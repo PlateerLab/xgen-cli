@@ -504,6 +504,7 @@ const fn model_rejection_code(reason: ModelCallRejectionReason) -> &'static str 
             "model_rejected.planner_invalid_response"
         }
         ModelCallRejectionReason::ProviderLimit => "model_rejected.provider_limit",
+        ModelCallRejectionReason::OutputTruncated => "model_rejected.output_truncated",
         ModelCallRejectionReason::ProviderRejected => "model_rejected.provider_rejected",
         ModelCallRejectionReason::ProposalRejected => "model_rejected.proposal_rejected",
         ModelCallRejectionReason::MaterializationFailed => "model_rejected.materialization_failed",
@@ -1855,6 +1856,7 @@ fn map_planner_unavailable(run_id: String, failure: PlannerPortFailure) -> Local
         }
         PlannerPortFailure::InvalidResponse => ModelCallRejectionReason::PlannerInvalidResponse,
         PlannerPortFailure::ProviderLimit => ModelCallRejectionReason::ProviderLimit,
+        PlannerPortFailure::OutputTruncated => ModelCallRejectionReason::OutputTruncated,
         PlannerPortFailure::ProviderRejected => ModelCallRejectionReason::ProviderRejected,
     };
     LocalCommandResult::Rejected {
@@ -2937,6 +2939,10 @@ mod tests {
             (
                 ModelCallRejectionReason::ProviderLimit,
                 "model_rejected.provider_limit",
+            ),
+            (
+                ModelCallRejectionReason::OutputTruncated,
+                "model_rejected.output_truncated",
             ),
             (
                 ModelCallRejectionReason::ProviderRejected,
