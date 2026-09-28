@@ -510,7 +510,7 @@ fn json_object_native_calls_still_reserve_validate_and_settle_exactly_once() {
     for (content, finish, expected_failure) in [
         (valid.clone(), "stop", None),
         (invalid, "stop", Some(PlannerPortFailure::InvalidResponse)),
-        (valid, "length", Some(PlannerPortFailure::ProviderLimit)),
+        (valid, "length", Some(PlannerPortFailure::OutputTruncated)),
     ] {
         let mut envelope: Value = serde_json::from_slice(&provider_response(&content)).unwrap();
         envelope["choices"][0]["finish_reason"] = json!(finish);

@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+jsonschema.workspace = true
 serde.workspace = true
 serde_jcs.workspace = true
 serde_json.workspace = true

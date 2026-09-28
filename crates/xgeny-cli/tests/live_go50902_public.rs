@@ -1342,6 +1342,15 @@ fn require_workspace_completion(output: &Output, state_root: &Path) {
                         ModelCallRejectionReason::ProviderLimit => {
                             "live workspace provider response exceeded a limit"
                         }
+                        ModelCallRejectionReason::RequestTooLarge => {
+                            "live workspace request too large"
+                        }
+                        ModelCallRejectionReason::RateLimited => {
+                            "live workspace provider rate limited request"
+                        }
+                        ModelCallRejectionReason::OutputTruncated => {
+                            "live workspace output truncated"
+                        }
                         ModelCallRejectionReason::ProviderRejected => {
                             "live workspace provider rejected the request"
                         }
