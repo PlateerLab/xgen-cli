@@ -1,5 +1,8 @@
 # OpenAI-compatible Provider Adapter
 
+2026-09-28 로컬 opt-in `json_schema_atomic_json`과 `chat_template_disabled`의 계약·실측 실패·
+배포 보류 사유는 [ADR-0044](../adr/0044-atomic-json-artifact-wire.md)에 둔다. 기존 기본값은 유지한다.
+
 ## 현재 제공 범위
 
 `xgeny-provider-openai`는 synchronous `PlannerPort`를 OpenAI-compatible Chat Completions에 연결한다.

@@ -433,6 +433,7 @@ fn compatibility_probe_config(
         .and_then(|config| config.with_timeout(limits.timeout()))
         .and_then(|config| config.with_response_format(options.response_format))
         .and_then(|config| config.with_thinking(options.thinking))
+        .and_then(artifact_schema_from_environment)
         .map_err(map_model_check_config)
 }
 
@@ -504,6 +505,9 @@ const fn model_rejection_code(reason: ModelCallRejectionReason) -> &'static str 
             "model_rejected.planner_invalid_response"
         }
         ModelCallRejectionReason::ProviderLimit => "model_rejected.provider_limit",
+        ModelCallRejectionReason::RequestTooLarge => "model_rejected.request_too_large",
+        ModelCallRejectionReason::RateLimited => "model_rejected.rate_limited",
+        ModelCallRejectionReason::OutputTruncated => "model_rejected.output_truncated",
         ModelCallRejectionReason::ProviderRejected => "model_rejected.provider_rejected",
         ModelCallRejectionReason::ProposalRejected => "model_rejected.proposal_rejected",
         ModelCallRejectionReason::MaterializationFailed => "model_rejected.materialization_failed",
@@ -1734,6 +1738,7 @@ fn planner_config(
         .and_then(|config| config.with_timeout(limits.timeout()))
         .and_then(|config| config.with_response_format(options.response_format))
         .and_then(|config| config.with_thinking(options.thinking))
+        .and_then(artifact_schema_from_environment)
         .map_err(map_provider_config)?;
     if planning_constraints_required {
         config
@@ -1741,6 +1746,20 @@ fn planner_config(
             .map_err(map_provider_config)
     } else {
         Ok(config)
+    }
+}
+
+// Per-invocation host contract, not a model-profile default. Resume checks the
+// resulting schema-bound request digest before sending anything.
+fn artifact_schema_from_environment(
+    config: OpenAiPlannerConfig,
+) -> Result<OpenAiPlannerConfig, OpenAiPlannerConfigError> {
+    match std::env::var("XGENY_OPENAI_ARTIFACT_SCHEMA") {
+        Ok(encoded) => config.with_artifact_schema(&encoded),
+        Err(std::env::VarError::NotPresent) => Ok(config),
+        Err(std::env::VarError::NotUnicode(_)) => Err(
+            OpenAiPlannerConfigError::InvalidProfileField("artifact_schema"),
+        ),
     }
 }
 
@@ -1855,6 +1874,9 @@ fn map_planner_unavailable(run_id: String, failure: PlannerPortFailure) -> Local
         }
         PlannerPortFailure::InvalidResponse => ModelCallRejectionReason::PlannerInvalidResponse,
         PlannerPortFailure::ProviderLimit => ModelCallRejectionReason::ProviderLimit,
+        PlannerPortFailure::RequestTooLarge => ModelCallRejectionReason::RequestTooLarge,
+        PlannerPortFailure::RateLimited => ModelCallRejectionReason::RateLimited,
+        PlannerPortFailure::OutputTruncated => ModelCallRejectionReason::OutputTruncated,
         PlannerPortFailure::ProviderRejected => ModelCallRejectionReason::ProviderRejected,
     };
     LocalCommandResult::Rejected {
@@ -2812,11 +2834,16 @@ mod tests {
     #[test]
     fn explicit_wire_options_have_identical_probe_and_planner_digests() {
         use xgeny_provider_openai::{ResponseFormat, ThinkingMode};
-        for response_format in [ResponseFormat::JsonSchema, ResponseFormat::JsonObject] {
+        for response_format in [
+            ResponseFormat::JsonSchema,
+            ResponseFormat::JsonObject,
+            ResponseFormat::JsonSchemaAtomicJson,
+        ] {
             for thinking in [
                 ThinkingMode::Default,
                 ThinkingMode::Disabled,
                 ThinkingMode::Enabled,
+                ThinkingMode::ChatTemplateDisabled,
             ] {
                 let options = RequestOptions {
                     response_format,

@@ -1159,11 +1159,16 @@ mod tests {
 
     #[test]
     fn request_options_round_trip_and_reject_unknown_modes() {
-        for response_format in [ResponseFormat::JsonSchema, ResponseFormat::JsonObject] {
+        for response_format in [
+            ResponseFormat::JsonSchema,
+            ResponseFormat::JsonObject,
+            ResponseFormat::JsonSchemaAtomicJson,
+        ] {
             for thinking in [
                 ThinkingMode::Default,
                 ThinkingMode::Disabled,
                 ThinkingMode::Enabled,
+                ThinkingMode::ChatTemplateDisabled,
             ] {
                 let mut original = profile("wire");
                 let options = RequestOptions {
