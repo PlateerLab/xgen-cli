@@ -187,7 +187,7 @@ struct RunArgs {
     #[command(flatten)]
     request_options: RequestOptionArgs,
     /// Goal sent to the bounded planner.
-    #[arg(help = format!("Goal sent to the bounded planner. XGENY_MAX_GOAL_BYTES={}", xgeny_cli::MAX_GOAL_BYTES))]
+    #[arg(help = format!("Goal sent to the bounded planner. XGENY_MAX_GOAL_BYTES={} XGENY_OPENAI_ARTIFACT_SCHEMA=atomic-json-schema-v1 (optional per-invocation JSON Schema; also required unchanged on resume)", xgeny_cli::MAX_GOAL_BYTES))]
     goal: String,
     /// Workspace root opened as the local filesystem capability.
     #[arg(long, default_value = ".")]
@@ -298,10 +298,10 @@ struct ResumeArgs {
 #[derive(Debug, Args, Default)]
 struct RequestOptionArgs {
     /// Structured output transport; `json_object` is validated by `XGENy`, not server-enforced schema.
-    #[arg(long, value_parser = ["json_schema", "json_object"])]
+    #[arg(long, value_parser = ["json_schema", "json_object", "json_schema_atomic_json"])]
     response_format: Option<String>,
     /// Explicit provider thinking setting; default omits the provider-specific setting.
-    #[arg(long, value_parser = ["default", "disabled", "enabled"])]
+    #[arg(long, value_parser = ["default", "disabled", "enabled", "chat_template_disabled"])]
     thinking: Option<String>,
 }
 
@@ -1219,6 +1219,7 @@ fn resolve_request_options(
         None => base.response_format,
         Some("json_schema") => ResponseFormat::JsonSchema,
         Some("json_object") => ResponseFormat::JsonObject,
+        Some("json_schema_atomic_json") => ResponseFormat::JsonSchemaAtomicJson,
         Some(_) => return Err(ModelCliError::InvalidRequestOptions),
     };
     let thinking = match explicit
@@ -1230,6 +1231,7 @@ fn resolve_request_options(
         Some("default") => ThinkingMode::Default,
         Some("disabled") => ThinkingMode::Disabled,
         Some("enabled") => ThinkingMode::Enabled,
+        Some("chat_template_disabled") => ThinkingMode::ChatTemplateDisabled,
         Some(_) => return Err(ModelCliError::InvalidRequestOptions),
     };
     Ok(RequestOptions {
@@ -1242,6 +1244,7 @@ const fn response_format_label(format: ResponseFormat) -> &'static str {
     match format {
         ResponseFormat::JsonSchema => "json_schema",
         ResponseFormat::JsonObject => "json_object",
+        ResponseFormat::JsonSchemaAtomicJson => "json_schema_atomic_json",
     }
 }
 
@@ -1250,12 +1253,16 @@ const fn thinking_label(thinking: ThinkingMode) -> &'static str {
         ThinkingMode::Default => "default",
         ThinkingMode::Disabled => "disabled",
         ThinkingMode::Enabled => "enabled",
+        ThinkingMode::ChatTemplateDisabled => "chat_template_disabled",
     }
 }
 
 const fn compatibility_label(options: RequestOptions) -> &'static str {
     match options.response_format {
         ResponseFormat::JsonSchema => "strict JSON compatible",
+        ResponseFormat::JsonSchemaAtomicJson => {
+            "atomic JSON wire compatible (native write still verified)"
+        }
         ResponseFormat::JsonObject => {
             "JSON object compatible (host-validated; no server schema guarantee)"
         }

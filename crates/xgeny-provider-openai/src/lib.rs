@@ -75,6 +75,8 @@ pub enum ResponseFormat {
     JsonSchema,
     /// Ask for JSON syntax only; include the schema in the committed system prompt.
     JsonObject,
+    /// Atomic JSON artifact wire codec; native permissions and receipts remain unchanged.
+    JsonSchemaAtomicJson,
 }
 
 /// Opt-in vendor thinking extension, never inferred from an endpoint hostname.
@@ -88,6 +90,8 @@ pub enum ThinkingMode {
     Disabled,
     /// Explicit thinking with low reasoning effort and the existing output/time limits.
     Enabled,
+    /// Explicit chat-template switch for compatible serving engines; no provider guessing.
+    ChatTemplateDisabled,
 }
 
 /// A bearer credential retained only as a sensitive HTTP header value.
@@ -132,6 +136,7 @@ pub struct OpenAiPlannerConfig {
     max_proposal_bytes: usize,
     max_json_depth: usize,
     proposal_schema: Value,
+    artifact_validator: Option<jsonschema::Validator>,
     response_format: ResponseFormat,
     thinking: ThinkingMode,
     planning_constraints_required: bool,
@@ -175,6 +180,7 @@ impl OpenAiPlannerConfig {
             max_proposal_bytes: DEFAULT_MAX_PROPOSAL_BYTES,
             max_json_depth: DEFAULT_MAX_JSON_DEPTH,
             proposal_schema: proposal_schema(),
+            artifact_validator: None,
             response_format: ResponseFormat::default(),
             thinking: ThinkingMode::default(),
             planning_constraints_required: false,
@@ -192,7 +198,46 @@ impl OpenAiPlannerConfig {
         mut self,
         response_format: ResponseFormat,
     ) -> Result<Self, OpenAiPlannerConfigError> {
+        if self.artifact_validator.is_some() {
+            return Err(OpenAiPlannerConfigError::InvalidProfileField(
+                "artifact_schema",
+            ));
+        }
         self.response_format = response_format;
+        self.proposal_schema = if response_format == ResponseFormat::JsonSchemaAtomicJson {
+            atomic_json_proposal_schema()
+        } else {
+            proposal_schema()
+        };
+        self.refresh_profile_digest()?;
+        Ok(self)
+    }
+
+    /// Attach a bounded, local-only JSON Schema to the atomic artifact wire.
+    /// The compiled validator rejects invalid domain objects before a Plan is admitted.
+    ///
+    /// # Errors
+    /// Rejects wrong dialects, remote references, duplicate keys, invalid or oversized schemas.
+    pub fn with_artifact_schema(mut self, encoded: &str) -> Result<Self, OpenAiPlannerConfigError> {
+        let invalid = || OpenAiPlannerConfigError::InvalidProfileField("artifact_schema");
+        if self.response_format != ResponseFormat::JsonSchemaAtomicJson || encoded.len() > 32_768 {
+            return Err(invalid());
+        }
+        let schema = parse_unique_json(encoded.as_bytes(), 32).map_err(|_| invalid())?;
+        if schema.get("type") != Some(&json!("object")) || !local_artifact_schema(&schema) {
+            return Err(invalid());
+        }
+        jsonschema::meta::options()
+            .validate(&schema)
+            .map_err(|_| invalid())?;
+        let validator = jsonschema::options()
+            .with_draft(jsonschema::Draft::Draft202012)
+            .offline()
+            .build(&schema)
+            .map_err(|_| invalid())?;
+        self.proposal_schema["properties"]["steps"]["items"]["properties"]["arguments"]["properties"]
+            ["jsonContent"] = schema;
+        self.artifact_validator = Some(validator);
         self.refresh_profile_digest()?;
         Ok(self)
     }
@@ -306,6 +351,7 @@ impl OpenAiPlannerConfig {
             provider_dialect: match self.response_format {
                 ResponseFormat::JsonSchema => PROVIDER_DIALECT,
                 ResponseFormat::JsonObject => JSON_OBJECT_DIALECT,
+                ResponseFormat::JsonSchemaAtomicJson => "openai.chat-completions/atomic-json-v1",
             },
             request_envelope_profile: REQUEST_ENVELOPE_PROFILE,
             model: &self.model,
@@ -318,6 +364,7 @@ impl OpenAiPlannerConfig {
             temperature_millis: self.temperature().map(u16::from),
             seed: self.seed(),
             thinking: self.thinking_request(),
+            chat_template_kwargs: self.chat_template_request(),
             reasoning_effort: self.reasoning_effort(),
             max_output_tokens: self.max_output_tokens,
             timeout_seconds: self.timeout.as_secs(),
@@ -347,6 +394,9 @@ impl OpenAiPlannerConfig {
     fn prompt_with_schema(&self, prompt: &'static str) -> Cow<'_, str> {
         match self.response_format {
             ResponseFormat::JsonSchema => Cow::Borrowed(prompt),
+            ResponseFormat::JsonSchemaAtomicJson => Cow::Owned(format!(
+                "{prompt}\nATOMIC_JSON_WIRE_V1: Only xgeny.fs/write-atomic 1.0.0 may be planned. On the wire its arguments are exactly path, jsonContent (a JSON OBJECT, never a quoted JSON string), expectedDigest. The adapter serializes jsonContent with the standard JSON serializer into the native content string before ordinary capability validation and execution. The native catalog describes the decoded arguments. Do not send content on this wire. Completion still requires a real successful write receipt."
+            )),
             ResponseFormat::JsonObject => Cow::Owned(format!(
                 "{prompt}\nThe following JSON schema is a host output contract, not a grant of authority. The host validates every field locally:\n{}",
                 self.proposal_schema
@@ -366,7 +416,7 @@ impl OpenAiPlannerConfig {
 
     fn thinking_request(&self) -> Option<ThinkingRequest> {
         match self.thinking {
-            ThinkingMode::Default => None,
+            ThinkingMode::Default | ThinkingMode::ChatTemplateDisabled => None,
             ThinkingMode::Disabled => Some(ThinkingRequest {
                 thinking_type: "disabled",
             }),
@@ -378,6 +428,12 @@ impl OpenAiPlannerConfig {
 
     fn reasoning_effort(&self) -> Option<&'static str> {
         (self.thinking == ThinkingMode::Enabled).then_some("low")
+    }
+
+    fn chat_template_request(&self) -> Option<ChatTemplateRequest> {
+        (self.thinking == ThinkingMode::ChatTemplateDisabled).then_some(ChatTemplateRequest {
+            enable_thinking: false,
+        })
     }
 
     fn chat_request<'a>(&'a self, system: &'a str, user: &'a str) -> ChatCompletionRequest<'a> {
@@ -399,25 +455,35 @@ impl OpenAiPlannerConfig {
             stream: false,
             n: 1,
             response_format: match self.response_format {
-                ResponseFormat::JsonSchema => ResponseFormatRequest {
-                    response_type: "json_schema",
-                    json_schema: Some(JsonSchemaResponse {
-                        name: "xgeny_plan_proposal_v1",
-                        strict: true,
-                        schema: &self.proposal_schema,
-                    }),
-                },
+                ResponseFormat::JsonSchema | ResponseFormat::JsonSchemaAtomicJson => {
+                    ResponseFormatRequest {
+                        response_type: "json_schema",
+                        json_schema: Some(JsonSchemaResponse {
+                            name: "xgeny_plan_proposal_v1",
+                            strict: true,
+                            schema: &self.proposal_schema,
+                        }),
+                    }
+                }
                 ResponseFormat::JsonObject => ResponseFormatRequest {
                     response_type: "json_object",
                     json_schema: None,
                 },
             },
             thinking: self.thinking_request(),
+            chat_template_kwargs: self.chat_template_request(),
             reasoning_effort: self.reasoning_effort(),
         }
     }
 
     fn prompt_template_revision(&self) -> &'static str {
+        if self.response_format == ResponseFormat::JsonSchemaAtomicJson {
+            return if self.planning_constraints_required {
+                "xgeny.openai-planner-prompt/v6-atomic-json-constrained"
+            } else {
+                "xgeny.openai-planner-prompt/v6-atomic-json"
+            };
+        }
         if self.response_format == ResponseFormat::JsonObject {
             return if self.planning_constraints_required {
                 "xgeny.openai-planner-prompt/v5-json-object-constrained"
@@ -449,6 +515,7 @@ impl fmt::Debug for OpenAiPlannerConfig {
             .field("max_proposal_bytes", &self.max_proposal_bytes)
             .field("max_json_depth", &self.max_json_depth)
             .field("proposal_schema", &"<redacted>")
+            .field("artifact_validator", &self.artifact_validator.is_some())
             .field("response_format", &self.response_format)
             .field("thinking", &self.thinking)
             .field(
@@ -645,7 +712,9 @@ impl OpenAiCompatibilityChecker {
         // JSON-object APIs promise syntax, not provider-side schema enforcement.
         // Asking them to emit an extra field would deliberately fail this probe.
         let user = match self.config.response_format {
-            ResponseFormat::JsonSchema => COMPATIBILITY_USER_PROMPT,
+            ResponseFormat::JsonSchema | ResponseFormat::JsonSchemaAtomicJson => {
+                COMPATIBILITY_USER_PROMPT
+            }
             ResponseFormat::JsonObject => JSON_OBJECT_COMPATIBILITY_USER_PROMPT,
         };
         let body = serde_json::to_vec(&self.config.chat_request(&system, user))
@@ -777,7 +846,7 @@ impl PlannerPort for OpenAiPlanner {
         let body = serde_json::to_vec(&self.config.chat_request(&system, &prompt))
             .map_err(|_| PlannerPortFailure::ProviderLimit)?;
         if body.len() > self.config.max_request_bytes {
-            return Err(PlannerPortFailure::ProviderLimit);
+            return Err(PlannerPortFailure::RequestTooLarge);
         }
         let response = self.transport.send(TransportRequest {
             endpoint: &self.config.endpoint,
@@ -785,12 +854,17 @@ impl PlannerPort for OpenAiPlanner {
             body: &body,
             max_response_bytes: self.config.max_response_bytes,
         })?;
-        decode_chat_response(
+        let proposal = decode_chat_response_with_codec(
             &response,
             &self.config.model,
             self.config.max_proposal_bytes,
             self.config.max_json_depth,
-        )
+            self.config.response_format == ResponseFormat::JsonSchemaAtomicJson,
+        )?;
+        if let Some(validator) = &self.config.artifact_validator {
+            validate_artifact_response(&response, &self.config, validator)?;
+        }
+        Ok(proposal)
     }
 }
 
@@ -836,6 +910,8 @@ struct RequestProfileDescriptor<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<ThinkingRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    chat_template_kwargs: Option<ChatTemplateRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
     max_output_tokens: u32,
     timeout_seconds: u64,
@@ -875,6 +951,8 @@ struct ChatCompletionRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<ThinkingRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    chat_template_kwargs: Option<ChatTemplateRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
 }
 
@@ -896,6 +974,11 @@ struct ResponseFormatRequest<'a> {
 struct ThinkingRequest {
     #[serde(rename = "type")]
     thinking_type: &'static str,
+}
+
+#[derive(Serialize)]
+struct ChatTemplateRequest {
+    enable_thinking: bool,
 }
 
 #[derive(Serialize)]
@@ -1061,7 +1144,8 @@ fn map_transport_error(error: &ureq::Error) -> PlannerPortFailure {
 fn map_status(status: u16) -> PlannerPortFailure {
     match status {
         408 | 504 => PlannerPortFailure::Timeout,
-        413 | 429 => PlannerPortFailure::ProviderLimit,
+        413 => PlannerPortFailure::RequestTooLarge,
+        429 => PlannerPortFailure::RateLimited,
         300..=499 => PlannerPortFailure::ProviderRejected,
         _ => PlannerPortFailure::Unavailable,
     }
@@ -1091,9 +1175,15 @@ const fn map_compatibility_transport_failure(
     match failure {
         PlannerPortFailure::Timeout => OpenAiCompatibilityCheckFailure::Timeout,
         PlannerPortFailure::Unavailable => OpenAiCompatibilityCheckFailure::Unavailable,
-        PlannerPortFailure::InvalidResponse => OpenAiCompatibilityCheckFailure::InvalidResponse,
-        PlannerPortFailure::ProviderLimit => OpenAiCompatibilityCheckFailure::ProviderLimit,
-        PlannerPortFailure::ProviderRejected => OpenAiCompatibilityCheckFailure::RequestRejected,
+        PlannerPortFailure::InvalidResponse | PlannerPortFailure::OutputTruncated => {
+            OpenAiCompatibilityCheckFailure::InvalidResponse
+        }
+        PlannerPortFailure::ProviderLimit | PlannerPortFailure::RateLimited => {
+            OpenAiCompatibilityCheckFailure::ProviderLimit
+        }
+        PlannerPortFailure::RequestTooLarge | PlannerPortFailure::ProviderRejected => {
+            OpenAiCompatibilityCheckFailure::RequestRejected
+        }
     }
 }
 
@@ -1173,11 +1263,28 @@ enum DependencyKind {
     ProposedStep,
 }
 
+#[cfg(test)]
 fn decode_chat_response(
     body: &[u8],
     expected_model: &str,
     max_proposal_bytes: usize,
     max_json_depth: usize,
+) -> Result<PlanProposal, PlannerPortFailure> {
+    decode_chat_response_with_codec(
+        body,
+        expected_model,
+        max_proposal_bytes,
+        max_json_depth,
+        false,
+    )
+}
+
+fn decode_chat_response_with_codec(
+    body: &[u8],
+    expected_model: &str,
+    max_proposal_bytes: usize,
+    max_json_depth: usize,
+    atomic_json: bool,
 ) -> Result<PlanProposal, PlannerPortFailure> {
     let envelope = parse_unique_json(body, max_json_depth)?;
     let response: ChatCompletionResponse =
@@ -1192,7 +1299,7 @@ fn decode_chat_response(
         return Err(PlannerPortFailure::InvalidResponse);
     }
     if choice.finish_reason == "length" {
-        return Err(PlannerPortFailure::ProviderLimit);
+        return Err(PlannerPortFailure::OutputTruncated);
     }
     if choice.finish_reason != "stop"
         || choice.message.refusal.is_some()
@@ -1223,7 +1330,11 @@ fn decode_chat_response(
             let steps = proposal
                 .steps
                 .into_iter()
-                .map(|step| {
+                .map(|mut step| {
+                    if atomic_json {
+                        step.arguments =
+                            decode_atomic_json_arguments(&step.capability, step.arguments)?;
+                    }
                     let dependencies = step
                         .depends_on
                         .into_iter()
@@ -1247,6 +1358,96 @@ fn decode_chat_response(
             Ok(PlanProposal::completion_candidate(proposal.summary))
         }
     }
+}
+
+// Restrict schema *vocabulary*, not application fields. No references or resource loading.
+fn local_artifact_schema(schema: &Value) -> bool {
+    let Some(object) = schema.as_object() else {
+        return false;
+    };
+    object.iter().all(|(key, value)| match key.as_str() {
+        "type" | "enum" | "const" | "required" | "minItems" | "maxItems" | "minLength"
+        | "maxLength" | "minimum" | "maximum" | "title" | "description" => true,
+        "additionalProperties" => value == &Value::Bool(false),
+        "properties" => value
+            .as_object()
+            .is_some_and(|props| props.values().all(local_artifact_schema)),
+        "items" => local_artifact_schema(value),
+        "anyOf" => value
+            .as_array()
+            .is_some_and(|items| !items.is_empty() && items.iter().all(local_artifact_schema)),
+        _ => false,
+    })
+}
+
+fn validate_artifact_response(
+    body: &[u8],
+    config: &OpenAiPlannerConfig,
+    validator: &jsonschema::Validator,
+) -> Result<(), PlannerPortFailure> {
+    let envelope = parse_unique_json(body, config.max_json_depth)?;
+    let response: ChatCompletionResponse =
+        serde_json::from_value(envelope).map_err(|_| PlannerPortFailure::InvalidResponse)?;
+    let [choice] = response.choices.as_slice() else {
+        return Err(PlannerPortFailure::InvalidResponse);
+    };
+    // Preserve the existing truncation classification; full envelope validation follows.
+    if choice.finish_reason == "length" {
+        return Err(PlannerPortFailure::OutputTruncated);
+    }
+    let content = choice
+        .message
+        .content
+        .as_deref()
+        .ok_or(PlannerPortFailure::InvalidResponse)?;
+    if content.len() > config.max_proposal_bytes {
+        return Err(PlannerPortFailure::InvalidResponse);
+    }
+    let proposal: ProposalDocument = serde_json::from_value(parse_unique_json(
+        content.as_bytes(),
+        config.max_json_depth,
+    )?)
+    .map_err(|_| PlannerPortFailure::InvalidResponse)?;
+    for step in proposal.steps {
+        if !step
+            .arguments
+            .get("jsonContent")
+            .is_some_and(|value| validator.is_valid(value))
+        {
+            return Err(PlannerPortFailure::InvalidResponse);
+        }
+    }
+    Ok(())
+}
+
+fn decode_atomic_json_arguments(
+    capability: &CapabilityRef,
+    value: Value,
+) -> Result<Value, PlannerPortFailure> {
+    let capability =
+        serde_json::to_value(capability).map_err(|_| PlannerPortFailure::InvalidResponse)?;
+    if capability != json!({"capabilityId":"xgeny.fs/write-atomic", "contractVersion":"1.0.0"}) {
+        return Err(PlannerPortFailure::InvalidResponse);
+    }
+    let Value::Object(mut args) = value else {
+        return Err(PlannerPortFailure::InvalidResponse);
+    };
+    if args.len() != 3
+        || !args.get("path").is_some_and(Value::is_string)
+        || !args
+            .get("expectedDigest")
+            .is_some_and(|v| v.is_null() || v.is_string())
+        || !args.get("jsonContent").is_some_and(Value::is_object)
+    {
+        return Err(PlannerPortFailure::InvalidResponse);
+    }
+    let object = args
+        .remove("jsonContent")
+        .ok_or(PlannerPortFailure::InvalidResponse)?;
+    let content =
+        serde_json::to_string(&object).map_err(|_| PlannerPortFailure::InvalidResponse)?;
+    args.insert("content".into(), Value::String(content));
+    Ok(Value::Object(args))
 }
 
 #[cfg(test)]
@@ -1550,6 +1751,21 @@ fn proposal_schema() -> Value {
     })
 }
 
+fn atomic_json_proposal_schema() -> Value {
+    let mut schema = proposal_schema();
+    let step = &mut schema["properties"]["steps"]["items"]["properties"];
+    step["capability"]["properties"]["capabilityId"] =
+        json!({"type":"string", "const":"xgeny.fs/write-atomic"});
+    step["capability"]["properties"]["contractVersion"] = json!({"type":"string", "const":"1.0.0"});
+    step["arguments"] = json!({
+        "type":"object", "properties": {
+            "path":{"type":"string"}, "jsonContent":{"type":"object", "additionalProperties":true},
+            "expectedDigest":{"type":["string","null"]}
+        }, "required":["path","jsonContent","expectedDigest"], "additionalProperties":false
+    });
+    schema
+}
+
 fn api_endpoints(base_url: &str) -> Result<(Url, Url), OpenAiPlannerConfigError> {
     if base_url.len() > MAX_BASE_URL_BYTES {
         return Err(OpenAiPlannerConfigError::InvalidBaseUrl);
@@ -1801,6 +2017,234 @@ mod tests {
         assert_eq!(
             reset.request_profile_digest(),
             config("https://provider.example/v1").request_profile_digest()
+        );
+    }
+
+    #[test]
+    fn chat_template_switch_is_explicit_and_profile_bound() {
+        let base = config("https://provider.example/v1");
+        let old = base.request_profile_digest().to_owned();
+        let configured = base
+            .with_thinking(ThinkingMode::ChatTemplateDisabled)
+            .unwrap();
+        let body = request_body(&configured);
+        assert_eq!(
+            body["chat_template_kwargs"],
+            json!({"enable_thinking":false})
+        );
+        assert!(body.get("thinking").is_none());
+        assert!(body.get("reasoning_effort").is_none());
+        assert_ne!(old, configured.request_profile_digest());
+        assert_eq!(
+            old,
+            configured
+                .with_thinking(ThinkingMode::Default)
+                .unwrap()
+                .request_profile_digest()
+        );
+    }
+
+    #[test]
+    fn atomic_json_codec_preserves_nested_values_and_native_write_contract() {
+        let capability: CapabilityRef = serde_json::from_value(json!({
+            "capabilityId":"xgeny.fs/write-atomic", "contractVersion":"1.0.0"
+        }))
+        .unwrap();
+        for object in [
+            json!({"report":{"quote":"a\"b\\c\n한글", "values":[1,null,true, {"x":-2.5}]}}),
+            json!({"contract":{"requirements":[]}, "large":9_007_199_254_740_993_u64}),
+        ] {
+            let decoded = decode_atomic_json_arguments(
+                &capability,
+                json!({
+                    "path":"result.json", "jsonContent":object, "expectedDigest":null
+                }),
+            )
+            .unwrap();
+            assert_eq!(decoded["path"], "result.json");
+            assert!(decoded["expectedDigest"].is_null());
+            assert_eq!(decoded.as_object().unwrap().len(), 3);
+            assert_eq!(
+                serde_json::from_str::<Value>(decoded["content"].as_str().unwrap()).unwrap(),
+                object
+            );
+        }
+        for bad in [
+            json!({"path":"x", "content":"{}", "expectedDigest":null}),
+            json!({"path":"x", "jsonContent":"{}", "expectedDigest":null}),
+            json!({"path":"x", "jsonContent":{}, "expectedDigest":null, "extra":true}),
+            json!({"path":"x", "jsonContent":[], "expectedDigest":null}),
+        ] {
+            assert!(decode_atomic_json_arguments(&capability, bad).is_err());
+        }
+    }
+
+    #[test]
+    fn atomic_json_full_codec_rejects_mixed_plans_and_nested_duplicates() {
+        let step = json!({
+            "key":"write", "objective":"record", "dependsOn":[],
+            "capability":{"capabilityId":"xgeny.fs/write-atomic", "contractVersion":"1.0.0"},
+            "arguments":{"path":"result.json", "jsonContent":{"value":1}, "expectedDigest":null}
+        });
+        let plan = json!({"formatVersion":1, "kind":"plan", "summary":"", "steps":[step.clone()]});
+        let decode = |value: &Value| {
+            decode_chat_response_with_codec(
+                &response(&value.to_string(), "stop"),
+                MODEL,
+                256 * 1024,
+                64,
+                true,
+            )
+        };
+        assert!(matches!(decode(&plan), Ok(PlanProposal::Plan { .. })));
+        let mut mixed = plan.clone();
+        let mut other = step;
+        other["key"] = json!("other");
+        other["capability"]["capabilityId"] = json!("xgeny.process/execute");
+        mixed["steps"].as_array_mut().unwrap().push(other);
+        assert_eq!(decode(&mixed), Err(PlannerPortFailure::InvalidResponse));
+        let duplicate = plan
+            .to_string()
+            .replace("\"value\":1", "\"value\":1,\"value\":2");
+        assert_eq!(
+            decode_chat_response_with_codec(
+                &response(&duplicate, "stop"),
+                MODEL,
+                256 * 1024,
+                64,
+                true,
+            ),
+            Err(PlannerPortFailure::InvalidResponse)
+        );
+        let mut deep = json!({});
+        for _ in 0..65 {
+            deep = json!({"nested":deep});
+        }
+        let mut too_deep = plan.clone();
+        too_deep["steps"][0]["arguments"]["jsonContent"] = deep;
+        assert_eq!(decode(&too_deep), Err(PlannerPortFailure::InvalidResponse));
+        assert_eq!(
+            decode_chat_response_with_codec(
+                &response(&plan.to_string(), "stop"),
+                MODEL,
+                8,
+                64,
+                true,
+            ),
+            Err(PlannerPortFailure::InvalidResponse)
+        );
+        assert_eq!(
+            decode_chat_response_with_codec(
+                &response(&plan.to_string(), "length"),
+                MODEL,
+                256 * 1024,
+                64,
+                true,
+            ),
+            Err(PlannerPortFailure::OutputTruncated)
+        );
+    }
+
+    #[test]
+    fn artifact_schema_is_bound_and_validated_before_admission() {
+        let schema = json!({"type":"object", "properties":{"answer":{"type":"string"},
+            "nested":{"type":"object", "properties":{"values":{"type":"array", "items":{"type":"integer"}}},
+                "required":["values"], "additionalProperties":false}},
+            "required":["answer","nested"], "additionalProperties":false});
+        let base = config("https://provider.example/v1")
+            .with_response_format(ResponseFormat::JsonSchemaAtomicJson)
+            .unwrap();
+        let prior_digest = base.request_profile_digest().to_owned();
+        let configured = base.with_artifact_schema(&schema.to_string()).unwrap();
+        assert_ne!(prior_digest, configured.request_profile_digest());
+        assert_eq!(
+            request_body(&configured)["response_format"]["json_schema"]["schema"]["properties"]["steps"]
+                ["items"]["properties"]["arguments"]["properties"]["jsonContent"],
+            schema
+        );
+        for (value, valid) in [
+            (json!({"answer":"내용", "nested":{"values":[1,2]}}), true),
+            (json!({"answer":"내용", "nested":{"values":null}}), false),
+            (json!({"answer":"내용", "nested":{"values":["1"]}}), false),
+            (
+                json!({"answer":"내용", "nested":{"values":[]}, "path":"x"}),
+                false,
+            ),
+        ] {
+            let proposal = json!({"formatVersion":1,"kind":"plan","summary":"","steps":[{
+                "key":"write","objective":"record","dependsOn":[],
+                "capability":{"capabilityId":"xgeny.fs/write-atomic","contractVersion":"1.0.0"},
+                "arguments":{"path":"result.json","jsonContent":value,"expectedDigest":null}}]});
+            assert_eq!(
+                validate_artifact_response(
+                    &response(&proposal.to_string(), "stop"),
+                    &configured,
+                    configured.artifact_validator.as_ref().unwrap()
+                )
+                .is_ok(),
+                valid
+            );
+        }
+        assert!(
+            configured
+                .with_response_format(ResponseFormat::JsonSchema)
+                .is_err()
+        );
+        assert!(
+            config("https://provider.example/v1")
+                .with_artifact_schema(&schema.to_string())
+                .is_err()
+        );
+        for invalid in [
+            r#"{"type":"object","$ref":"https://example.com/schema"}"#,
+            r#"{"type":"object","properties":{"a":{"$ref":"file:///private"}}}"#,
+            r#"{"type":"object","type":"string"}"#,
+            r#"{"type":"object","properties":{"a":{"type":"bogus"}}}"#,
+        ] {
+            assert!(
+                config("https://provider.example/v1")
+                    .with_response_format(ResponseFormat::JsonSchemaAtomicJson)
+                    .unwrap()
+                    .with_artifact_schema(invalid)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn atomic_json_profile_is_opt_in_and_cannot_select_other_capabilities() {
+        let base = config("https://provider.example/v1");
+        let old = base.request_profile_digest().to_owned();
+        let configured = base
+            .with_response_format(ResponseFormat::JsonSchemaAtomicJson)
+            .unwrap();
+        assert_ne!(old, configured.request_profile_digest());
+        let body = request_body(&configured);
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        assert_eq!(
+            body["response_format"]["json_schema"]["schema"],
+            atomic_json_proposal_schema()
+        );
+        assert!(configured.system_prompt().contains("ATOMIC_JSON_WIRE_V1"));
+        assert_eq!(
+            old,
+            configured
+                .with_response_format(ResponseFormat::JsonSchema)
+                .unwrap()
+                .request_profile_digest()
+        );
+        let capability: CapabilityRef = serde_json::from_value(json!({
+            "capabilityId":"xgeny.process/execute", "contractVersion":"1.0.0"
+        }))
+        .unwrap();
+        assert!(
+            decode_atomic_json_arguments(
+                &capability,
+                json!({
+                    "path":"x", "jsonContent":{}, "expectedDigest":null
+                })
+            )
+            .is_err()
         );
     }
 
@@ -2123,7 +2567,7 @@ mod tests {
         }
         assert_eq!(
             decode_chat_response(&response(&valid_plan(), "length"), MODEL, 256 * 1024, 64,),
-            Err(PlannerPortFailure::ProviderLimit)
+            Err(PlannerPortFailure::OutputTruncated)
         );
         assert_eq!(
             decode_chat_response(&response(&valid_plan(), "stop"), MODEL, 8, 64),
@@ -2765,8 +3209,8 @@ mod tests {
     fn status_mapping_is_closed_or_unknown_without_raw_body() {
         assert_eq!(map_status(400), PlannerPortFailure::ProviderRejected);
         assert_eq!(map_status(401), PlannerPortFailure::ProviderRejected);
-        assert_eq!(map_status(413), PlannerPortFailure::ProviderLimit);
-        assert_eq!(map_status(429), PlannerPortFailure::ProviderLimit);
+        assert_eq!(map_status(413), PlannerPortFailure::RequestTooLarge);
+        assert_eq!(map_status(429), PlannerPortFailure::RateLimited);
         assert_eq!(map_status(202), PlannerPortFailure::Unavailable);
         assert_eq!(map_status(500), PlannerPortFailure::Unavailable);
         assert_eq!(map_status(600), PlannerPortFailure::Unavailable);

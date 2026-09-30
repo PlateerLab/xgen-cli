@@ -685,6 +685,12 @@ pub enum PlannerPortFailure {
     InvalidResponse,
     #[error("planner request exceeded provider limits")]
     ProviderLimit,
+    #[error("planner request is too large")]
+    RequestTooLarge,
+    #[error("planner provider rate limited the request")]
+    RateLimited,
+    #[error("planner response was truncated")]
+    OutputTruncated,
     #[error("planner provider rejected the request")]
     ProviderRejected,
 }
@@ -1696,13 +1702,25 @@ impl AgentLoop {
                 ),
                 ModelCallConflictIntent::RejectStale,
             ),
-            PlannerPortFailure::ProviderLimit => (
+            PlannerPortFailure::ProviderLimit
+            | PlannerPortFailure::RequestTooLarge
+            | PlannerPortFailure::RateLimited
+            | PlannerPortFailure::OutputTruncated => (
                 append_model_call_rejection(
                     store,
                     events,
                     reserved_state,
                     call_id,
-                    ModelCallRejectionReason::ProviderLimit,
+                    match failure {
+                        PlannerPortFailure::RequestTooLarge => {
+                            ModelCallRejectionReason::RequestTooLarge
+                        }
+                        PlannerPortFailure::RateLimited => ModelCallRejectionReason::RateLimited,
+                        PlannerPortFailure::OutputTruncated => {
+                            ModelCallRejectionReason::OutputTruncated
+                        }
+                        _ => ModelCallRejectionReason::ProviderLimit,
+                    },
                 ),
                 ModelCallConflictIntent::RejectStale,
             ),

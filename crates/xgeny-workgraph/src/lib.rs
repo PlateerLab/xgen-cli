@@ -1462,6 +1462,9 @@ pub enum ModelCallUnknownReason {
 pub enum ModelCallRejectionReason {
     PlannerInvalidResponse,
     ProviderLimit,
+    RequestTooLarge,
+    RateLimited,
+    OutputTruncated,
     ProviderRejected,
     ProposalRejected,
     MaterializationFailed,
