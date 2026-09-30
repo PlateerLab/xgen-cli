@@ -126,6 +126,8 @@ pub struct LocalRunRequest {
     pub allow_write: bool,
     pub allow_execute: bool,
     pub max_ticks: u32,
+    /// Host-selected agent loop budget for workspace discovery; `None` keeps the built-in one.
+    pub max_model_turns: Option<u32>,
 }
 
 impl LocalRunRequest {
@@ -156,6 +158,7 @@ impl LocalRunRequest {
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,
+            max_model_turns: None,
         }
     }
 }
@@ -926,11 +929,7 @@ where
         config.request_profile_digest(),
         catalog.catalog_digest(),
         &local_execution_profile_digest,
-        if planning_constraints_required {
-            ManifestBudget::workspace_discovery()
-        } else {
-            ManifestBudget::default()
-        },
+        manifest_budget(planning_constraints_required, request.max_model_turns)?,
     )
     .map_err(|_| PublicRunError::Configuration)?;
     let planner = remote_planner(config, request.credential)?;
@@ -1810,6 +1809,21 @@ fn validate_goal(goal: &str) -> Result<(), PublicRunError> {
     Ok(())
 }
 
+fn manifest_budget(
+    planning_constraints_required: bool,
+    max_model_turns: Option<u32>,
+) -> Result<ManifestBudget, PublicRunError> {
+    match (planning_constraints_required, max_model_turns) {
+        (true, Some(turns)) => {
+            ManifestBudget::with_model_turns(turns).map_err(|_| PublicRunError::Configuration)
+        }
+        (true, None) => Ok(ManifestBudget::workspace_discovery()),
+        // Single-shot runs have no agent loop to extend; never silently ignore the request.
+        (false, Some(_)) => Err(PublicRunError::Configuration),
+        (false, None) => Ok(ManifestBudget::default()),
+    }
+}
+
 fn validate_max_ticks(max_ticks: u32) -> Result<(), PublicRunError> {
     if max_ticks == 0 || max_ticks > MAX_TICKS {
         return Err(PublicRunError::Configuration);
@@ -2665,6 +2679,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn manifest_budget_extends_only_the_agent_loop() {
+        assert_eq!(
+            manifest_budget(true, None).unwrap(),
+            ManifestBudget::workspace_discovery()
+        );
+        assert_eq!(
+            manifest_budget(true, Some(64)).unwrap(),
+            ManifestBudget::with_model_turns(64).unwrap()
+        );
+        assert_eq!(
+            manifest_budget(false, None).unwrap(),
+            ManifestBudget::default()
+        );
+        assert!(matches!(
+            manifest_budget(false, Some(64)),
+            Err(PublicRunError::Configuration)
+        ));
+        assert!(matches!(
+            manifest_budget(true, Some(0)),
+            Err(PublicRunError::Configuration)
+        ));
+    }
+
+    #[test]
     fn goal_bound_counts_utf8_bytes_without_truncation() {
         for unit in ["a", "한", "🧪"] {
             let mut goal = unit.repeat(MAX_GOAL_BYTES / unit.len());
@@ -3006,6 +3044,7 @@ mod tests {
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,
+            max_model_turns: None,
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -3061,6 +3100,7 @@ mod tests {
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,
+            max_model_turns: None,
         };
         assert!(matches!(
             run_local_with_process_session_progress(

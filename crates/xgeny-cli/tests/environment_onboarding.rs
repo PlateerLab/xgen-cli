@@ -519,6 +519,71 @@ fn advertised_goal_bound_matches_validation_and_oversize_creates_no_state() {
     assert_configuration_before_state(&output, &state);
 }
 
+#[test]
+fn host_model_turn_budget_is_advertised_bounded_and_recorded_in_the_manifest() {
+    let fixture = tempdir().unwrap();
+    let state = fixture.path().join("state");
+    let help = xgeny(&state).args(["run", "--help"]).output().unwrap();
+    assert!(help.status.success());
+    let help = String::from_utf8(help.stdout).unwrap();
+    assert!(help.contains("--max-model-turns"));
+    assert!(help.contains("XGENY_RUN_BUDGET=manifest-model-turns-v1"));
+    for turns in ["0", &(xgeny_cli::MAX_HOST_MODEL_TURNS + 1).to_string()] {
+        let output = xgeny(&state)
+            .current_dir(fixture.path())
+            .env("XGENY_OPENAI_BASE_URL", "http://127.0.0.1:1/v1")
+            .env("XGENY_OPENAI_MODEL", MODEL)
+            .args(["run", "--allow-dir", ".", "--allow-remote-model-egress"])
+            .args(["--max-model-turns", turns, "goal"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(!state.exists());
+    }
+
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    fs::write(workspace.join("README.md"), "fixture").unwrap();
+    // Single-shot runs have no agent loop; the request is refused, not ignored.
+    let single = xgeny(&state)
+        .current_dir(&workspace)
+        .env("XGENY_OPENAI_BASE_URL", "http://127.0.0.1:1/v1")
+        .env("XGENY_OPENAI_MODEL", MODEL)
+        .args([
+            "run",
+            "--allow-file",
+            "README.md",
+            "--allow-remote-model-egress",
+        ])
+        .args(["--max-model-turns", "64", "goal"])
+        .output()
+        .unwrap();
+    assert_configuration_before_state(&single, &state);
+
+    let server = CompletionServer::spawn();
+    let output = xgeny(&state)
+        .current_dir(&workspace)
+        .env("XGENY_OPENAI_BASE_URL", &server.base_url)
+        .env("XGENY_OPENAI_MODEL", MODEL)
+        .args(["run", "--allow-dir", ".", "--allow-remote-model-egress"])
+        .args(["--max-model-turns", "64", "inspect the workspace"])
+        .output()
+        .unwrap();
+    let _ = server.handle.join();
+    assert!(String::from_utf8_lossy(&output.stderr).contains("XGENY_STARTED"));
+    let manifests: Vec<_> = fs::read_dir(state.join("runs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("manifest.json"))
+        .collect();
+    assert_eq!(manifests.len(), 1);
+    let manifest: Value = serde_json::from_slice(&fs::read(&manifests[0]).unwrap()).unwrap();
+    let budget = &manifest["record"]["budget"];
+    assert_eq!(budget["maxModelTurns"], 64);
+    assert_eq!(budget["maxModelCalls"], 128);
+    assert_eq!(budget["maxPlannedSteps"], 64);
+    assert_eq!(budget["maxToolCalls"], 64);
+}
+
 fn xgeny(state: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_xgeny"));
     command

@@ -63,6 +63,10 @@ impl Default for ManifestBudget {
     }
 }
 
+/// Upper bound for a host-selected model turn budget; planned steps stay within the
+/// planner's source-step bound.
+pub const MAX_HOST_MODEL_TURNS: u32 = 4_096;
+
 impl ManifestBudget {
     pub(crate) const fn workspace_discovery() -> Self {
         Self {
@@ -72,6 +76,24 @@ impl ManifestBudget {
             max_tool_calls: 8,
             max_context_bytes: 512 * 1024,
         }
+    }
+
+    /// Host-selected agent loop budget for workspace discovery, recorded in the Run manifest.
+    ///
+    /// Model calls, planned steps and tool calls keep the `workspace_discovery` ratio
+    /// (2:1:1 per model turn). The context bound is unchanged. Resume reads the manifest, so a
+    /// continued Run keeps the budget it was created with.
+    pub(crate) fn with_model_turns(max_model_turns: u32) -> Result<Self, ManifestError> {
+        if !(1..=MAX_HOST_MODEL_TURNS).contains(&max_model_turns) {
+            return Err(ManifestError::Invalid);
+        }
+        Ok(Self {
+            max_model_turns,
+            max_model_calls: max_model_turns * 2,
+            max_planned_steps: max_model_turns,
+            max_tool_calls: max_model_turns,
+            ..Self::workspace_discovery()
+        })
     }
 
     pub(crate) fn agent_loop(&self) -> Result<AgentLoopBudget, ManifestError> {
@@ -356,6 +378,52 @@ mod tests {
             RunManifest::from_bytes(&serde_json::to_vec(&value).unwrap()).unwrap_err(),
             ManifestError::Invalid
         );
+    }
+
+    #[test]
+    fn host_model_turn_budget_keeps_discovery_ratio_and_round_trips() {
+        let budget = ManifestBudget::with_model_turns(96).unwrap();
+        assert_eq!(
+            (
+                budget.max_model_turns,
+                budget.max_model_calls,
+                budget.max_planned_steps,
+                budget.max_tool_calls,
+                budget.max_context_bytes,
+            ),
+            (
+                96,
+                192,
+                96,
+                96,
+                ManifestBudget::workspace_discovery().max_context_bytes
+            )
+        );
+        for turns in [0, MAX_HOST_MODEL_TURNS + 1] {
+            assert_eq!(
+                ManifestBudget::with_model_turns(turns).unwrap_err(),
+                ManifestError::Invalid
+            );
+        }
+        let largest = ManifestBudget::with_model_turns(MAX_HOST_MODEL_TURNS).unwrap();
+        assert!(largest.agent_loop().is_ok() && largest.model_calls().is_ok());
+        let manifest = RunManifest::new(
+            "run-0123456789abcdef0123456789abcdef",
+            &WorkspaceId::new("ws-0123456789abcdef").unwrap(),
+            "xgeny.workspace-root.unix-file-id.v1",
+            DIGEST_A,
+            "xgeny.cli.openai",
+            "qwen3.8-27b",
+            "Qwen-Qwen3.8-27B-FP8",
+            DIGEST_B,
+            DIGEST_C,
+            DIGEST_D,
+            budget.clone(),
+        )
+        .unwrap();
+        let loaded = RunManifest::from_bytes(&manifest.to_bytes().unwrap()).unwrap();
+        assert_eq!(loaded.budget(), &budget);
+        assert_ne!(loaded.authority(), fixture().authority());
     }
 
     #[test]

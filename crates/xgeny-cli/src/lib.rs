@@ -12,4 +12,5 @@ mod run_layout;
 
 pub use composition::*;
 pub use driver::*;
+pub use manifest::MAX_HOST_MODEL_TURNS;
 pub use model_profile::*;

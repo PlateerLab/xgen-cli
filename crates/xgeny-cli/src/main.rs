@@ -234,6 +234,17 @@ struct RunArgs {
     /// Bound work performed by this process invocation.
     #[arg(long, default_value_t = 32)]
     max_ticks: u32,
+    /// Agent loop budget recorded in the Run manifest for workspace discovery runs.
+    #[arg(
+        long,
+        value_name = "TURNS",
+        value_parser = clap::value_parser!(u32).range(1..=i64::from(xgeny_cli::MAX_HOST_MODEL_TURNS)),
+        help = format!(
+            "Agent loop budget recorded in the Run manifest (1..={}); model calls, planned steps and tool calls scale 2:1:1. Resume keeps the recorded budget. XGENY_RUN_BUDGET=manifest-model-turns-v1",
+            xgeny_cli::MAX_HOST_MODEL_TURNS
+        )
+    )]
+    max_model_turns: Option<u32>,
 }
 
 #[derive(Debug, Args)]
@@ -422,6 +433,7 @@ impl repl::ReplHost for InteractiveHost {
                 allow_write: grants.write,
                 allow_execute: grants.execute,
                 max_ticks: REPL_MAX_TICKS,
+                max_model_turns: None,
             },
             &process_session,
             |run_id| eprintln!("XGENY_STARTED run_id={run_id}"),
@@ -601,6 +613,7 @@ fn run_command(args: RunArgs) -> ExitCode {
             allow_write: args.allow_write,
             allow_execute: args.allow_execute,
             max_ticks: args.max_ticks,
+            max_model_turns: args.max_model_turns,
         },
         |run_id| eprintln!("XGENY_STARTED run_id={run_id}"),
     ))
