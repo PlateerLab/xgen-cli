@@ -1,0 +1,76 @@
+{
+  "decision": "do_not_adopt",
+  "reasons": [
+    "별도 검증의 작업 완료가 4/4에서 3/4로 감소",
+    "실패한 설계 사례가 하나로, 사전 두 사례 조건 미충족"
+  ],
+  "reviewed_trials": [
+    {
+      "case": "ranges",
+      "split": "design",
+      "variant": "baseline",
+      "attempt": 1,
+      "final_literal_quote": "mismatch",
+      "semantic_error_confirmed": true,
+      "evidence": "최종 인용에는 병합 조건에 + 1이 있지만 실제 파일에는 없다. <=가 동일 끝점을 제외한다는 설명도 잘못됐다."
+    },
+    {
+      "case": "quoted_fields",
+      "split": "held_out",
+      "variant": "baseline",
+      "attempt": 1,
+      "final_literal_quote": "match",
+      "semantic_error_confirmed": false,
+      "evidence": "수정 전·후를 명시해서 함께 인용했다. 최종 함수는 실제 파일 AST와 일치한다."
+    },
+    {
+      "case": "quoted_fields",
+      "split": "held_out",
+      "variant": "baseline",
+      "attempt": 2,
+      "final_literal_quote": "mismatch",
+      "semantic_error_confirmed": false,
+      "evidence": "최종 인용이 실제 파일의 continue 구조를 else/elif로 바꿨다. fixture 결과상 동등하며 literal 일치만 실패했다."
+    },
+    {
+      "case": "windows",
+      "split": "held_out",
+      "variant": "readback",
+      "attempt": 1,
+      "final_literal_quote": "missing",
+      "semantic_error_confirmed": false,
+      "evidence": "completion output이 없다. model_rejected.planner_invalid_response로 거절됐다. 원인은 확인하지 못했다."
+    }
+  ],
+  "literal_quote_matches": {
+    "baseline": 6,
+    "readback": 7
+  },
+  "workflow_completions": {
+    "baseline": 8,
+    "readback": 7
+  },
+  "tests_passed": {
+    "baseline": 8,
+    "readback": 8
+  },
+  "limits": [
+    "작은 표본",
+    "자연어 전체의 사실성 인증이 아님",
+    "CSV 인용 차이를 의미적 오류로 판정하지 않음",
+    "모델 응답 거절과 후보의 인과 관계 미확인",
+    "토큰 및 금액 미측정"
+  ],
+  "averages": {
+    "baseline": {
+      "model_calls": 7.125,
+      "elapsed_seconds": 10.563637049272074,
+      "readbacks": 0
+    },
+    "readback": {
+      "model_calls": 8,
+      "elapsed_seconds": 11.806002782730502,
+      "readbacks": 8
+    }
+  }
+}

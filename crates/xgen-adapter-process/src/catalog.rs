@@ -35,6 +35,17 @@ pub(crate) struct ExecutableEntry {
 }
 
 impl ExecutableCatalog {
+    pub(crate) fn fingerprints(&self) -> BTreeMap<String, String> {
+        self.entries
+            .iter()
+            .map(|(id, entry)| {
+                (
+                    format!("executable:{id}"),
+                    sha256_digest(format!("{}/{}", entry.launch_digest, entry.digest).as_bytes()),
+                )
+            })
+            .collect()
+    }
     /// Snapshot a set of host-resolved OS-executable files under portable logical identifiers.
     ///
     /// The launch path and its canonical target/content are pinned. The launch alias is retained
@@ -428,6 +439,35 @@ mod tests {
 
     use super::*;
     use crate::ProcessWorkspaceId;
+
+    #[test]
+    fn executable_fingerprints_detect_content_changes_without_exposing_paths() {
+        use std::io::Write as _;
+        for id in ["compiler", "runner"] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("fixture.exe");
+            std::fs::copy(std::env::current_exe().unwrap(), &path).unwrap();
+            let before = ExecutableCatalog::from_paths([(id, &path)])
+                .unwrap()
+                .fingerprints();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(b"diagnostic change")
+                .unwrap();
+            let after = ExecutableCatalog::from_paths([(id, &path)])
+                .unwrap()
+                .fingerprints();
+            assert_ne!(before, after);
+            assert!(after.contains_key(&format!("executable:{id}")));
+            assert!(
+                !serde_json::to_string(&after)
+                    .unwrap()
+                    .contains(&directory.path().to_string_lossy().into_owned())
+            );
+        }
+    }
 
     #[test]
     fn resolver_is_catalog_bound_and_idempotent() {

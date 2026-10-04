@@ -457,7 +457,7 @@ impl repl::ReplHost for InteractiveHost {
             },
             progress,
         )
-        .map_err(|error| repl::ReplFailure::new(error.code()))
+        .map_err(repl::ReplFailure::from_run_error)
     }
 
     fn resume(
@@ -512,7 +512,7 @@ impl repl::ReplHost for InteractiveHost {
         if let Some(error) = resolution_error {
             Err(repl::ReplFailure::new(error.code()))
         } else {
-            result.map_err(|error| repl::ReplFailure::new(error.code()))
+            result.map_err(repl::ReplFailure::from_run_error)
         }
     }
 }
@@ -1716,6 +1716,16 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         }
         Err(error) => {
             eprintln!("XGEN_ERROR code={}", error.code());
+            if let Some((field, items, hint)) = error.configuration_details() {
+                eprintln!("  configuration={field}");
+                if !items.is_empty() {
+                    eprintln!(
+                        "  changed_items={}",
+                        serde_json::to_string(items).expect("identifiers serialize")
+                    );
+                }
+                eprintln!("  recovery={hint}");
+            }
             ExitCode::from(error.exit_code())
         }
     }

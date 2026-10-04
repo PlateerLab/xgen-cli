@@ -31,6 +31,8 @@ struct RunManifestRecord {
     model_data_boundary: ModelDataBoundary,
     allow_file_catalog_digest: String,
     local_execution_profile_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    process_fingerprints: Option<std::collections::BTreeMap<String, String>>,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
@@ -141,6 +143,7 @@ impl RunManifest {
             model_data_boundary: ModelDataBoundary::Remote,
             allow_file_catalog_digest: allow_file_catalog_digest.to_owned(),
             local_execution_profile_digest: local_execution_profile_digest.to_owned(),
+            process_fingerprints: None,
             budget,
             conversation_responses: false,
         };
@@ -156,6 +159,22 @@ impl RunManifest {
         self.record.conversation_responses = true;
         self.record_digest = digest_record(&self.record)?;
         Ok(self)
+    }
+
+    pub(crate) fn with_process_fingerprints(
+        mut self,
+        fingerprints: std::collections::BTreeMap<String, String>,
+    ) -> Result<Self, ManifestError> {
+        self.record.process_fingerprints = Some(fingerprints);
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn process_fingerprints(
+        &self,
+    ) -> Option<&std::collections::BTreeMap<String, String>> {
+        self.record.process_fingerprints.as_ref()
     }
 
     pub(crate) fn conversation_responses(&self) -> bool {
@@ -256,6 +275,17 @@ pub(crate) enum ManifestError {
 }
 
 fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
+    if record.process_fingerprints.as_ref().is_some_and(|items| {
+        items.len() > 128
+            || items.iter().any(|(key, value)| {
+                key.len() > 256
+                    || key.chars().any(char::is_control)
+                    || !(key.starts_with("executable:") || key.starts_with("environment:"))
+                    || !valid_sha256_digest(value)
+            })
+    }) {
+        return Err(ManifestError::Invalid);
+    }
     if record.format_version != MANIFEST_FORMAT_VERSION
         || !valid_run_id(&record.run_id)
         || WorkspaceId::new(&record.workspace_id).is_err()
@@ -365,6 +395,28 @@ mod tests {
             ManifestBudget::default(),
         )
         .expect("manifest should construct")
+    }
+
+    #[test]
+    fn optional_diagnostics_keep_legacy_manifests_and_bind_new_hashes() {
+        let legacy = fixture();
+        assert!(legacy.process_fingerprints().is_none());
+        let mut hashes = std::collections::BTreeMap::new();
+        hashes.insert("environment:LANG".to_owned(), DIGEST_A.to_owned());
+        let manifest = legacy.with_process_fingerprints(hashes).unwrap();
+        assert_eq!(
+            RunManifest::from_bytes(&manifest.to_bytes().unwrap()).unwrap(),
+            manifest
+        );
+        let mut value: Value = serde_json::from_slice(&manifest.to_bytes().unwrap()).unwrap();
+        value["record"]["processFingerprints"]["environment:LANG"] =
+            Value::String(DIGEST_B.to_owned());
+        assert!(RunManifest::from_bytes(&serde_json::to_vec(&value).unwrap()).is_err());
+        let invalid = std::collections::BTreeMap::from([(
+            "environment:LANG".to_owned(),
+            "plaintext".to_owned(),
+        )]);
+        assert!(fixture().with_process_fingerprints(invalid).is_err());
     }
 
     #[test]

@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use xgen_cli::{DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason};
+use xgen_cli::{
+    DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason, RejectionReason,
+};
 
 const MAX_REPL_LINE_BYTES: usize = 16 * 1024;
 const MAX_REPL_GOAL_BYTES: usize = 16 * 1024;
@@ -170,18 +172,29 @@ pub(crate) struct ModelView {
     pub(crate) authentication: &'static str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReplFailure {
     code: &'static str,
+    run_error: Option<xgen_cli::PublicRunError>,
 }
 
 impl ReplFailure {
     pub(crate) const fn new(code: &'static str) -> Self {
-        Self { code }
+        Self {
+            code,
+            run_error: None,
+        }
     }
 
-    const fn code(self) -> &'static str {
+    const fn code(&self) -> &'static str {
         self.code
+    }
+
+    pub(crate) fn from_run_error(error: xgen_cli::PublicRunError) -> Self {
+        Self {
+            code: error.code(),
+            run_error: Some(error),
+        }
     }
 }
 
@@ -445,11 +458,11 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
             ReplEntry::Command(ReplCommand::Model(name)) => match name {
                 Some(name) => match host.use_model(&name) {
                     Ok(model) => print_model(output, &model)?,
-                    Err(error) => print_failure(output, error)?,
+                    Err(error) => print_failure(output, &error)?,
                 },
                 None => match host.model() {
                     Ok(model) => print_model(output, &model)?,
-                    Err(error) => print_failure(output, error)?,
+                    Err(error) => print_failure(output, &error)?,
                 },
             },
             ReplEntry::Command(ReplCommand::Status) => {
@@ -597,8 +610,10 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
         let conversation = matches!(result, Ok(LocalCommandResult::Responded { .. }));
         match result {
             Err(error) => {
-                session_context.pending_goal = None;
-                print_failure(output, error)?;
+                if active_run.is_none() {
+                    session_context.pending_goal = None;
+                }
+                print_failure(output, &error)?;
                 return Ok(());
             }
             Ok(
@@ -659,11 +674,28 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
             }
             Ok(LocalCommandResult::Rejected { run_id, reason }) => {
                 cancellation.clear();
-                *active_run = None;
+                let model_rejected = matches!(reason, RejectionReason::ModelRejected(_));
+                *active_run = model_rejected.then(|| run_id.clone());
                 *last_run = Some(run_id.clone());
                 *outcome = SessionOutcome::Rejected;
-                session_context.pending_goal = None;
+                if !model_rejected {
+                    session_context.pending_goal = None;
+                }
                 writeln!(output, "rejected: run_id={run_id} reason={}", reason.code())?;
+                if model_rejected {
+                    writeln!(
+                        output,
+                        "The model response was rejected; no final answer was saved."
+                    )?;
+                    writeln!(
+                        output,
+                        "Committed execution results are preserved. Task completion is not confirmed."
+                    )?;
+                    write!(output, "Continue this Run: /resume ")?;
+                    write_terminal_text(output, &run_id)?;
+                    writeln!(output)?;
+                    writeln!(output, "Use /clear to start a different task.")?;
+                }
                 return Ok(());
             }
             Ok(LocalCommandResult::RecoveryRequired { run_id, reason }) => {
@@ -1171,8 +1203,24 @@ fn print_permissions(output: &mut impl Write, settings: PermissionSettings) -> i
     )
 }
 
-fn print_failure(output: &mut impl Write, failure: ReplFailure) -> io::Result<()> {
-    writeln!(output, "error: {}", failure.code())
+fn print_failure(output: &mut impl Write, failure: &ReplFailure) -> io::Result<()> {
+    writeln!(output, "error: {}", failure.code())?;
+    if let Some((field, items, hint)) = failure
+        .run_error
+        .as_ref()
+        .and_then(xgen_cli::PublicRunError::configuration_details)
+    {
+        writeln!(output, "configuration: {field}")?;
+        if !items.is_empty() {
+            writeln!(
+                output,
+                "changed_items: {}",
+                serde_json::to_string(items).expect("identifiers serialize")
+            )?;
+        }
+        writeln!(output, "{hint}")?;
+    }
+    Ok(())
 }
 
 fn write_terminal_text(output: &mut impl Write, value: &str) -> io::Result<()> {
@@ -1262,6 +1310,66 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn model_rejection_keeps_request_until_explicit_resume_or_clear() {
+        for reason in [
+            xgen_workgraph::ModelCallRejectionReason::PlannerInvalidResponse,
+            xgen_workgraph::ModelCallRejectionReason::OutputTruncated,
+        ] {
+            let mut host = FakeHost::new([
+                LocalCommandResult::Rejected {
+                    run_id: "run-rejected".to_owned(),
+                    reason: RejectionReason::ModelRejected(reason),
+                },
+                LocalCommandResult::Completed {
+                    run_id: "run-rejected".to_owned(),
+                    summary: "recovered answer".to_owned(),
+                },
+                LocalCommandResult::Responded {
+                    run_id: "run-next".to_owned(),
+                    summary: "next answer".to_owned(),
+                },
+            ]);
+            let mut input = io::Cursor::new(b"/permissions model allow\noriginal request\n/status\nunrelated request\n/resume\nfollow-up\n/exit\n");
+            let mut output = Vec::new();
+            run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+            let output = String::from_utf8(output).unwrap();
+            assert!(output.contains("no final answer was saved"));
+            assert!(output.contains("Task completion is not confirmed"));
+            assert!(output.contains("Continue this Run: /resume run-rejected"));
+            assert!(output.contains("active_run: run-rejected"));
+            assert!(output.contains("error: active_run_paused"));
+            assert_eq!(host.resumes.len(), 1);
+            assert_eq!(host.starts.len(), 2);
+            assert!(host.starts[1].0.contains("original request"));
+            assert!(host.starts[1].0.contains("recovered answer"));
+            assert!(!host.starts[1].0.contains("unrelated request"));
+        }
+    }
+
+    #[test]
+    fn clear_after_model_rejection_starts_without_failed_request_context() {
+        let mut host = FakeHost::new([
+            LocalCommandResult::Rejected {
+                run_id: "run-rejected".to_owned(),
+                reason: RejectionReason::ModelRejected(
+                    xgen_workgraph::ModelCallRejectionReason::PlannerInvalidResponse,
+                ),
+            },
+            LocalCommandResult::Responded {
+                run_id: "run-new".to_owned(),
+                summary: "fresh answer".to_owned(),
+            },
+        ]);
+        let mut input = io::Cursor::new(
+            b"/permissions model allow\nfailed request\n/clear\nfresh request\n/exit\n",
+        );
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        assert!(host.resumes.is_empty());
+        assert_eq!(host.starts[1].0, "fresh request");
+    }
 
     struct FakeHost {
         results: VecDeque<Result<LocalCommandResult, ReplFailure>>,

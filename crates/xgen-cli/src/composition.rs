@@ -586,9 +586,13 @@ impl RecoveryReason {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublicRunError {
     Configuration,
+    ConfigurationMismatch {
+        field: &'static str,
+        changed_items: Vec<String>,
+    },
     Busy,
     Integrity,
     Internal,
@@ -738,9 +742,9 @@ fn local_model_call_recovery(
 
 impl PublicRunError {
     #[must_use]
-    pub const fn code(self) -> &'static str {
+    pub const fn code(&self) -> &'static str {
         match self {
-            Self::Configuration => "configuration_mismatch",
+            Self::Configuration | Self::ConfigurationMismatch { .. } => "configuration_mismatch",
             Self::Busy => "run_busy",
             Self::Integrity => "run_integrity_failure",
             Self::Internal => "internal_safety_failure",
@@ -748,11 +752,35 @@ impl PublicRunError {
     }
 
     #[must_use]
-    pub const fn exit_code(self) -> u8 {
+    pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::Configuration => 64,
+            Self::Configuration | Self::ConfigurationMismatch { .. } => 64,
             Self::Busy => 75,
             Self::Integrity | Self::Internal => 70,
+        }
+    }
+
+    #[must_use]
+    pub fn configuration_details(&self) -> Option<(&'static str, &[String], &'static str)> {
+        match self {
+            Self::ConfigurationMismatch {
+                field,
+                changed_items,
+            } => Some((
+                field,
+                changed_items,
+                match *field {
+                    "workspace" => "Resume from the original workspace directory.",
+                    "file_catalog" => {
+                        "Restore the original --allow-file and --allow-dir selections."
+                    }
+                    "model_profile" => "Restore the original model profile and inference options.",
+                    _ => {
+                        "Restore the original executable selections, binaries and safe process environment; the binding cannot be overridden."
+                    }
+                },
+            )),
+            _ => None,
         }
     }
 }
@@ -973,13 +1001,7 @@ where
         manifest_budget(planning_constraints_required, request.max_model_turns)?,
     )
     .map_err(|_| PublicRunError::Configuration)?;
-    let manifest = if conversation_responses {
-        manifest
-            .with_conversation_responses()
-            .map_err(|_| PublicRunError::Configuration)?
-    } else {
-        manifest
-    };
+    let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?;
     let planner = remote_planner(config, request.credential)?;
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
     let layout = RunLayout::create(&state_root, manifest.run_id()).map_err(map_layout_create)?;
@@ -1173,7 +1195,10 @@ where
     if manifest.workspace_identity_profile() != WORKSPACE_IDENTITY_PROFILE
         || manifest.workspace_identity_digest() != identity.as_str()
     {
-        return Err(PublicRunError::Configuration);
+        return Err(PublicRunError::ConfigurationMismatch {
+            field: "workspace",
+            changed_items: Vec::new(),
+        });
     }
     let catalog = LocalReadCatalog::build(&workspace, &request.allow_files, &request.allow_dirs)?;
     if process_session.is_some() && !request.allow_executables.is_empty() {
@@ -1188,13 +1213,36 @@ where
     if request.allow_execute && process.is_none() {
         return Err(PublicRunError::Configuration);
     }
+    if manifest.allow_file_catalog_digest() != catalog.catalog_digest() {
+        return Err(PublicRunError::ConfigurationMismatch {
+            field: "file_catalog",
+            changed_items: Vec::new(),
+        });
+    }
     if manifest.local_execution_profile_digest()
         != local_execution_profile_digest(&workspace, &catalog, process.as_ref())?
     {
-        return Err(PublicRunError::Configuration);
-    }
-    if manifest.allow_file_catalog_digest() != catalog.catalog_digest() {
-        return Err(PublicRunError::Configuration);
+        let current = process
+            .as_ref()
+            .map(|p| p.workspace().diagnostic_fingerprints())
+            .unwrap_or_default();
+        let changed_items = manifest
+            .process_fingerprints()
+            .map(|previous| {
+                previous
+                    .keys()
+                    .chain(current.keys())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .filter(|key| previous.get(*key) != current.get(*key))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        return Err(PublicRunError::ConfigurationMismatch {
+            field: "execution_profile",
+            changed_items,
+        });
     }
     if !manifest.remote_model_egress() {
         return Err(PublicRunError::Configuration);
@@ -1220,7 +1268,10 @@ where
         )?;
         let config = response_contract(config, manifest.conversation_responses())?;
         if manifest.request_profile_digest() != config.request_profile_digest() {
-            return Err(PublicRunError::Configuration);
+            return Err(PublicRunError::ConfigurationMismatch {
+                field: "model_profile",
+                changed_items: Vec::new(),
+            });
         }
         Some(remote_planner(config, resolved.credential)?)
     } else {
@@ -2146,6 +2197,26 @@ struct ProcessExecutionProfileDescriptor<'a> {
     approval_profile: &'static str,
     host_policy_profile: &'static str,
     user_execute_policy_profile: &'static str,
+}
+
+fn bind_manifest_options(
+    manifest: RunManifest,
+    process: Option<&ProcessTooling>,
+    conversation_responses: bool,
+) -> Result<RunManifest, PublicRunError> {
+    let manifest = match process {
+        Some(process) => manifest
+            .with_process_fingerprints(process.workspace().diagnostic_fingerprints())
+            .map_err(|_| PublicRunError::Configuration)?,
+        None => manifest,
+    };
+    if conversation_responses {
+        manifest
+            .with_conversation_responses()
+            .map_err(|_| PublicRunError::Configuration)
+    } else {
+        Ok(manifest)
+    }
 }
 
 fn local_execution_profile_digest(

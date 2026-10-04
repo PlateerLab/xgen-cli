@@ -95,6 +95,18 @@ pub struct ProcessWorkspace {
 }
 
 impl ProcessWorkspace {
+    /// Diagnostic hashes only; never expose paths or inherited environment values.
+    #[must_use]
+    pub fn diagnostic_fingerprints(&self) -> std::collections::BTreeMap<String, String> {
+        let mut result = self.catalog.fingerprints();
+        for (key, value) in self.environment.values() {
+            result.insert(
+                format!("environment:{key}"),
+                execution::sha256_digest(value.as_bytes()),
+            );
+        }
+        result
+    }
     /// Open a user-selected workspace and bind it to an explicit executable/environment snapshot.
     ///
     /// This trusted composition-root API is the only ambient path entrypoint in the crate. The

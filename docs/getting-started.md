@@ -255,6 +255,15 @@ continuation이다. 직전 durable completion summary만 다음 goal에 비신�
 연결을 제거하지만 Run state를 삭제하지 않는다. 상세 동작과 Ctrl+C 복구 의미는
 [대화형 REPL](development/interactive-repl.md)을 따른다.
 
+모델 응답 거절 뒤 `/resume RUN_ID`가 `configuration_mismatch`로 막히면 추가로 표시되는
+`configuration`과 `changed_items`를 확인한다. `workspace`는 원래 디렉터리, `file_catalog`는 원래
+`--allow-file`/`--allow-dir`, `model_profile`은 원래 모델·추론 옵션을 복원해야 한다. `execution_profile`에서
+`environment:LANG` 같은 항목은 원래 셸 환경을, `executable:git` 같은 항목은 원래 실행 파일 선택·경로·내용을
+복원한다. 값·경로는 출력하지 않으며 binding을 무시하는 강제 재개는 제공하지 않는다.
+
+새 Run에는 항목별 fingerprint를 저장한다. 기존 Run에 이 정보가 없거나 실행 profile 정의 자체가 달라졌다면
+항목 이름까지는 알 수 없고 설정 종류만 안내한다. 이미 완료한 Run의 최종 응답 replay에는 이 설정 복원이 필요하지 않다.
+
 ## 첫 실행과 재개
 
 현재 directory를 workspace로 열고 model이 선택할 수 있는 상대 파일을 명시한다. Model egress와 실제
