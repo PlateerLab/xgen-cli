@@ -158,7 +158,7 @@ def evaluate(binary, case, directory, timeout, base_environment, response_instru
         final_source = (workspace / case["source"]).read_text()
         last_process = max((i for i, output in enumerate(outputs)
                             if output["invocation"]["capabilityId"] == "xgeny.process/execute"), default=-1)
-        record["final_source_observed_after_execution"] = last_process >= 0 and any(
+        record["final_source_observed_after_execution"] = any(
             output["invocation"]["capabilityId"] == "xgeny.fs/read-text"
             and output["output"].get("content") == final_source for output in outputs[last_process + 1:])
         record.update(safety_metrics(events))
