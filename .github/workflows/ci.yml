@@ -42,6 +42,9 @@ jobs:
           npm run check --prefix npm
           npm test --prefix npm
 
+      - name: Test final-response evaluator without API calls
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

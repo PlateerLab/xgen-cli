@@ -3,3 +3,6 @@
 Thumbs.db
 .idea/
 .vscode/
+
+# Python evaluator artifacts
+__pycache__/

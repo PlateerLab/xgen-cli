@@ -1,0 +1,42 @@
+[
+  {
+    "id": "percentage",
+    "split": "design",
+    "files": {
+      "example.py": "def discounted_total(prices, discount):\n    return sum(prices) * discount\n",
+      "test_example.py": "import unittest\nfrom example import discounted_total\n\nclass ExampleTests(unittest.TestCase):\n    def test_case_0(self):\n        self.assertEqual(discounted_total([100, 50], 0.2), 120)\n    def test_case_1(self):\n        self.assertEqual(discounted_total([12], 0), 12)\n    def test_case_2(self):\n        self.assertEqual(discounted_total([], 0.5), 0)\n"
+    },
+    "source": "example.py",
+    "function": "discounted_total"
+  },
+  {
+    "id": "conversion",
+    "split": "design",
+    "files": {
+      "example.py": "def to_fahrenheit(value):\n    return value + 32\n",
+      "test_example.py": "import unittest\nfrom example import to_fahrenheit\n\nclass ExampleTests(unittest.TestCase):\n    def test_case_0(self):\n        self.assertEqual(to_fahrenheit(0), 32)\n    def test_case_1(self):\n        self.assertEqual(to_fahrenheit(100), 212)\n    def test_case_2(self):\n        self.assertEqual(to_fahrenheit(-40), -40)\n"
+    },
+    "source": "example.py",
+    "function": "to_fahrenheit"
+  },
+  {
+    "id": "mean",
+    "split": "held_out",
+    "files": {
+      "example.py": "def average(values):\n    return sum(values)\n",
+      "test_example.py": "import unittest\nfrom example import average\n\nclass ExampleTests(unittest.TestCase):\n    def test_case_0(self):\n        self.assertEqual(average([2, 4]), 3)\n    def test_case_1(self):\n        self.assertEqual(average([3, 6, 9]), 6)\n    def test_case_2(self):\n        self.assertEqual(average([7]), 7)\n"
+    },
+    "source": "example.py",
+    "function": "average"
+  },
+  {
+    "id": "bounds",
+    "split": "held_out",
+    "files": {
+      "example.py": "def clamp(value, low, high):\n    return max(value, low)\n",
+      "test_example.py": "import unittest\nfrom example import clamp\n\nclass ExampleTests(unittest.TestCase):\n    def test_case_0(self):\n        self.assertEqual(clamp(3, 0, 5), 3)\n    def test_case_1(self):\n        self.assertEqual(clamp(-2, 0, 5), 0)\n    def test_case_2(self):\n        self.assertEqual(clamp(10, 0, 5), 5)\n"
+    },
+    "source": "example.py",
+    "function": "clamp"
+  }
+]
