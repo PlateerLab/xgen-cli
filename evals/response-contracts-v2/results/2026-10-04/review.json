@@ -1,0 +1,64 @@
+{
+  "baseline_quote_failures": [
+    {
+      "trial": "split-last-1-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": true
+    },
+    {
+      "trial": "split-last-2-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": true
+    },
+    {
+      "trial": "rotate-2-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": false
+    },
+    {
+      "trial": "adjacent-dedupe-1-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": false
+    },
+    {
+      "trial": "adjacent-dedupe-2-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": false
+    },
+    {
+      "trial": "adjacent-dedupe-3-baseline",
+      "classification": "equivalent_code_rewritten_not_literal_quote",
+      "prose_implementation_claim_contradicted": false
+    }
+  ],
+  "structured_commands_match": {
+    "baseline": 12,
+    "copy_observation": 12
+  },
+  "structured_changed_files_match": {
+    "baseline": 12,
+    "copy_observation": 12
+  },
+  "manual_prose_findings": [
+    {
+      "trial": "split-last-1-baseline",
+      "claim": "rsplit(sep, 1)로 고쳐",
+      "actual": "rfind(sep)",
+      "classification": "implementation_claim_contradicted"
+    },
+    {
+      "trial": "split-last-2-baseline",
+      "claim": "rsplit(sep, 1) 기반으로 고쳐",
+      "actual": "rfind(sep)",
+      "classification": "implementation_claim_contradicted"
+    }
+  ],
+  "review_corrections": [
+    "설계 baseline 2회에 수정 전 실패 명령이 없지만, 응답도 해당 실패 명령을 실행했다고 주장하지 않았다. 관찰하지 않은 명령을 지어낸 것으로 분류하지 않는다. 다만 먼저 실패를 관찰하라는 작업 지시는 이 두 실행에서 충족되지 않았다.",
+    "자유 형식 문장의 전체 자동 사실 검증 결과가 아니다. 24개 응답에서 명시한 명령 결과와 digest를 직접 대조했고, 구현 방식 설명 불일치 2회를 기록했다."
+  ],
+  "scope": "소스 인용 개선만 확인했다. 명령·변경 파일 보고는 양 조건 모두 12/12이므로 해당 항목의 개선을 주장하지 않는다.",
+  "decision": "promising_requires_larger_validation",
+  "production_default_changed": false,
+  "execution_inputs_verified_unchanged": true
+}

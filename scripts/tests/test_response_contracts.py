@@ -25,6 +25,52 @@ def records():
 
 
 class ResponseContractTests(unittest.TestCase):
+    def test_observed_commands_join_outputs_in_execution_order_not_recipe_order(self):
+        import json
+        import sqlite3
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with sqlite3.connect(root / 'materials.sqlite3') as connection:
+                connection.execute('CREATE TABLE material_recipe (record BLOB)')
+                for step, executable, args in [('build', 'node', ['--check', 'source.mjs']),
+                                               ('test', 'node', ['--test', 'test.mjs']),
+                                               ('unexecuted', 'python3', ['--version'])]:
+                    connection.execute('INSERT INTO material_recipe VALUES (?)', (json.dumps({
+                        'stepId': step, 'capability': {'capabilityId': 'xgeny.process/execute'},
+                        'arguments': {'executable': f'process:primary/executables/{executable}', 'args': args}}),))
+            outputs = [{'stepId': step, 'invocation': {'capabilityId': 'xgeny.process/execute'},
+                        'output': {'exitCode': code}} for step, code in [('test', 1), ('test', 0), ('build', 0)]]
+            self.assertEqual(MODULE.EVAL.observed_commands(root / 'run.sqlite3', outputs), [
+                {'argv': ['node', '--test', 'test.mjs'], 'exit_code': 1},
+                {'argv': ['node', '--test', 'test.mjs'], 'exit_code': 0},
+                {'argv': ['node', '--check', 'source.mjs'], 'exit_code': 0}])
+
+    def test_evidence_is_not_accepted_when_failed_commands_or_changed_files_are_omitted(self):
+        import json
+        commands = [{'argv': ['node', '--test', 'test.mjs'], 'exit_code': 1},
+                    {'argv': ['node', '--test', 'test.mjs'], 'exit_code': 0}]
+        for claim, expected in [
+            ({'commands': commands, 'changed_files': ['source.mjs']}, (True, True)),
+            ({'commands': commands[1:], 'changed_files': ['source.mjs']}, (False, True)),
+            ({'commands': commands, 'changed_files': []}, (True, False)),
+        ]:
+            actual = MODULE.EVAL.evidence_claims('```json\n' + json.dumps(claim) + '\n```', commands, ['source.mjs'])
+            self.assertEqual((actual['command_claims_match'], actual['changed_file_claims_match']), expected)
+
+    def test_invalid_evidence_cannot_pass_as_missing_or_duplicate_json(self):
+        for summary in ('no evidence', '```json\n{\n```', '```json\n{}\n```\n```json\n{}\n```'):
+            self.assertFalse(MODULE.EVAL.evidence_claims(summary, [], [])['evidence_contract_valid'])
+
+    def test_evidence_regression_is_rejected_separately_from_literal_quotes(self):
+        rs = records()
+        for r in rs:
+            r.update(command_claims_match=True, changed_file_claims_match=True)
+        for r in rs:
+            if r['split'] == 'held_out' and r['variant'] == 'copy_observation':
+                r['command_claims_match'] = False
+        self.assertEqual(MODULE.gate(rs, 2, True), 'do_not_adopt_evidence_regression')
+
     def test_partial_usage_does_not_report_a_complete_cached_mean(self):
         rs = records()
         rs[0]['usage']['completeTokenUsage'] = False
