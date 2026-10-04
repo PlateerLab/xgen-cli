@@ -60,5 +60,37 @@
   "scope": "소스 인용 개선만 확인했다. 명령·변경 파일 보고는 양 조건 모두 12/12이므로 해당 항목의 개선을 주장하지 않는다.",
   "decision": "promising_requires_larger_validation",
   "production_default_changed": false,
-  "execution_inputs_verified_unchanged": true
+  "execution_inputs_verified_unchanged": true,
+  "independent_quoted_code_checks": [
+    {
+      "trial": "split-last-1-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    },
+    {
+      "trial": "split-last-2-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    },
+    {
+      "trial": "rotate-2-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    },
+    {
+      "trial": "adjacent-dedupe-1-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    },
+    {
+      "trial": "adjacent-dedupe-2-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    },
+    {
+      "trial": "adjacent-dedupe-3-baseline",
+      "quoted_code_visible_hidden_tests_passed": true,
+      "quoted_code_build_passed": true
+    }
+  ]
 }
