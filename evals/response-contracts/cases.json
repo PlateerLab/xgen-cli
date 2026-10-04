@@ -1,0 +1,114 @@
+[
+  {
+    "id": "run-lengths",
+    "split": "design",
+    "language": "python",
+    "mode": "run-resume",
+    "contract": "run_lengths(items)는 문자열 리스트를 입력으로 받아 인접한 같은 값의 (값, 길이) tuple을 입력 순서대로 반환한다. 비인접 중복은 합치지 않는다. 빈 입력은 []이고 입력을 수정하지 않는다. 대소문자와 Unicode는 원래 값 그대로 구분한다.",
+    "source": "source.py",
+    "files": {
+      "source.py": "def run_lengths(items):\n    result = []\n    for item in items:\n        if result and result[-1][0] == item:\n            result[-1] = (item, 1)\n        else:\n            result.append((item, 1))\n    return result\n",
+      "test_visible.py": "import unittest\nfrom source import *\nclass Visible(unittest.TestCase):\n    def test_runs(self):\n        items = ['a','a','b','a']\n        self.assertEqual(run_lengths(items), [('a',2),('b',1),('a',1)])\n        self.assertEqual(items, ['a','a','b','a'])\n    def test_empty(self):\n        self.assertEqual(run_lengths([]), [])\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-v"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom source import *\nclass Hidden(unittest.TestCase):\n    def test_boundary(self):\n        self.assertEqual(run_lengths(['가'] * 5 + ['A','a','a']), [('가',5),('A',1),('a',2)])\n"
+  },
+  {
+    "id": "interleave",
+    "split": "design",
+    "language": "node",
+    "mode": "run-resume",
+    "contract": "interleave(a,b)는 두 배열을 받아 a의 첫 항목부터 a,b 순으로 번갈아 넣은 새 배열을 반환한다. 한쪽이 먼저 끝나면 나머지를 원래 순서대로 모두 붙인다. 빈 배열을 허용하며 입력 배열을 수정하지 않는다. 값의 종류는 임의이며 중복도 보존한다.",
+    "source": "source.mjs",
+    "files": {
+      "package.json": "{\"type\":\"module\",\"private\":true}\n",
+      "source.mjs": "export function interleave(a, b) {\n  const result = [];\n  for (let i = 0; i < Math.min(a.length, b.length); i++) {\n    result.push(a[i], b[i]);\n  }\n  return result;\n}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport * as source from './source.mjs';\ntest('unequal and empty', () => {\n  const a = [1,2,3], b = ['x'];\n  assert.deepEqual(source.interleave(a,b), [1,'x',2,3]);\n  assert.deepEqual(a,[1,2,3]); assert.deepEqual(b,['x']);\n  assert.deepEqual(source.interleave([],['x','y']), ['x','y']);\n});\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport * as source from './source.mjs';\ntest('longer right and repeated values', () => {\n  assert.deepEqual(source.interleave(['a'],[null,false,0]), ['a',null,false,0]);\n  assert.deepEqual(source.interleave([1,1],[1,1]), [1,1,1,1]);\n});\n"
+  },
+  {
+    "id": "split-last",
+    "split": "held_out",
+    "language": "python",
+    "mode": "run-resume",
+    "contract": "split_last(text,sep)는 문자열 text와 길이 1인 비어 있지 않은 문자열 sep를 받아 마지막 sep 앞·뒤의 문자열 tuple을 반환한다. sep가 없으면 (text, \"\")다. 빈 text는 (\"\", \"\")다. 양 끝 sep는 빈 문자열을 보존한다. Unicode 문자도 지원한다. sep 길이 1 이외의 입력은 이 계약의 범위 밖이다.",
+    "source": "source.py",
+    "files": {
+      "source.py": "def split_last(text, sep):\n    parts = text.split(sep, 1)\n    return (parts[0], parts[1] if len(parts) > 1 else '')\n",
+      "test_visible.py": "import unittest\nfrom source import *\nclass Visible(unittest.TestCase):\n    def test_last(self):\n        self.assertEqual(split_last('a:b:c', ':'), ('a:b','c'))\n        self.assertEqual(split_last('abc', ':'), ('abc',''))\n        self.assertEqual(split_last('', ':'), ('',''))\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-v"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom source import *\nclass Hidden(unittest.TestCase):\n    def test_edges(self):\n        self.assertEqual(split_last(':a:', ':'), (':a',''))\n        self.assertEqual(split_last('가나가끝', '가'), ('가나','끝'))\n        self.assertEqual(split_last(':', ':'), ('',''))\n"
+  },
+  {
+    "id": "rotate",
+    "split": "held_out",
+    "language": "node",
+    "mode": "run-resume",
+    "contract": "rotate(items,offset)는 배열과 정수 offset을 받아 오른쪽으로 offset만큼 회전한 새 배열을 반환한다. 음수는 왼쪽 회전이고 길이 이상의 offset은 배열 길이로 정규화한다. 빈 입력은 []다. 입력을 수정하지 않으며 중복과 null 등 임의의 값을 보존한다. offset은 유한 정수만 계약 범위다.",
+    "source": "source.mjs",
+    "files": {
+      "package.json": "{\"type\":\"module\",\"private\":true}\n",
+      "source.mjs": "export function rotate(items, offset) {\n  return items.slice(offset).concat(items.slice(0, offset));\n}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport * as source from './source.mjs';\ntest('positive, negative and wrap', () => {\n  const a = [1,2,3];\n  assert.deepEqual(source.rotate(a,1), [3,1,2]);\n  assert.deepEqual(source.rotate(a,-1), [2,3,1]);\n  assert.deepEqual(source.rotate(a,4), [3,1,2]);\n  assert.deepEqual(a,[1,2,3]);\n  assert.deepEqual(source.rotate([],1), []);\n});\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport * as source from './source.mjs';\ntest('zero, large negative and arbitrary values', () => {\n  assert.deepEqual(source.rotate([null,0,false],-7), [0,false,null]);\n  assert.deepEqual(source.rotate(['a','a'],0), ['a','a']);\n  assert.deepEqual(source.rotate([1],100), [1]);\n});\n"
+  }
+]

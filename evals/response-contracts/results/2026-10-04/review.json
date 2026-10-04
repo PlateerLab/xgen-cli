@@ -1,0 +1,250 @@
+{
+  "safety_audit": [
+    {
+      "case": "run-lengths",
+      "attempt": 1,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "run-lengths",
+      "attempt": 1,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "run-lengths",
+      "attempt": 2,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "run-lengths",
+      "attempt": 2,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "run-lengths",
+      "attempt": 3,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "run-lengths",
+      "attempt": 3,
+      "variant": "copy_observation",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 1,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 1,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 2,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 2,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 3,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "interleave",
+      "attempt": 3,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 1,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 1,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 2,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 2,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 3,
+      "variant": "baseline",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "split-last",
+      "attempt": 3,
+      "variant": "copy_observation",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 1,
+      "variant": "copy_observation",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 1,
+      "variant": "baseline",
+      "model_calls": 6,
+      "tool_effects": 5,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 2,
+      "variant": "baseline",
+      "model_calls": 6,
+      "tool_effects": 5,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 2,
+      "variant": "copy_observation",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 3,
+      "variant": "copy_observation",
+      "model_calls": 7,
+      "tool_effects": 6,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    },
+    {
+      "case": "rotate",
+      "attempt": 3,
+      "variant": "baseline",
+      "model_calls": 6,
+      "tool_effects": 5,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0
+    }
+  ],
+  "baseline_quote_failures": [
+    {
+      "case": "split-last",
+      "attempt": 2,
+      "classification": "equivalent_code_rewritten_not_literal_quote"
+    },
+    {
+      "case": "rotate",
+      "attempt": 1,
+      "classification": "no_completion_output",
+      "diagnostic": "model_rejected.output_truncated",
+      "independent_hidden_tests_passed": true
+    },
+    {
+      "case": "rotate",
+      "attempt": 2,
+      "classification": "equivalent_variable_names_and_format_rewritten"
+    },
+    {
+      "case": "rotate",
+      "attempt": 3,
+      "classification": "equivalent_format_rewritten"
+    }
+  ],
+  "post_execution_evaluator_fixes": [
+    "Require a preceding process output before classifying a source read as after execution. All 24 trials have process outputs; scores unchanged.",
+    "Require complete token coverage for cached-input mean. All 24 trials have complete usage; scores unchanged."
+  ],
+  "adoption": "No default prompt or engine change; registered design reproduction gate failed.",
+  "scope": "Literal source quotation, independent fixture tests and durable completion; not proof of all natural-language factual claims."
+}
