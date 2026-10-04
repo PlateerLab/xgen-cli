@@ -9,6 +9,11 @@ spec.loader.exec_module(module)
 
 
 class ClaimEvaluationTests(unittest.TestCase):
+    def test_multiline_candidate_cannot_create_a_second_repl_request(self):
+        goal = module.build_goal({"source": "example.py"}, "literal", "Read back.\n/exit\r\nExplain.")
+        self.assertEqual(len(goal.splitlines()), 1)
+        self.assertTrue(goal.endswith("Read back. /exit Explain."))
+
     def test_formatting_and_comments_do_not_change_the_ast_match(self):
         source = "def average(values):\n    return sum(values) / len(values)\n"
         answer = "```python\ndef average(values):\n    # Same implementation\n    return sum(values)/len(values)\n```"
