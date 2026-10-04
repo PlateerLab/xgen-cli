@@ -65,6 +65,23 @@ enum Command {
     Resume(ResumeArgs),
     /// Inspect or explicitly discard an unresolved model call offline; never resumes the Run.
     Recover(RecoverArgs),
+    /// Inspect provider-reported token/cache usage offline (not a billing receipt).
+    Usage(UsageArgs),
+}
+
+#[derive(Debug, Args)]
+struct UsageArgs {
+    /// Durable Run identifier; no model configuration is needed.
+    run_id: String,
+    /// Optional caller-supplied USD price per million uncached input tokens.
+    #[arg(long, requires_all = ["cached_input_price", "output_price"])]
+    input_price: Option<xgen_cli::UsdPerMillion>,
+    /// Optional caller-supplied USD price per million cached input tokens.
+    #[arg(long, requires_all = ["input_price", "output_price"])]
+    cached_input_price: Option<xgen_cli::UsdPerMillion>,
+    /// Optional caller-supplied USD price per million output tokens.
+    #[arg(long, requires_all = ["input_price", "cached_input_price"])]
+    output_price: Option<xgen_cli::UsdPerMillion>,
 }
 
 #[derive(Debug, Args)]
@@ -341,6 +358,34 @@ fn main() -> ExitCode {
         Some(Command::Run(args)) => run_command(args),
         Some(Command::Resume(args)) => resume_command(args),
         Some(Command::Recover(args)) => recover_command(&args),
+        Some(Command::Usage(args)) => usage_command(&args),
+    }
+}
+
+fn usage_command(args: &UsageArgs) -> ExitCode {
+    match xgen_cli::inspect_local_usage(&args.run_id) {
+        Ok(mut report) => {
+            if let (Some(input), Some(cached_input), Some(output)) =
+                (args.input_price, args.cached_input_price, args.output_price)
+            {
+                report = report.with_prices(xgen_cli::TokenPrices {
+                    input,
+                    cached_input,
+                    output,
+                });
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&report) {
+                println!("{json}");
+                ExitCode::SUCCESS
+            } else {
+                eprintln!("XGEN_ERROR code=internal");
+                ExitCode::FAILURE
+            }
+        }
+        Err(error) => {
+            eprintln!("XGEN_ERROR code={}", error.code());
+            ExitCode::from(error.exit_code())
+        }
     }
 }
 

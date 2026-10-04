@@ -113,6 +113,10 @@ impl RunLayout {
         self.directory.join(MATERIAL_CATALOG_FILE)
     }
 
+    pub(crate) fn usage_path(&self) -> PathBuf {
+        self.directory.join("usage.sqlite3")
+    }
+
     fn manifest_path(&self) -> PathBuf {
         self.directory.join(MANIFEST_FILE)
     }

@@ -10,11 +10,13 @@ mod manifest;
 mod material_catalog;
 mod model_profile;
 mod run_layout;
+mod usage;
 
 pub use composition::*;
 pub use driver::*;
 pub use manifest::MAX_HOST_MODEL_TURNS;
 pub use model_profile::*;
+pub use usage::{CostEstimate, TokenPrices, UsageReport, UsdPerMillion, inspect_local_usage};
 
 #[doc(hidden)]
 pub use environment::compatible_environment;

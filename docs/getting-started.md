@@ -28,6 +28,12 @@ xgen
 않으려면 아래 checksum installer를 사용한 뒤 `xgen model setup`부터 같은 순서로 진행한다. API key를
 명령행 인자, shell history 또는 일반 설정 파일에 넣지 않는다.
 
+작업 뒤 `/usage`를 입력하면 추가 API 호출 없이 입력·출력·cached input 토큰을 확인할 수 있다.
+`xgen usage RUN_ID`는 별도 터미널에서도 상세 JSON을 출력한다. 사용량 기록이 없는 이전 Run이나
+provider가 수치를 보내지 않은 호출은 미상이며, 부분 합계는 실제 총비용으로 해석하지 않는다.
+별도 사용량 설정은 필요 없다. 비용을 추정할 때만 현재 계약의 USD/백만 토큰 단가를
+`--input-price`, `--cached-input-price`, `--output-price` 세 옵션으로 함께 지정한다.
+
 ## 게시 target과 CI 검증 OS
 
 | CI runner OS | Architecture | Release asset |

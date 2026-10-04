@@ -30,6 +30,9 @@ workspace와 `result.json`을 대조한다. `report.json`은 binary·corpus dige
 - `tests_passed`, `tests_unchanged`: 모델과 별도로 실행한 테스트가 통과했고 허용한 source 외의 모든 fixture 파일 bytes가 그대로인가.
 - `model_calls`, `tool_effects`: journal의 possible-send reservation과 committed 성공 effect 수. Process의
   비정상 exit도 실행 effect 자체는 성공적으로 기록될 수 있으므로, 이 숫자는 테스트 통과 횟수가 아니다.
+- `usage`: `xgen usage`로 조회한 provider-reported 토큰·cache·HTTP 시간과 관측 coverage다.
+  누락된 호출은 추정하지 않으며 이전 binary에서 command가 없으면 `null`이다. 가격 단가를 주지 않으므로
+  금액은 계산하지 않는다. [계측 계약](../../docs/development/model-usage-2026-10-04.md)을 따른다.
 - `final_content_observed_after_write`: 마지막 대상 파일의 native write/apply-patch 뒤 read-text 관찰이 최종 파일 내용과 같은가. Native write가 없으면 `null`이며 process가 임의로 쓴 파일의 순서는 추론하지 않는다.
 - `quote_status`: standard Python AST로 이름이 같은 함수·명시적 return 인용을 비교한 결과다. `match`는 인용
   일치를 뜻하며 자연어 전체의 사실성을 보장하지 않는다. `mixed_quotes`는 일치·불일치 인용이 함께 있어서

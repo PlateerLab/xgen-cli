@@ -205,6 +205,10 @@ pub(crate) trait ReplHost {
 
     fn executable_ids(&self) -> &[String];
 
+    fn usage(&mut self, run_id: &str) -> Result<xgen_cli::UsageReport, ReplFailure> {
+        xgen_cli::inspect_local_usage(run_id).map_err(ReplFailure::from_run_error)
+    }
+
     fn start(
         &mut self,
         goal: String,
@@ -348,6 +352,7 @@ impl BufRead for InterruptibleInput {
 enum ReplCommand {
     Model(Option<String>),
     Status,
+    Usage(Option<String>),
     Permissions(Option<(PermissionKind, PermissionMode)>),
     Resume(Option<String>),
     Clear,
@@ -493,6 +498,33 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     host.executable_ids().len()
                 )?;
                 print_permissions(output, permissions)?;
+            }
+            ReplEntry::Command(ReplCommand::Usage(requested)) => {
+                if let Some(run_id) = requested
+                    .or_else(|| active_run.clone())
+                    .or_else(|| last_run.clone())
+                {
+                    match host.usage(&run_id) {
+                        Ok(report) => {
+                            writeln!(
+                                output,
+                                "usage: calls={}/{} input={} output={} cached={} partial={}",
+                                report.observed_calls,
+                                report.reserved_calls,
+                                report.token_subtotal.input_tokens,
+                                report.token_subtotal.output_tokens,
+                                report.token_subtotal.cached_input_tokens.map_or_else(
+                                    || "unknown".to_owned(),
+                                    |count| count.to_string()
+                                ),
+                                !report.complete_token_usage
+                            )?;
+                        }
+                        Err(failure) => print_failure(output, &failure)?,
+                    }
+                } else {
+                    writeln!(output, "usage: no_run")?;
+                }
             }
             ReplEntry::Command(ReplCommand::Permissions(update)) => {
                 if let Some((kind, mode)) = update {
@@ -1142,6 +1174,8 @@ fn parse_command(value: &str) -> Result<ReplCommand, InputFailure> {
         ["/model"] => Ok(ReplCommand::Model(None)),
         ["/model", name] => Ok(ReplCommand::Model(Some((*name).to_owned()))),
         ["/status"] => Ok(ReplCommand::Status),
+        ["/usage"] => Ok(ReplCommand::Usage(None)),
+        ["/usage", run_id] => Ok(ReplCommand::Usage(Some((*run_id).to_owned()))),
         ["/permissions"] => Ok(ReplCommand::Permissions(None)),
         ["/permissions", kind, mode] => Ok(ReplCommand::Permissions(Some((
             PermissionKind::parse(kind).ok_or(InputFailure::InvalidCommand)?,
@@ -1157,6 +1191,10 @@ fn parse_command(value: &str) -> Result<ReplCommand, InputFailure> {
 }
 
 fn print_help(output: &mut impl Write) -> io::Result<()> {
+    writeln!(
+        output,
+        "/usage [RUN_ID]                   show provider-reported token/cache usage"
+    )?;
     writeln!(
         output,
         "/model [PROFILE]                 show or select a model profile"

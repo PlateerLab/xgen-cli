@@ -92,7 +92,7 @@ RC3의 포함 범위와 알려진 한계는 [Developer Preview RC3 후보](docs/
 경로를 사용한다.
 
 대화형 모드는 현재 디렉터리 전체를 workspace catalog로 열되 실제 read/write/execute와 model egress를
-각각 별도로 승인한다. 일반 질문과 후속 질문은 도구 없이 답하며, 최근 요청·답변을 제한된 문맥으로 이어간다. `/model`, `/status`, `/permissions`, `/resume`, `/clear`, `/exit`을 지원하며 줄 끝
+각각 별도로 승인한다. 일반 질문과 후속 질문은 도구 없이 답하며, 최근 요청·답변을 제한된 문맥으로 이어간다. `/model`, `/status`, `/usage`, `/permissions`, `/resume`, `/clear`, `/exit`을 지원하며 줄 끝
 `\`로 여러 줄 goal을 입력한다. 직전 durable completion만 다음 goal의 비신뢰 session context로 이어지고
 `/clear`가 이를 끊는다. Model의 strict structured proposal을 그대로 화면에 흘리지 않고, 검증된 최종
 summary 전에는 Thinking 표시만 출력한다. `--debug` 또는 pipe 입력에서는 기존 redacted durable progress를
@@ -101,6 +101,10 @@ summary 전에는 Thinking 표시만 출력한다. `--debug` 또는 pipe 입력�
 모델 응답이 거절되면 최종 답변이 저장되지 않았음을 표시하고 `/resume RUN_ID`를 안내한다. 이미 저장된
 실행 결과는 유지되지만 작업 완료를 보장하지는 않는다. 같은 세션에서 `/resume`으로 명시적으로 이어가거나
 `/clear`로 새 작업을 시작할 수 있다. 재개에는 원래 workspace·도구 catalog·모델 설정과 남은 budget이 필요하다.
+
+`/usage`는 현재/직전 Run의 입력·출력·cache 토큰을 보여준다. 별도 설정 없이 provider가 반환한 수치만
+저장하며, 누락은 미상·부분 합계로 표시한다. `xgen usage RUN_ID`로 network 없이 상세 조회할 수 있다.
+비용은 선택적으로 단가를 지정했을 때만 추정한다. [사용량 계측 계약](docs/development/model-usage-2026-10-04.md)을 따른다.
 
 `model check` 기본형은 선택 profile의 endpoint에 `GET /v1/models` 하나만 보내 기존 자동화 계약을
 유지한다. `--compatibility`를 지정하면 strict structured output POST를 한 번 더 보낸다. `model setup`은

@@ -1388,6 +1388,17 @@ fn continue_incomplete(
 ) -> Result<LocalCommandResult, PublicRunError> {
     let model_egress_allowed = planner.is_some();
     let mut planner = if let Some(planner) = planner {
+        let usage_path = material_catalog_path.with_file_name("usage.sqlite3");
+        let planner = if let Ok(mut usage_store) = crate::usage::UsageStore::open(&usage_path) {
+            planner.with_usage_observer(move |observation| {
+                if usage_store.record(&observation).is_err() {
+                    eprintln!("XGEN_USAGE warning=record_unavailable");
+                }
+            })
+        } else {
+            eprintln!("XGEN_USAGE warning=store_unavailable");
+            planner
+        };
         LocalPlanner::Remote(Box::new(planner))
     } else {
         LocalPlanner::Disabled {
