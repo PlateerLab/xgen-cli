@@ -1,0 +1,185 @@
+{
+  "purpose": "post-review waitid/WNOWAIT cleanup validation; separate from original 32 trial comparison",
+  "cases": [
+    {
+      "id": "curl",
+      "query": "curl CURLOPT_SSL_VERIFYPEER official documentation",
+      "split": "lifecycle_validation",
+      "language": "en",
+      "domains": [
+        "curl.se"
+      ]
+    },
+    {
+      "id": "python-ast",
+      "query": "파이썬 ast 공식 문서",
+      "split": "lifecycle_validation",
+      "language": "ko",
+      "domains": [
+        "docs.python.org"
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "backend": "ddgs",
+      "case": "curl",
+      "split": "lifecycle_validation",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html",
+          "snippet": "Use CURLOPT_SSL_VERIFYHOST for that. The check that the host name in the certificate is valid for the hostname you are connecting to is done independently of the CURLOPT_SSL_VERIFYPEER option. WARNING: disabling verification of the certificate allows bad guys to man-in-the-middle the communication without you knowing it."
+        },
+        {
+          "title": "PHP: curl_setopt - Manual",
+          "url": "https://www.php.net/manual/en/function.curl-setopt.php",
+          "snippet": "Parameters ¶ handle A cURL handle returned by curl_init (). option The CURLOPT_ * option to set. value The value to be set on option. See the description of the CURLOPT_ * constants for details on the type of values each constant expects."
+        },
+        {
+          "title": "curl/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md at master · curl/curl ...",
+          "url": "https://github.com/curl/curl/blob/master/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md",
+          "snippet": "When CURLOPT_SSL_VERIFYPEER (3) is enabled, and the verification fails to prove that the certificate is signed by a CA, the connection fails. When this option is disabled (set to zero), the CA certificates are not loaded and the peer certificate verification is simply skipped."
+        },
+        {
+          "title": "PHP CURL CURLOPT_SSL_VERIFYPEER ignored - Stack Overflow",
+          "url": "https://stackoverflow.com/questions/15135834/php-curl-curlopt-ssl-verifypeer-ignored",
+          "snippet": "According to documentation: to verify host or peer certificate you need to specify alternate certificates with the CURLOPT_CAINFO option or a certificate directory can be specified with the CURLOPT_CAPATH option. Also look at CURLOPT_SSL_VERIFYHOST: 1 to check the existence of a common name in the SSL peer certificate."
+        },
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER (3) — libcurl4-doc - Debian",
+          "url": "https://manpages.debian.org/unstable/libcurl4-doc/CURLOPT_SSL_VERIFYPEER.3",
+          "snippet": "Use CURLOPT_SSL_VERIFYHOST (3) for that. The check that the host name in the certificate is valid for the hostname you are connecting to is done independently of the CURLOPT_SSL_VERIFYPEER (3) option. WARNING: disabling verification of the certificate allows bad guys to man-in-the-middle the communication without you knowing it."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 4803,
+      "stdout_sha256": "f9df3f814ea0ffc0a492a55a8f130ce3d6fcecb5d8b9716309aa9978049ae89d",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "curl",
+      "split": "lifecycle_validation",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html",
+          "snippet": "Use CURLOPT_SSL_VERIFYHOST for that. The check that the host name in the certificate is valid for the hostname you are connecting to is done independently of the CURLOPT_SSL_VERIFYPEER option. WARNING: disabling verification of the certificate allows bad guys to man-in-the-middle the communication without you knowing it."
+        },
+        {
+          "title": "curl/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md at master · curl/curl ...",
+          "url": "https://github.com/curl/curl/blob/master/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md",
+          "snippet": "When CURLOPT_SSL_VERIFYPEER (3) is enabled, and the verification fails to prove that the certificate is signed by a CA, the connection fails. When this option is disabled (set to zero), the CA certificates are not loaded and the peer certificate verification is simply skipped."
+        },
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER (3) — libcurl4-doc - Debian",
+          "url": "https://manpages.debian.org/unstable/libcurl4-doc/CURLOPT_SSL_VERIFYPEER.3",
+          "snippet": "Sep 26, 2026Use CURLOPT_SSL_VERIFYHOST (3) for that. The check that the host name in the certificate is valid for the hostname you are connecting to is done independently of the CURLOPT_SSL_VERIFYPEER (3) option. WARNING: disabling verification of the certificate allows bad guys to man-in-the-middle the communication without you knowing it."
+        },
+        {
+          "title": "PHP CURL CURLOPT_SSL_VERIFYPEER ignored - Stack Overflow",
+          "url": "https://stackoverflow.com/questions/15135834/php-curl-curlopt-ssl-verifypeer-ignored",
+          "snippet": "According to documentation: to verify host or peer certificate you need to specify alternate certificates with the CURLOPT_CAINFO option or a certificate directory can be specified with the CURLOPT_CAPATH option. Also look at CURLOPT_SSL_VERIFYHOST: 1 to check the existence of a common name in the SSL peer certificate."
+        },
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER (3) — libcurl4-doc - Debian",
+          "url": "https://manpages.debian.org/testing/libcurl4-doc/CURLOPT_SSL_VERIFYPEER.3.en.html",
+          "snippet": "Jun 28, 2026Use CURLOPT_SSL_VERIFYHOST (3) for that. The check that the host name in the certificate is valid for the hostname you are connecting to is done independently of the CURLOPT_SSL_VERIFYPEER (3) option. WARNING: disabling verification of the certificate allows bad guys to man-in-the-middle the communication without you knowing it."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:32:00+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-l0_voceb]\\\"\"\n",
+      "elapsed_ms": 1702,
+      "stdout_sha256": "a9afd5d7898eb505f5fac9affafa6b816d0191200535045354fa842cb846bbbf",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "python-ast",
+      "split": "lifecycle_validation",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "ast — Abstract syntax trees — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/ast.html",
+          "snippet": "소스 코드: Lib/ast.py The ast module helps Python applications to process trees of the Python abstract syntax grammar. The abstract syntax itself might change with each Python release; this module help..."
+        },
+        {
+          "title": "ast | Python Standard Library – Real Python",
+          "url": "https://realpython.com/ref/stdlib/ast/",
+          "snippet": "The Python ast module lets you work with Abstract Syntax Trees (ASTs), which represent the structure of Python source code. You can use it for introspection, static analysis, and programmatic code transformations."
+        },
+        {
+          "title": "ast — 추상 구문 트리 — Python 3.16.0a0 문서",
+          "url": "https://python.flowdas.com/library/ast.html",
+          "snippet": "소스 코드: Lib/ast.py ast 모듈은 파이썬 애플리케이션이 파이썬 추상 구문 문법의 트리를 처리하는 것을 돕습니다. 추상 구문 자체는 파이썬을 릴리스할 때마다 변경될 수 있으며, 이 모듈은 현재 문법이 어떻게 구성되어 있는지 프로그래밍 방식으로 확인하는 데 도움을 줍니다. ast.PyCF_ONLY_AST 를 ..."
+        },
+        {
+          "title": "파이썬 AST 문법: '*' 기호의 의미와 리스트 속성 처리 방법",
+          "url": "https://runebook.dev/ko/docs/python/library/ast/index-1",
+          "snippet": "Nov 5, 2025 · 파이썬의 공식 ast 모듈 문서에서 정의하는 추상 문법 (Abstract Grammar)에서 *는 \"0개 이상\"의 반복을 나타냅니다. 문법적 의미 * 가 붙은 속성 (attribute)은 해당 AST 노드가 파이썬 리스트 (list) 형태로 0개 이상의 하위 노드 (자식 노드)를 포함할 수 있음을 의미합니다. 예를 들어, 함수 정의를 나타내는 ast ..."
+        },
+        {
+          "title": "ast — Abstract Syntax Trees — Python 3.9.2 documentation",
+          "url": "https://www.cs.unb.ca/~bremner/teaching/cs2613/books/python3-doc/library/ast.html",
+          "snippet": "The ast module helps Python applications to process trees of the Python abstract syntax grammar. The abstract syntax itself might change with each Python release; this module helps to find out programmatically what the current grammar looks like. An abstract syntax tree can be generated by passing ast.PyCF_ONLY_AST as a flag to the compile () built-in function, or using the parse () helper ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 4601,
+      "stdout_sha256": "2c976f06a51a776c4e75c7b54ee83ffbbf838ebcddc074f8199d47d2541ff6bf",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "python-ast",
+      "split": "lifecycle_validation",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "ast — Abstract syntax trees — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/ast.html",
+          "snippet": "소스 코드: Lib/ast.py The ast module helps Python applications to process trees of the Python abstract syntax grammar. The abstract syntax itself might change with each Python release; this module help..."
+        },
+        {
+          "title": "3.14.8 Documentation - Python",
+          "url": "https://docs.python.org/ko/3",
+          "snippet": "파이썬 3.14.8 공식 설명서의 한국어 번역입니다. 설명서 섹션들: 파이썬 3.14 의 새로운 기능은? 또는 파이썬 2.0 이후의 모든 \"새로운 기능\" 문서 자습서 Start here: a tour of Python's syntax and features Built-ins reference Built-in functions and classes 라이브러리 레퍼런스 Standard library ..."
+        },
+        {
+          "title": "ast — 추상 구문 트리 — Python 3.16.0a0 문서",
+          "url": "https://python.flowdas.com/library/ast.html",
+          "snippet": "소스 코드: Lib/ast.py ast 모듈은 파이썬 애플리케이션이 파이썬 추상 구문 문법의 트리를 처리하는 것을 돕습니다. 추상 구문 자체는 파이썬을 릴리스할 때마다 변경될 수 있으며, 이 모듈은 현재 문법이 어떻게 구성되어 있는지 프로그래밍 방식으로 확인하는 데 도움을 줍니다. ast.PyCF_ONLY_AST 를 ..."
+        },
+        {
+          "title": "Our Documentation | Python.org",
+          "url": "https://www.python.org/doc",
+          "snippet": "The official home of the Python Programming Language"
+        },
+        {
+          "title": "pandas - Python Data Analysis Library",
+          "url": "https://pandas.pydata.org/",
+          "snippet": "pandas pandas is a fast, powerful, flexible and easy to use open source data analysis and manipulation tool, built on top of the Python programming language. Install pandas now!"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:32:06+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-vzzws9gc]\\\"\"\n",
+      "elapsed_ms": 1531,
+      "stdout_sha256": "29c642fc08420b6d0644249067cc4801f5c6f6e5bce18daa5c675c10db89c2e7",
+      "official_rank": 1
+    }
+  ]
+}

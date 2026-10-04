@@ -1,0 +1,1264 @@
+{
+  "created_at": "2026-10-04T19:21:14.797447+00:00",
+  "versions": {
+    "ddgs": "9.16.0",
+    "openserp_binary_sha256": "4b7ef41282758bee32a04cd6128fcd17579a60b2c747da47f970448834bacf8e"
+  },
+  "protocol": {
+    "concurrency": 2,
+    "deadline_seconds": 20,
+    "result_limit": 5,
+    "ddgs_backend": "auto",
+    "openserp_backend": "duckduckgo",
+    "openserp_mode": "browser",
+    "same_engine_comparison": false,
+    "freshness_scored": false,
+    "adoption_gate": "No adoption on availability alone; review relevance and failure handling separately."
+  },
+  "cases": [
+    {
+      "id": "rust-command",
+      "split": "design",
+      "language": "en",
+      "query": "Rust std process Command documentation",
+      "domains": [
+        "doc.rust-lang.org"
+      ]
+    },
+    {
+      "id": "python-subprocess-ko",
+      "split": "design",
+      "language": "ko",
+      "query": "파이썬 subprocess 공식 문서",
+      "domains": [
+        "docs.python.org"
+      ]
+    },
+    {
+      "id": "sqlite-wal",
+      "split": "held_out",
+      "language": "en",
+      "query": "SQLite write ahead logging official documentation",
+      "domains": [
+        "sqlite.org"
+      ]
+    },
+    {
+      "id": "node-stream",
+      "split": "held_out",
+      "language": "en",
+      "query": "Node.js stream backpressure official documentation",
+      "domains": [
+        "nodejs.org"
+      ]
+    },
+    {
+      "id": "git-worktree-ko",
+      "split": "held_out",
+      "language": "ko",
+      "query": "git worktree 공식 문서",
+      "domains": [
+        "git-scm.com"
+      ]
+    },
+    {
+      "id": "rust-cargo-ko",
+      "split": "held_out",
+      "language": "ko",
+      "query": "Rust Cargo 의존성 지정 공식 문서",
+      "domains": [
+        "doc.rust-lang.org"
+      ]
+    },
+    {
+      "id": "recent-python",
+      "split": "held_out",
+      "language": "en",
+      "query": "Python latest release October 2026",
+      "domains": [
+        "python.org"
+      ],
+      "freshness_scored": false
+    },
+    {
+      "id": "recent-korean",
+      "split": "held_out",
+      "language": "ko",
+      "query": "한국은행 2026년 9월 통화정책",
+      "domains": [
+        "bok.or.kr"
+      ],
+      "freshness_scored": false
+    }
+  ],
+  "summary": {
+    "ddgs": {
+      "trials": 16,
+      "nonempty": 11,
+      "official_top5": 11,
+      "mean_elapsed_ms": 3589,
+      "held_out_official_top5": 8,
+      "held_out_trials": 12
+    },
+    "openserp": {
+      "trials": 16,
+      "nonempty": 16,
+      "official_top5": 16,
+      "mean_elapsed_ms": 1848,
+      "held_out_official_top5": 12,
+      "held_out_trials": 12
+    }
+  },
+  "trials": [
+    {
+      "backend": "ddgs",
+      "case": "rust-command",
+      "split": "design",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Command in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/struct.Command.html",
+          "snippet": "6 days ago · A process builder, providing fine-grained control over how a new process should be spawned. A default configuration can be generated using Command::new (program), where program gives a path to the program to be executed. Additional builder methods allow the configuration to be changed (for example, by adding arguments) prior to spawning:"
+        },
+        {
+          "title": "std::process - Ruststd::process::Command - RustHow to Execute System Commands from Rust (std::process ...std::process - Rust - MITstd::process::Command — Rust struct · RustDocs HubCommand in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/index.html",
+          "snippet": "The Commandstruct is used to configure and spawn processes: Several methods on Command, such as spawn or output, can be usedto spawn a process. In particular, output spawns the child process andwaits until the process terminates, while spawn will return a Childthat represents the spawned child process. See full list on doc.rust-lang.org The stdout, stdin, and stderr of a child process can beconfigured by passing an Stdio to the corresponding method onCommand. Once spawned, they can be accessed from the Child. Forexample, piping output from one command into another command can be donelike so: Note that ChildStderr and ChildStdout implement Read andChildStdin implements Write: See full list on doc.rust-lang.org On Unix systems arguments are passed to a new process as an array of strings,but on Windows arguments are passed as a single commandline string and it isup to the child process to parse it into an array. Therefore the parent andchild processes must agree on how the commandline string is encoded. Most programs use the standard C run-time argv, which... See full list on doc.rust-lang.org API documentation for the Rust `Command` struct in crate `std`. Apr 17, 2026 · Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now. API documentation for the Rust `process` mod in crate `std`. Reference page for std::process::Command — what it does, when to use it, two annotated examples, common pitfalls, and related items in the Rust standard library. 提供了生成器方法来更改这些默认值，并以其他方式配置该进程。 如果 program 不是绝对路径，则将以 OS 定义的方式搜索 PATH。 可以通过在 Command 上设置 PATH 环境变量来控制要使用的搜索路径，但这在 Windows 上有一些实现上的限制 (请参见 issue #37519)。"
+        },
+        {
+          "title": "std::process::Command - Rust",
+          "url": "https://mitaa.github.io/rust/doc/std/process/struct.Command.html",
+          "snippet": "API documentation for the Rust `Command` struct in crate `std`."
+        },
+        {
+          "title": "How to Execute System Commands from Rust (std::process ...",
+          "url": "https://www.rustfaq.org/en/how-to-execute-system-commands-from-rust-stdprocesscommand/",
+          "snippet": "Apr 17, 2026 · Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now."
+        },
+        {
+          "title": "std::process - Rust - MITstd::process::Command — Rust struct · RustDocs HubCommand in std::process - Rust",
+          "url": "https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html",
+          "snippet": "API documentation for the Rust `process` mod in crate `std`. Reference page for std::process::Command — what it does, when to use it, two annotated examples, common pitfalls, and related items in the Rust standard library. 提供了生成器方法来更改这些默认值，并以其他方式配置该进程。 如果 program 不是绝对路径，则将以 OS 定义的方式搜索 PATH。 可以通过在 Command 上设置 PATH 环境变量来控制要使用的搜索路径，但这在 Windows 上有一些实现上的限制 (请参见 issue #37519)。"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 4171,
+      "stdout_sha256": "886129963daef68210c3a14bf16cd867d1c9b61c24d9f505b06299157afe0b89",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "rust-command",
+      "split": "design",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Command in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/struct.Command.html",
+          "snippet": "6 days agoA process builder, providing fine-grained control over how a new process should be spawned. A default configuration can be generated using Command::new (program), where program gives a path to the program to be executed. Additional builder methods allow the configuration to be changed (for example, by adding arguments) prior to spawning:"
+        },
+        {
+          "title": "std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/index.html",
+          "snippet": "6 days agoSeveral methods on Command, such as spawn or output, can be used to spawn a process. In particular, output spawns the child process and waits until the process terminates, while spawn will return a Child that represents the spawned child process. Handling I/O The stdout, stdin, and stderr of a child process can be configured by passing an Stdio to the corresponding method on Command. Once ..."
+        },
+        {
+          "title": "std::process::Command - Rust",
+          "url": "https://mitaa.github.io/rust/doc/std/process/struct.Command.html",
+          "snippet": "API documentation for the Rust `Command` struct in crate `std`."
+        },
+        {
+          "title": "How to Execute System Commands from Rust (std",
+          "url": "https://www.rustfaq.org/en/how-to-execute-system-commands-from-rust-stdprocesscommand",
+          "snippet": "Apr 17, 2026Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now."
+        },
+        {
+          "title": "std::process - Rust - MIT",
+          "url": "https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html",
+          "snippet": "API documentation for the Rust `process` mod in crate `std`."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:31+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-x1phpt46]\\\"\"\n",
+      "elapsed_ms": 1717,
+      "stdout_sha256": "a30aff7b429c9a6b9a5d45c1e76a4f24ca62cfbd56a5bbfcc513f0579f226974",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "python-subprocess-ko",
+      "split": "design",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "subprocess — Subprocess management — Python 3.14.8 documentation",
+          "url": "https://docs.python.org/3/library/subprocess.html",
+          "snippet": "19 hours ago · Using the subprocess Module ¶ The recommended approach to invoking subprocesses is to use the run () function for all use cases it can handle. For more advanced use cases, the underlying Popen interface can be used directly."
+        },
+        {
+          "title": "subprocess — Subprocess management — Python documentation",
+          "url": "https://getdocs.org/Python/docs/3.10/library/subprocess",
+          "snippet": "Using the subprocess Module The recommended approach to invoking subprocesses is to use the run () function for all use cases it can handle. For more advanced use cases, the underlying Popen interface can be used directly. The run () function was added in Python 3.5; if you need to retain compatibility with older versions, see the Older high-level API section. subprocess.run(args, *, stdin ..."
+        },
+        {
+          "title": "subprocess — 서브 프로세스 관리 — Python 3.16.0a0 문서",
+          "url": "https://python.flowdas.com/library/subprocess.html",
+          "snippet": "소스 코드: Lib/subprocess.py subprocess 모듈을 사용하면 새로운 프로세스를 생성하고, 해당 프로세스의 입력/출력/에러 파이프에 연결하며, 반환 코드를 가져올 수 있습니다. 이 모듈은 몇몇 오래된 모듈과 함수를 대체하기 위해 만들어졌습니다: subprocess 모듈을 사용하여 이러한 모듈과 함수를 대체하는 ..."
+        },
+        {
+          "title": "python - 파이썬 subprocess 병렬 실행: 흔한 함정과 안전한 대안",
+          "url": "https://runebook.dev/ko/docs/python/library/subprocess",
+          "snippet": "Nov 8, 2025 · subprocess 자체는 외부 프로세스를 실행하는 데 중점을 둡니다. 동시성 환경에서 이 모듈을 사용할 때 흔히 발생하는 문제점들을 알아봅시다.문제 subprocess. run ()은 실행한 외부 프로세스가 완료될 때까지 메인 파이썬 프로그램의 실행을 멈춥니다 (블로킹). 만약 여러 개의 외부 프로세스를 순차적으로 ..."
+        },
+        {
+          "title": "3.14.8 Documentation - Python",
+          "url": "https://docs.python.org/ko/3/",
+          "snippet": "파이썬 3.14.8 공식 설명서의 한국어 번역입니다. 설명서 섹션들: 파이썬 3.14 의 새로운 기능은? 또는 파이썬 2.0 이후의 모든 \"새로운 기능\" 문서 자습서 Start here: a tour of Python's syntax and features Built-ins reference Built-in functions and classes 라이브러리 레퍼런스 Standard library ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 5372,
+      "stdout_sha256": "5b5c8afce60f0a5e61a428e636e2b5a565b6035015d0ce831907869e5d860be2",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "python-subprocess-ko",
+      "split": "design",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "subprocess — 서브 프로세스 관리 — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/subprocess.html",
+          "snippet": "파이썬 3.2.4와 3.3.1 이전 버전에서는 버퍼링 되지 않고 짧은 읽기를 허용하는 0 으로 기본값이 잘못 설정되었습니다. 이것은 의도하지 않은 것이며 대부분의 코드가 기대하는 파이썬 2의 동작과 일치하지 않았습니다."
+        },
+        {
+          "title": "Our Documentation | Python.org",
+          "url": "https://www.python.org/doc",
+          "snippet": "Browse the docs online or download a copy of your own. Python's documentation, tutorials, and guides are constantly evolving. Get started here, or scroll down for documentation broken out by type and subject. Python Docs See also Documentation Releases by Version"
+        },
+        {
+          "title": "서브 프로세스 — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/asyncio-subprocess.html",
+          "snippet": "서브 프로세스와 상호 작용하기¶ create_subprocess_exec()와 create_subprocess_shell()함수는 모두 Process클래스의 인스턴스를 반환합니다. Process는 서브 프로세스와 통신하고 완료를 관찰할 수 있는 고수준 래퍼입니다. classasyncio.subprocess. Process¶"
+        },
+        {
+          "title": "파이썬 subprocess 모듈과 threading 모듈 | Minnnning's logs",
+          "url": "https://minnnning.github.io/posts/subprocess-%EB%AA%A8%EB%93%88",
+          "snippet": "Sep 17, 2025# print(stdout) subprocess 공식문서 threading 하나의 파이썬 프로세스 내에서 여러 개의 실행 흐름(스레드)을 만들어특정 작업을 동시에 처리하기 위해 사용된다 주로 I/O 바운드(I/O-bound) 작업의 효율을 높이는 데 사용한다"
+        },
+        {
+          "title": "subprocess — 서브 프로세스 관리 — Python 3.16.0a0 문서",
+          "url": "https://python.flowdas.com/library/subprocess.html",
+          "snippet": "소스 코드: Lib/subprocess.py subprocess 모듈을 사용하면 새로운 프로세스를 생성하고, 해당 프로세스의 입력/출력/에러 파이프에 연결하며, 반환 코드를 가져올 수 있습니다. 이 모듈은 몇몇 오래된 모듈과 함수를 대체하기 위해 만들어졌습니다: subprocess 모듈을 사용하여 이러한 모듈과 함수를 대체하는 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:35+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-df9oiyth]\\\"\"\n",
+      "elapsed_ms": 2468,
+      "stdout_sha256": "22c70735cf1d2e3bce76a841b15245432fdbbd6104e14b9c6770113217dd940c",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "sqlite-wal",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "backend_failed",
+      "results": [],
+      "exit_code": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    print(json.dumps(DDGS(timeout=8).text(sys.argv[1], max_results=5, backend='auto'), ensure_ascii=False))\n                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 227, in text\n    return self._search_sync(\"text\", query, **kwargs)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 223, in _search_sync\n    raise DDGSException(err or \"No results found.\")\nddgs.exceptions.DDGSException: No results found.\n",
+      "elapsed_ms": 5373,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "official_rank": null
+    },
+    {
+      "backend": "openserp",
+      "case": "sqlite-wal",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Write-Ahead Logging - SQLite",
+          "url": "https://sqlite.org/wal.html",
+          "snippet": "Aug 25, 20261. Overview The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0 (2010-07-21), a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "WAL-mode File Format - SQLite",
+          "url": "https://sqlite.org/walformat.html",
+          "snippet": "May 10, 2025The write-ahead log or \"wal\" file is a roll-forward journal that records transactions that have been committed but not yet applied to the main database. Details on the format of the wal file are described in the WAL format subsection of the main file format document."
+        },
+        {
+          "title": "SQLite Documentation",
+          "url": "https://a1.sqlite.org/docs.html",
+          "snippet": "Write-Ahead Log (WAL) Mode → Transaction control using a write-ahead log offers more concurrency and is often faster than the default rollback transactions. This document explains how to use WAL mode for improved performance."
+        },
+        {
+          "title": "Write-Ahead Logging | SQLite Documentation",
+          "url": "https://wizardforcel.gitbooks.io/sqlite-doc-en/content/48.html",
+          "snippet": "Write-Ahead Logging The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0, a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "Write-Ahead Logging (WAL) | sqlite/sqlite | DeepWiki",
+          "url": "https://deepwiki.com/sqlite/sqlite/3.4-write-ahead-logging-(wal)",
+          "snippet": "May 16, 2026Write-Ahead Logging (WAL) Relevant source files Purpose and Scope This page documents the WAL (Write-Ahead Logging) subsystem in SQLite, covering the on-disk WAL file format, the shared-memory WAL index (the -shm file), read and write transaction protocols, checkpoint operations, and the locking scheme used to coordinate concurrent access."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:38+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-19u5dbrq]\\\"\"\n",
+      "elapsed_ms": 2017,
+      "stdout_sha256": "5e521db8daf745ce135d04dfde451e3b16c17d259400b664e3057830c060ae1c",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "node-stream",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Backpressuring in Streams | Node.js Learn",
+          "url": "https://nodejs.org/learn/modules/backpressuring-in-streams",
+          "snippet": "We assume a little familiarity with the general definition of backpressure, Buffer, and EventEmitters in Node.js, as well as some experience with Stream. If you haven't read through those docs, it's not a bad idea to take a look at the API documentation first, as it will help expand your understanding while reading this guide."
+        },
+        {
+          "title": "Stream | Node.js v26.10.0 Documentation",
+          "url": "https://nodejs.org/api/stream.html",
+          "snippet": "A stream is an abstract interface for working with streaming data in Node.js. The node:stream module provides an API for implementing the stream interface. There are many stream objects provided by Node.js. For instance, a request to an HTTP server and process.stdout are both stream instances. Streams can be readable, writable, or both. All streams are instances of EventEmitter. To access the ..."
+        },
+        {
+          "title": "Node.js Stream Backpressure: A Comprehensive Guide",
+          "url": "https://www.w3tutorials.net/blog/nodejs-stream-backpressure/",
+          "snippet": "Jan 16, 2026 · Node.js stream backpressure is a crucial concept for building efficient and robust applications. By understanding how backpressure works and using the appropriate techniques to manage it, developers can prevent memory issues, data loss, and other problems that can occur when working with streams."
+        },
+        {
+          "title": "Handle Node.js Stream Backpressure - salivity.github.io",
+          "url": "https://salivity.github.io/node.js/article/handle-node-js-stream-backpressure",
+          "snippet": "Understanding Backpressure in Node.js Backpressure occurs when the data producer (readable stream) sends data faster than the data consumer (writable stream) can process it. When this happens, Node.js buffers the incoming data in system memory."
+        },
+        {
+          "title": "Handling Backpressure in Node.js streams - DEV Community",
+          "url": "https://dev.to/codexstoney/handling-backpressure-in-nodejs-streams-2dck",
+          "snippet": "Oct 14, 2024 · 4. Managing Backpressure Now that we’ve identified backpressure, how do we manage it effectively? Let’s continue our riverboat journey by exploring practical strategies to handle backpressure in a Node.js application using TypeScript. Setting Up a Readable Stream Imagine your readable stream as the flow of passengers boarding the boat."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 2317,
+      "stdout_sha256": "835fc2ee12235aa82c52c4f1be5ccf451380b0516552a3b07627e2a9570c5bb9",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "node-stream",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Backpressuring in Streams | Node.js Learn",
+          "url": "https://nodejs.org/learn/modules/backpressuring-in-streams",
+          "snippet": "We assume a little familiarity with the general definition of backpressure, Buffer, and EventEmitters in Node.js, as well as some experience with Stream. If you haven't read through those docs, it's not a bad idea to take a look at the API documentation first, as it will help expand your understanding while reading this guide."
+        },
+        {
+          "title": "Stream | Node.js v26.10.0 Documentation",
+          "url": "https://nodejs.org/api/stream.html",
+          "snippet": "A stream is an abstract interface for working with streaming data in Node.js. The node:stream module provides an API for implementing the stream interface. There are many stream objects provided by Node.js. For instance, a request to an HTTP server and process.stdout are both stream instances. Streams can be readable, writable, or both. All streams are instances of EventEmitter. To access the ..."
+        },
+        {
+          "title": "Handling Backpressure in Node.js streams - DEV Community",
+          "url": "https://dev.to/codexstoney/handling-backpressure-in-nodejs-streams-2dck",
+          "snippet": "Oct 14, 20244. Managing Backpressure Now that we've identified backpressure, how do we manage it effectively? Let's continue our riverboat journey by exploring practical strategies to handle backpressure in a Node.js application using TypeScript. Setting Up a Readable Stream Imagine your readable stream as the flow of passengers boarding the boat."
+        },
+        {
+          "title": "Backpressure — Exstream",
+          "url": "https://exstream-js.github.io/docs/learn/backpressure",
+          "snippet": "High-level record operations with backpressure, bounded concurrency, branching, and explicit error handling."
+        },
+        {
+          "title": "Handle Node.js Stream Backpressure - salivity.github.io",
+          "url": "https://salivity.github.io/node.js/article/handle-node-js-stream-backpressure",
+          "snippet": "In Node.js applications, writing data to a slow writable stream faster than it can process leads to high memory usage and potential crashes, a phenomenon known as backpressure. This article explains how backpressure occurs in Node.js streams and provides practical, efficient solutions to handle it, such as using the .pipe () method, listening to the 'drain' event, and utilizing the robust ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:42+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-63uaqezv]\\\"\"\n",
+      "elapsed_ms": 1616,
+      "stdout_sha256": "748f5ff0ff5d1b6a16325195e426ed364836c975973d2f18e93eaf995f0e6d67",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "git-worktree-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository, along with additional metadata that differentiates that working tree from others in the same repository. The working tree, along with this metadata, is called a \"worktree\"."
+        },
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree/2.29.0",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository. This new working tree is called a \"linked working tree\" as opposed to the \"main working tree\" prepared by git-init [1] or git-clone [1]. A repository has one main working tree (if it’s not a bare repository ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 효율적인 멀티 브랜치 워크플로우 구축하...",
+          "url": "https://jonny-cho.github.io/git/2025-07-02-git-worktree-complete-guide/",
+          "snippet": "Jul 2, 2025 · Git Worktree 완벽 가이드 브랜치 전환할 때마다 작업 중인 파일들을 stash 해야 하는 게 번거롭다면 Git Worktree를 사용하면 이런 고민을 해결할 수 있습니다. 이 글에서는 Git Worktree의 개념부터 실무 활용까지, 그리고 최신 Git 2.50의 새로운 기능들까지 다루겠습니다. 1. Git Worktree란? 1.1 개념과 정의 Git Worktree ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 병렬 작업으로 개발 속도 2배 올리기 (20...",
+          "url": "https://knightk.tistory.com/261",
+          "snippet": "Feb 19, 2026 · Git을 쓰는 개발자라면 한 번쯤 이런 상황을 겪어봤을 것이다. A 기능을 개발하다가 급하게 B 버그를 고쳐야 할 때, 현재 작업을 stash하거나 다른 폴더에 별도 클론을 만든다. 이 문제를 우아하게 해결하는 것이 바로 Git Worktree다. 2026년에도 여전히 많은 개발자들이 모르고 지나치는 Git의 강력한 기능 ..."
+        },
+        {
+          "title": "Git Worktrees 실전 가이드 — 핵심 명령부터 병렬 워크플로우까지",
+          "url": "https://dev-post.com/git-worktrees-practical-guide-2026/",
+          "snippet": "Apr 25, 2026 · Git Worktrees 실전 가이드 — worktree 개념과 동작 원리, 핵심 서브 명령 8가지, AI 에이전트 병렬 실행 패턴, IDE 연동, 흔한 함정과 해결책까지 멀티 브랜치 워크플로우를 코드 예제와 함께 정리한다."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 1767,
+      "stdout_sha256": "4cc9e951a3b811716cd8ae62ebcc84e983910920005479c60a75f44b84796ed5",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "git-worktree-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository, along with additional metadata that differentiates that working tree from others in the same repository. The working tree, along with this metadata, is called a \"worktree\"."
+        },
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree/2.29.0",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository. This new working tree is called a \"linked working tree\" as opposed to the \"main working tree\" prepared by git-init [1] or git-clone [1]. A repository has one main working tree (if it's not a bare repository ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 효율적인 멀티 브랜치 워크플로우 구축하기",
+          "url": "https://jonny-cho.github.io/git/2025-07-02-git-worktree-complete-guide",
+          "snippet": "Jul 2, 2025Git Worktree 완벽 가이드 브랜치 전환할 때마다 작업 중인 파일들을 stash 해야 하는 게 번거롭다면 Git Worktree를 사용하면 이런 고민을 해결할 수 있습니다. 이 글에서는 Git Worktree의 개념부터 실무 활용까지, 그리고 최신 Git 2.50의 새로운 기능들까지 다루겠습니다. 1. Git Worktree란? 1.1 개념과 정의 Git Worktree ..."
+        },
+        {
+          "title": "Git Worktrees 실전 가이드 — 핵심 명령부터 병렬 워크플로우까지",
+          "url": "https://dev-post.com/git-worktrees-practical-guide-2026",
+          "snippet": "Apr 25, 2026Git Worktrees 실전 가이드 — worktree 개념과 동작 원리, 핵심 서브 명령 8가지, AI 에이전트 병렬 실행 패턴, IDE 연동, 흔한 함정과 해결책까지 멀티 브랜치 워크플로우를 코드 예제와 함께 정리한다."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 병렬 작업으로 개발 속도 2배 올리기 (2026)",
+          "url": "https://knightk.tistory.com/261",
+          "snippet": "Feb 19, 2026Git을 쓰는 개발자라면 한 번쯤 이런 상황을 겪어봤을 것이다. A 기능을 개발하다가 급하게 B 버그를 고쳐야 할 때, 현재 작업을 stash하거나 다른 폴더에 별도 클론을 만든다. 이 문제를 우아하게 해결하는 것이 바로 Git Worktree다. 2026년에도 여전히 많은 개발자들이 모르고 지나치는 Git의 강력한 기능 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:44+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-zfoaeagr]\\\"\"\n",
+      "elapsed_ms": 1617,
+      "stdout_sha256": "8c2b31a5c9c3e96b8f8da9d99fc3d27ea36da0225b4e00d74c1a5a2db30aec42",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "rust-cargo-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/rust-by-example/ko/cargo/deps.html",
+          "snippet": "Rust by Example (RBE) is a collection of runnable examples that illustrate various Rust concepts and standard libraries."
+        },
+        {
+          "title": "게임존 - 게임정보 커뮤니티 - [Rust 공식문서 한국어 정리] 55. Rust...",
+          "url": "https://gamezone.live/board_rLBa73/14803889",
+          "snippet": "Jun 8, 2026 · [Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드 원문 제목: Specifying Dependencies — Cargo Reference 작성자: Rust Cargo Team ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 📌 1. 서론 — 이 문서가 다루는 내용 ..."
+        },
+        {
+          "title": "카고를 사용해봅시다 - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch01-03-hello-cargo.html",
+          "snippet": "카고를 사용해봅시다 카고 (Cargo) 는 러스타시안이라면 대부분 사용하는 러스트 빌드 시스템 및 패키지 매니저입니다. 이 도구는 코드 빌드나, 코드 작성에 필요한 외부 라이브러리를 다운로드할 때나, 라이브러리를 제작할 때 겪는 귀찮은 일들을 상당수 줄여주는 편리한 도구입니다. (앞으로 외부 ..."
+        },
+        {
+          "title": "[IT-안내] Rust Cargo 기초 공식 문서 및 필수 자료 가이드 - 초보 개...",
+          "url": "https://amsoft.kr/704/it-안내-rust-cargo-기초-공식-문서-및-필수-자료-가이드-초보-개/",
+          "snippet": "Rust 개발의 시작, 왜 Cargo부터 정복해야 할까요 새로운 언어를 배울 때 가장 당혹스러운 순간은 문법을 다 익혔는데도 정작 코드를 어떻게 실행하고, 외부 라이브러리는 어떻게 가져오는지 모를 때예요. Rust를 처음 접하는 분들이 흔히 겪는 일이죠. 컴파일러는 엄격하고, 의존성 관리는 복잡하게 ..."
+        },
+        {
+          "title": "Cargo Guide - The Cargo Book - Learn Rust",
+          "url": "https://doc.rust-lang.org/stable/cargo/guide/",
+          "snippet": "Cargo Guide This guide will give you all that you need to know about how to use Cargo to develop Rust packages. Why Cargo Exists Creating a New Package Working on an Existing Cargo Package Dependencies Package Layout Cargo.toml vs Cargo.lock Tests Continuous Integration Publishing on crates.io Cargo Home Optimizing Build Performance"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 5022,
+      "stdout_sha256": "93a0c1065e99368c85b07c74118280b7eb13ddcf52cc6fbf736f82a7565a56d5",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "rust-cargo-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/rust-by-example/ko/cargo/deps.html",
+          "snippet": "Rust by Example (RBE) is a collection of runnable examples that illustrate various Rust concepts and standard libraries."
+        },
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/nightly/rust-by-example/ko/cargo/deps.html",
+          "snippet": "대부분의 프로그램은 일부 라이브러리에 의존성을 가집니다. 의존성을 수동으로 관리해 본 적이 있다면 그것이 얼마나 고통스러운 일인지 알 것입니다. 다행히도 Rust 생태계에는 cargo 가 표준으로 포함되어 있습니다! cargo 는 프로젝트의 의존성을 관리할 수 있습니다."
+        },
+        {
+          "title": "게임존 - 게임정보 커뮤니티 - [Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드",
+          "url": "https://gamezone.live/board_rLBa73/14803889",
+          "snippet": "Jun 8, 2026[Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드 원문 제목: Specifying Dependencies — Cargo Reference 작성자: Rust Cargo Team ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 📌 1. 서론 — 이 문서가 다루는 내용 ..."
+        },
+        {
+          "title": "[IT-안내] Rust Cargo 기초 공식 문서 및 필수 자료 가이드 - 초보 개발자를 위한 단계별 학습 경로",
+          "url": "https://amsoft.kr/704/it-%EC%95%88%EB%82%B4-rust-cargo-%EA%B8%B0%EC%B4%88-%EA%B3%B5%EC%8B%9D-%EB%AC%B8%EC%84%9C-%EB%B0%8F-%ED%95%84%EC%88%98-%EC%9E%90%EB%A3%8C-%EA%B0%80%EC%9D%B4%EB%93%9C-%EC%B4%88%EB%B3%B4-%EA%B0%9C",
+          "snippet": "지금 이 글을 읽고 계신 분들은 Rust 프로그래밍의 기초를 탄탄히 다지고 싶은 열정적인 입문자분들이에요. 복잡한 설치 과정이나 설정 오류 때문에 진을 빼기보다는, 검증된 Rust Cargo 기초 공식 문서 를 중심으로 핵심만 빠르게 습득하는 것이 훨씬 효율적이에요."
+        },
+        {
+          "title": "카고를 사용해봅시다 - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch01-03-hello-cargo.html",
+          "snippet": "카고를 사용해봅시다 카고 (Cargo) 는 러스타시안이라면 대부분 사용하는 러스트 빌드 시스템 및 패키지 매니저입니다. 이 도구는 코드 빌드나, 코드 작성에 필요한 외부 라이브러리를 다운로드할 때나, 라이브러리를 제작할 때 겪는 귀찮은 일들을 상당수 줄여주는 편리한 도구입니다. (앞으로 외부 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:45+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-dlo_gv0y]\\\"\"\n",
+      "elapsed_ms": 1717,
+      "stdout_sha256": "35fc3198c7d927fa34f8d037a1e9fc8a427d63850e2b5eeaeb29d029281045c9",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "recent-python",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "backend_failed",
+      "results": [],
+      "exit_code": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    print(json.dumps(DDGS(timeout=8).text(sys.argv[1], max_results=5, backend='auto'), ensure_ascii=False))\n                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 227, in text\n    return self._search_sync(\"text\", query, **kwargs)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 223, in _search_sync\n    raise DDGSException(err or \"No results found.\")\nddgs.exceptions.DDGSException: No results found.\n",
+      "elapsed_ms": 5572,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "official_rank": null
+    },
+    {
+      "backend": "openserp",
+      "case": "recent-python",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Python 3.10.22, 3.11.17, 3.12.15, 3.13.16 and 3.14.8 are now available ...",
+          "url": "https://blog.python.org/2026/10/python-31022-31117",
+          "snippet": "3 days agoPython 3.12.15 is also a source-only security release, with security support continuing until October 2028. Python 3.13.16 is the last full maintenance release of 3.13; future 3.13 releases will contain security fixes only."
+        },
+        {
+          "title": "Python Release Python 3.14.8 | Python.org",
+          "url": "https://www.python.org/downloads/latest",
+          "snippet": "Python 3.14.8 Release date: Sept. 30, 2026 This is the eighth maintenance release of Python 3.14 Python 3.14.8 is an expedited security release and the eighth maintenance release of 3.14, containing around 354 bugfixes, build improvements and documentation changes from 142 contributors since 3.14.7. Security content in this releases CVE-2026-19445 gh-156293 Use-after-free of a server-side ..."
+        },
+        {
+          "title": "Download Python | Python.org",
+          "url": "https://www.python.org/downloads",
+          "snippet": "Starting with the Python 3.11.0, Python 3.10.7, and Python 3.9.14 releases, CPython release artifacts are signed with Sigstore. See our dedicated Sigstore Information page for how it works."
+        },
+        {
+          "title": "Latest Python Releases, Changelog & Updates - ReleaseBytes",
+          "url": "https://releasebytes.com/python",
+          "snippet": "1 day agoPython 3.15.0 Release Candidate 3 Issued; Final Release Due October 2026 Python 3.15.0 Release Candidate 3 (rc3) is now available, incorporating last-minute lazy-import blockers and over 150 bugfixes, build improvements, and documentation changes since rc2."
+        },
+        {
+          "title": "Python 3.15.0 candidate 3 is here! | Python Insider",
+          "url": "https://blog.python.org/2026/10/python-3150-rc3",
+          "snippet": "2 days agoThe next release of Python 3.15 will be 3.15.0 final, scheduled for 2026-10-09. There will be no ABI changes from this point forward in the 3.15 series, and the goal is that there will be as few code changes as possible."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:49+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-19olgqza]\\\"\"\n",
+      "elapsed_ms": 1618,
+      "stdout_sha256": "8f5b863d0b654e79fe5fd8e5c39a5cc415cc627ad3382d4f6f38f35b34ddc761",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "recent-korean",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "한국은행",
+          "url": "https://www.bok.or.kr/portal/main/main.do",
+          "snippet": "페이스북 통화신용정책보고서 (2026년 9월) 한국은행은 한국은행법 제96조에 따라 「통화신용정책보고서」 (2026년 9월)를 작성하였음 페이스북 2026년 2/4분기 국민소득 (잠정) 2026년 2/4분기 실질 국내총생산 (GDP)은 전기대비 0.6% 성장, 전년동기대비 3.7% 성장."
+        },
+        {
+          "title": "세계가 다시 브레이크를 밟았다: 2026년 9월 통화신용정책보고서",
+          "url": "https://www.wednesdata.com/monetary-policy-report-2026-09/",
+          "snippet": "한국은행은 한국은행법 제96조에 따라 「통화신용정책보고서」 (2026년 9월)를 작성하였음 붙 임 : 「통화신용정책보고서」 (2026년 9월). 끝. ※ 자세한 내용은 아래 링크를 참고하시기 바랍니다. 뉴스/자료 > 간행물 > 통화신용정책보고서 > 통화신용정책보고서 (2026년 9월) 한국은행"
+        },
+        {
+          "title": "한국은행 2026년 9월 통화신용정책 보고서 핵심 정리…기준금리 3% 이...",
+          "url": "https://dj2hrnf.tistory.com/1082",
+          "snippet": "Sep 15, 2026 · 금리 인하 시대 끝났나? 한국은행 9월 보고서로 읽는 물가·부동산·주식시장 전망2026년 한국 경제를 이해하려면 한 가지 변화부터 주목해야 합니다.불과 1년 전만 해도 시장의 관심은 **“한국은행이 언제 기준금리를 더 내릴 것인가”**에 집중돼 있었습니다.하지만 2026년 하반기 분위기는 완전히 ..."
+        },
+        {
+          "title": "한국은행, 2026년 9월 통화신용정책보고서 설명회 : 네이트 뉴스",
+          "url": "https://news.nate.com/view/20260910n24106",
+          "snippet": "Sep 10, 2026 · 한눈에 보는 오늘 : 경제 - 뉴스 : [서울=뉴스핌] 박종우 한국은행 부총재보가 10일 오전 서울 중구 한국은행에서 열린 2026년 9월 통화신용정책보고서 설명회에서 발언하고 있다.왼쪽부터 곽법준 조사국 경기동향팀장, 안성근 통화정책국 정책기획부장, 박종우 부총재보, 최창호 통화정책국장,"
+        },
+        {
+          "title": "한국은행, 2026년 9월 통화신용정책보고서 설명회",
+          "url": "https://www.newspim.com/news/view/20260910000881",
+          "snippet": "Sep 10, 2026 · [서울=뉴스핌] 박종우 한국은행 부총재보가 10일 오전 서울 중구 한국은행에서 열린 2026년 9월 통화신용정책보고서 설명회에서 발언하고 있다.왼쪽 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 2218,
+      "stdout_sha256": "25b9d84a1532f5b574fc9c429421a113ceaec11151ef58a7011af6816158e8b0",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "recent-korean",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 1,
+      "status": "ok",
+      "results": [
+        {
+          "title": "통화신용정책보고서 (2026년 9월) | (상세) | 한국은행 홈페이지",
+          "url": "https://www.bok.or.kr/portal/bbs/B0000156/view.do?menuNo=200754&nttId=11064613",
+          "snippet": "한눈에 보는 통화신용정책보고서 통화신용정책 운영 기준금리를 2.50%에서 3.00%로 두 차례 연속 인상 통화신용정책 운영 여건 및 전망 물가는 상당기간 목표수준을 상회할 전망 성장은 수출 및 투자 호조, 소비 회복으로 견조한 흐름 지속 예상 수도권 주택가격 오름세 및 가계대출 증가세 확대 향후 ..."
+        },
+        {
+          "title": "통화정책방향 (2026.8.27) | 통화정책 보도자료 (상세) - 한국은행",
+          "url": "https://www.bok.or.kr/portal/bbs/P0000559/view.do?menuNo=200690&nttId=11064191",
+          "snippet": "금융통화위원회는 다음 통화정책방향 결정시까지 한국은행 기준금리를 현재의 2.75% 수준에서 3.00%로 상향 조정하여 통화정책을 운용하기로 하였다. 국내경제는 수출 호조와 내수 회복에 힘입어 예상보다 높은 성장세를 이어가는 가운데 물가상승률은 상당기간 목표수준을 상회할 것으로 전망된다. 이러한 상황에서는 선제적 대응을 통해 물가 오름세의 확산을 방지하는 것이 중요하고 금융안정 리스크에도 계속 유의할 필요가 있는 만큼 기준금리를 0.25%p 인상하는 것이 적절하다고 판단하였다."
+        },
+        {
+          "title": "한국은행 2026년 9월 통화신용정책 보고서 핵심 정리...기준금리 3% ...",
+          "url": "https://dj2hrnf.tistory.com/1082",
+          "snippet": "Sep 15, 2026한국은행은 7월과 8월 기준금리를 연속 인상하면서 2.50%였던 기준금리를 3.00%까지 끌어올렸습니다. 그리고 9월 10일 발표한 통화신용정책보고서에서 물가가 상당 기간 목표 수준을 웃돌 것으로 예상하면서 향후 추가 금리 인상의 시기와 속도를 검토하겠다는 방향 을 제시했습니다. 그렇다고 한국 경제가 침체에 빠진 상황도 아닙니다. 오히려 한국은행은 2026년 경제성장률을 3.3%, 2027년을 **2.9%**로 전망하고 있습니다. 반도체 호황과 수출 증가, 투자 확대와 소비 회복이 동시에 나타나면서 성장률이 예상보다 높아졌습니다. 소비자물가 상승률은 2026년 2.7%, 2027년 **2.3%**로 예상했습니다."
+        },
+        {
+          "title": "세계가 다시 브레이크를 밟았다: 2026년 9월 통화신용정책보고서",
+          "url": "https://www.wednesdata.com/monetary-policy-report-2026-09",
+          "snippet": "왜 전 세계가 갑자기 다시 브레이크를 밟기 시작했을까요. 그리고 이게 내 대출 이자와는 정확히 어떤 관계가 있을까요. 한국은행이 반년마다 국회에 내는 통화신용정책보고서에 그 답이 있습니다."
+        },
+        {
+          "title": "한국은행, 2026년 9월 통화신용정책보고서 설명회",
+          "url": "https://www.newspim.com/news/view/20260910000881",
+          "snippet": "Sep 10, 2026[서울=뉴스핌] 박종우 한국은행 부총재보가 10일 오전 서울 중구 한국은행에서 열린 2026년 9월 통화신용정책보고서 설명회에서 발언하고 있다.왼쪽 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:52+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-4rqmsot1]\\\"\"\n",
+      "elapsed_ms": 1666,
+      "stdout_sha256": "36baf814d84ac8ffd7778214c8557d0f3142bcadf2933f72b2405174289ba010",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "rust-command",
+      "split": "design",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Command in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/struct.Command.html",
+          "snippet": "6 days ago · A process builder, providing fine-grained control over how a new process should be spawned. A default configuration can be generated using Command::new (program), where program gives a path to the program to be executed. Additional builder methods allow the configuration to be changed (for example, by adding arguments) prior to spawning:"
+        },
+        {
+          "title": "std::process - Ruststd::process::Command - RustHow to Execute System Commands from Rust (std::process ...std::process - Rust - MITstd::process::Command — Rust struct · RustDocs HubCommand in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/index.html",
+          "snippet": "The Commandstruct is used to configure and spawn processes: Several methods on Command, such as spawn or output, can be usedto spawn a process. In particular, output spawns the child process andwaits until the process terminates, while spawn will return a Childthat represents the spawned child process. See full list on doc.rust-lang.org The stdout, stdin, and stderr of a child process can beconfigured by passing an Stdio to the corresponding method onCommand. Once spawned, they can be accessed from the Child. Forexample, piping output from one command into another command can be donelike so: Note that ChildStderr and ChildStdout implement Read andChildStdin implements Write: See full list on doc.rust-lang.org On Unix systems arguments are passed to a new process as an array of strings,but on Windows arguments are passed as a single commandline string and it isup to the child process to parse it into an array. Therefore the parent andchild processes must agree on how the commandline string is encoded. Most programs use the standard C run-time argv, which... See full list on doc.rust-lang.org API documentation for the Rust `Command` struct in crate `std`. Apr 17, 2026 · Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now. API documentation for the Rust `process` mod in crate `std`. Reference page for std::process::Command — what it does, when to use it, two annotated examples, common pitfalls, and related items in the Rust standard library. 提供了生成器方法来更改这些默认值，并以其他方式配置该进程。 如果 program 不是绝对路径，则将以 OS 定义的方式搜索 PATH。 可以通过在 Command 上设置 PATH 环境变量来控制要使用的搜索路径，但这在 Windows 上有一些实现上的限制 (请参见 issue #37519)。"
+        },
+        {
+          "title": "std::process::Command - Rust",
+          "url": "https://mitaa.github.io/rust/doc/std/process/struct.Command.html",
+          "snippet": "API documentation for the Rust `Command` struct in crate `std`."
+        },
+        {
+          "title": "How to Execute System Commands from Rust (std::process ...",
+          "url": "https://www.rustfaq.org/en/how-to-execute-system-commands-from-rust-stdprocesscommand/",
+          "snippet": "Apr 17, 2026 · Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now."
+        },
+        {
+          "title": "std::process - Rust - MITstd::process::Command — Rust struct · RustDocs HubCommand in std::process - Rust",
+          "url": "https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html",
+          "snippet": "API documentation for the Rust `process` mod in crate `std`. Reference page for std::process::Command — what it does, when to use it, two annotated examples, common pitfalls, and related items in the Rust standard library. 提供了生成器方法来更改这些默认值，并以其他方式配置该进程。 如果 program 不是绝对路径，则将以 OS 定义的方式搜索 PATH。 可以通过在 Command 上设置 PATH 环境变量来控制要使用的搜索路径，但这在 Windows 上有一些实现上的限制 (请参见 issue #37519)。"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 4372,
+      "stdout_sha256": "886129963daef68210c3a14bf16cd867d1c9b61c24d9f505b06299157afe0b89",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "rust-command",
+      "split": "design",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Command in std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/struct.Command.html",
+          "snippet": "6 days agoA process builder, providing fine-grained control over how a new process should be spawned. A default configuration can be generated using Command::new (program), where program gives a path to the program to be executed. Additional builder methods allow the configuration to be changed (for example, by adding arguments) prior to spawning:"
+        },
+        {
+          "title": "std::process - Rust",
+          "url": "https://doc.rust-lang.org/std/process/index.html",
+          "snippet": "6 days agoSeveral methods on Command, such as spawn or output, can be used to spawn a process. In particular, output spawns the child process and waits until the process terminates, while spawn will return a Child that represents the spawned child process. Handling I/O The stdout, stdin, and stderr of a child process can be configured by passing an Stdio to the corresponding method on Command. Once ..."
+        },
+        {
+          "title": "std::process::Command - Rust",
+          "url": "https://mitaa.github.io/rust/doc/std/process/struct.Command.html",
+          "snippet": "API documentation for the Rust `Command` struct in crate `std`."
+        },
+        {
+          "title": "How to Execute System Commands from Rust (std",
+          "url": "https://www.rustfaq.org/en/how-to-execute-system-commands-from-rust-stdprocesscommand",
+          "snippet": "Apr 17, 2026Discover how to run system commands in Rust using std::process::Command. Get started with process spawning and output handling now."
+        },
+        {
+          "title": "std::process::Command — Rust struct · RustDocs Hub",
+          "url": "https://rustdocshub.com/std/process/struct.Command",
+          "snippet": "Reference page for std::process::Command — what it does, when to use it, two annotated examples, common pitfalls, and related items in the Rust standard library."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:54+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-15uswbz7]\\\"\"\n",
+      "elapsed_ms": 1867,
+      "stdout_sha256": "eb04c720e122f3e7cf64821c6aae6472acb354a21d1a1fd379bc89bc41251aa3",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "python-subprocess-ko",
+      "split": "design",
+      "language": "ko",
+      "repetition": 2,
+      "status": "backend_failed",
+      "results": [],
+      "exit_code": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    print(json.dumps(DDGS(timeout=8).text(sys.argv[1], max_results=5, backend='auto'), ensure_ascii=False))\n                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 227, in text\n    return self._search_sync(\"text\", query, **kwargs)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 223, in _search_sync\n    raise DDGSException(err or \"No results found.\")\nddgs.exceptions.DDGSException: No results found.\n",
+      "elapsed_ms": 4522,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "official_rank": null
+    },
+    {
+      "backend": "openserp",
+      "case": "python-subprocess-ko",
+      "split": "design",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "subprocess — Subprocess management — Python 3.14.8 documentation",
+          "url": "https://docs.python.org/3/library/subprocess.html",
+          "snippet": "TodayUsing the subprocess Module ¶ The recommended approach to invoking subprocesses is to use the run () function for all use cases it can handle. For more advanced use cases, the underlying Popen interface can be used directly."
+        },
+        {
+          "title": "Our Documentation | Python.org",
+          "url": "https://www.python.org/doc",
+          "snippet": "Browse the docs online or download a copy of your own. Python's documentation, tutorials, and guides are constantly evolving. Get started here, or scroll down for documentation broken out by type and subject. Python Docs See also Documentation Releases by Version"
+        },
+        {
+          "title": "3.14.8 Documentation - Python",
+          "url": "https://docs.python.org/ko/3",
+          "snippet": "파이썬 3.14.8 공식 설명서의 한국어 번역입니다. 설명서 섹션들: 파이썬 3.14 의 새로운 기능은? 또는 파이썬 2.0 이후의 모든 \"새로운 기능\" 문서 자습서 Start here: a tour of Python's syntax and features Built-ins reference Built-in functions and classes 라이브러리 레퍼런스 Standard library ..."
+        },
+        {
+          "title": "Welcome to Python.org",
+          "url": "https://www.python.org/",
+          "snippet": "The official home of the Python Programming Language"
+        },
+        {
+          "title": "subprocess — 서브 프로세스 관리 — Python 3.16.0a0 문서",
+          "url": "https://python.flowdas.com/library/subprocess.html",
+          "snippet": "소스 코드: Lib/subprocess.py subprocess 모듈을 사용하면 새로운 프로세스를 생성하고, 해당 프로세스의 입력/출력/에러 파이프에 연결하며, 반환 코드를 가져올 수 있습니다. 이 모듈은 몇몇 오래된 모듈과 함수를 대체하기 위해 만들어졌습니다: subprocess 모듈을 사용하여 이러한 모듈과 함수를 대체하는 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:20:58+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-5ad47u6u]\\\"\"\n",
+      "elapsed_ms": 2669,
+      "stdout_sha256": "7352114af62b5ffb4061fe71a335ac9705d13c39264adce6a42714bb9aa1531d",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "sqlite-wal",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Write-Ahead Logging - SQLite",
+          "url": "https://sqlite.org/wal.html",
+          "snippet": "Aug 25, 2026 · 1. Overview The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0 (2010-07-21), a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "WAL-mode File Format - SQLite",
+          "url": "https://sqlite.org/walformat.html",
+          "snippet": "May 10, 2025 · The write-ahead log or \"wal\" file is a roll-forward journal that records transactions that have been committed but not yet applied to the main database. Details on the format of the wal file are described in the WAL format subsection of the main file format document."
+        },
+        {
+          "title": "SQLite Documentation",
+          "url": "https://a1.sqlite.org/docs.html",
+          "snippet": "Write-Ahead Log (WAL) Mode → Transaction control using a write-ahead log offers more concurrency and is often faster than the default rollback transactions. This document explains how to use WAL mode for improved performance."
+        },
+        {
+          "title": "Write-Ahead Logging | SQLite Documentation",
+          "url": "https://wizardforcel.gitbooks.io/sqlite-doc-en/content/48.html",
+          "snippet": "Write-Ahead Logging The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0, a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "Write-Ahead Logging (WAL) | sqlite/sqlite | DeepWiki",
+          "url": "https://deepwiki.com/sqlite/sqlite/3.4-write-ahead-logging-(wal)",
+          "snippet": "May 16, 2026 · Write-Ahead Logging (WAL) Relevant source files Purpose and Scope This page documents the WAL (Write-Ahead Logging) subsystem in SQLite, covering the on-disk WAL file format, the shared-memory WAL index (the -shm file), read and write transaction protocols, checkpoint operations, and the locking scheme used to coordinate concurrent access."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 1717,
+      "stdout_sha256": "9d6e5e7d1c217718d9f7ae54c3d9b983d5eb2290aec2c432e3240df5a2883fbc",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "sqlite-wal",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Write-Ahead Logging - SQLite",
+          "url": "https://sqlite.org/wal.html",
+          "snippet": "Aug 25, 20261. Overview The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0 (2010-07-21), a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "Write-Ahead Logging - sqlite.org",
+          "url": "https://sqlite.org/wal.html?trk=public_post_comment-text",
+          "snippet": "Aug 25, 2026Another way to think about the difference between rollback and write-ahead log is that in the rollback-journal approach, there are two primitive operations, reading and writing, whereas with a write-ahead log there are now three primitive operations: reading, writing, and checkpointing."
+        },
+        {
+          "title": "SQLite Documentation",
+          "url": "https://a1.sqlite.org/docs.html",
+          "snippet": "Write-Ahead Log (WAL) Mode → Transaction control using a write-ahead log offers more concurrency and is often faster than the default rollback transactions. This document explains how to use WAL mode for improved performance."
+        },
+        {
+          "title": "Write-Ahead Logging | SQLite Documentation",
+          "url": "https://wizardforcel.gitbooks.io/sqlite-doc-en/content/48.html",
+          "snippet": "Write-Ahead Logging The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0, a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available. There are advantages and disadvantages to using WAL instead of a rollback journal. Advantages include: WAL is significantly faster in most scenarios. WAL provides more ..."
+        },
+        {
+          "title": "Write-Ahead Logging - wasm-testing.sqlite.org",
+          "url": "https://wasm-testing.sqlite.org/draft/wal.html",
+          "snippet": "1. Overview The default method by which SQLite implements atomic commit and rollback is a rollback journal. Beginning with version 3.7.0 (2010-07-21), a new \"Write-Ahead Log\" option (hereafter referred to as \"WAL\") is available."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:01+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-pz46xh7m]\\\"\"\n",
+      "elapsed_ms": 1666,
+      "stdout_sha256": "4d56a392435d9f28d6b5ba1336ac8e257f953f820147d5981d2fc1b2637f3f32",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "node-stream",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Backpressuring in Streams | Node.js Learn",
+          "url": "https://nodejs.org/learn/modules/backpressuring-in-streams",
+          "snippet": "We assume a little familiarity with the general definition of backpressure, Buffer, and EventEmitters in Node.js, as well as some experience with Stream. If you haven't read through those docs, it's not a bad idea to take a look at the API documentation first, as it will help expand your understanding while reading this guide."
+        },
+        {
+          "title": "Stream | Node.js v26.10.0 Documentation",
+          "url": "https://nodejs.org/api/stream.html",
+          "snippet": "A stream is an abstract interface for working with streaming data in Node.js. The node:stream module provides an API for implementing the stream interface. There are many stream objects provided by Node.js. For instance, a request to an HTTP server and process.stdout are both stream instances. Streams can be readable, writable, or both. All streams are instances of EventEmitter. To access the ..."
+        },
+        {
+          "title": "Node.js Stream Backpressure: A Comprehensive Guide",
+          "url": "https://www.w3tutorials.net/blog/nodejs-stream-backpressure/",
+          "snippet": "Jan 16, 2026 · Node.js stream backpressure is a crucial concept for building efficient and robust applications. By understanding how backpressure works and using the appropriate techniques to manage it, developers can prevent memory issues, data loss, and other problems that can occur when working with streams."
+        },
+        {
+          "title": "Handle Node.js Stream Backpressure - salivity.github.io",
+          "url": "https://salivity.github.io/node.js/article/handle-node-js-stream-backpressure",
+          "snippet": "Understanding Backpressure in Node.js Backpressure occurs when the data producer (readable stream) sends data faster than the data consumer (writable stream) can process it. When this happens, Node.js buffers the incoming data in system memory."
+        },
+        {
+          "title": "Handling Backpressure in Node.js streams - DEV Community",
+          "url": "https://dev.to/codexstoney/handling-backpressure-in-nodejs-streams-2dck",
+          "snippet": "Oct 14, 2024 · 4. Managing Backpressure Now that we’ve identified backpressure, how do we manage it effectively? Let’s continue our riverboat journey by exploring practical strategies to handle backpressure in a Node.js application using TypeScript. Setting Up a Readable Stream Imagine your readable stream as the flow of passengers boarding the boat."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 1817,
+      "stdout_sha256": "835fc2ee12235aa82c52c4f1be5ccf451380b0516552a3b07627e2a9570c5bb9",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "node-stream",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Backpressuring in Streams | Node.js Learn",
+          "url": "https://nodejs.org/learn/modules/backpressuring-in-streams",
+          "snippet": "We assume a little familiarity with the general definition of backpressure, Buffer, and EventEmitters in Node.js, as well as some experience with Stream. If you haven't read through those docs, it's not a bad idea to take a look at the API documentation first, as it will help expand your understanding while reading this guide."
+        },
+        {
+          "title": "Stream | Node.js v26.10.0 Documentation",
+          "url": "https://nodejs.org/api/stream.html",
+          "snippet": "A stream is an abstract interface for working with streaming data in Node.js. The node:stream module provides an API for implementing the stream interface. There are many stream objects provided by Node.js. For instance, a request to an HTTP server and process.stdout are both stream instances. Streams can be readable, writable, or both. All streams are instances of EventEmitter. To access the ..."
+        },
+        {
+          "title": "Handle Node.js Stream Backpressure - salivity.github.io",
+          "url": "https://salivity.github.io/node.js/article/handle-node-js-stream-backpressure",
+          "snippet": "In Node.js applications, writing data to a slow writable stream faster than it can process leads to high memory usage and potential crashes, a phenomenon known as backpressure. This article explains how backpressure occurs in Node.js streams and provides practical, efficient solutions to handle it, such as using the .pipe () method, listening to the 'drain' event, and utilizing the robust ..."
+        },
+        {
+          "title": "Handling Backpressure in Node.js streams - DEV Community",
+          "url": "https://dev.to/codexstoney/handling-backpressure-in-nodejs-streams-2dck",
+          "snippet": "Oct 14, 20244. Managing Backpressure Now that we've identified backpressure, how do we manage it effectively? Let's continue our riverboat journey by exploring practical strategies to handle backpressure in a Node.js application using TypeScript. Setting Up a Readable Stream Imagine your readable stream as the flow of passengers boarding the boat."
+        },
+        {
+          "title": "Understanding Streams in Node.js: From Piping to Backpressure",
+          "url": "https://dev.to/ayako_yk/understanding-streams-in-nodejs-from-piping-to-backpressure-1ncf",
+          "snippet": "Jul 11, 2025All streams in Node.js inherit from the EventEmitter class, which allows developers to respond to events like data (when new data arrives) and end (when the stream finishes)."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:02+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-ibu4v7h_]\\\"\"\n",
+      "elapsed_ms": 1817,
+      "stdout_sha256": "389b2b3c76b4abe82584bec1beffd85736880a3dc373cd4940e551eb0e769314",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "git-worktree-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository, along with additional metadata that differentiates that working tree from others in the same repository. The working tree, along with this metadata, is called a \"worktree\"."
+        },
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree/2.29.0",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository. This new working tree is called a \"linked working tree\" as opposed to the \"main working tree\" prepared by git-init [1] or git-clone [1]. A repository has one main working tree (if it’s not a bare repository ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 효율적인 멀티 브랜치 워크플로우 구축하...",
+          "url": "https://jonny-cho.github.io/git/2025-07-02-git-worktree-complete-guide/",
+          "snippet": "Jul 2, 2025 · Git Worktree 완벽 가이드 브랜치 전환할 때마다 작업 중인 파일들을 stash 해야 하는 게 번거롭다면 Git Worktree를 사용하면 이런 고민을 해결할 수 있습니다. 이 글에서는 Git Worktree의 개념부터 실무 활용까지, 그리고 최신 Git 2.50의 새로운 기능들까지 다루겠습니다. 1. Git Worktree란? 1.1 개념과 정의 Git Worktree ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 병렬 작업으로 개발 속도 2배 올리기 (20...",
+          "url": "https://knightk.tistory.com/261",
+          "snippet": "Feb 19, 2026 · Git을 쓰는 개발자라면 한 번쯤 이런 상황을 겪어봤을 것이다. A 기능을 개발하다가 급하게 B 버그를 고쳐야 할 때, 현재 작업을 stash하거나 다른 폴더에 별도 클론을 만든다. 이 문제를 우아하게 해결하는 것이 바로 Git Worktree다. 2026년에도 여전히 많은 개발자들이 모르고 지나치는 Git의 강력한 기능 ..."
+        },
+        {
+          "title": "Git Worktrees 실전 가이드 — 핵심 명령부터 병렬 워크플로우까지",
+          "url": "https://dev-post.com/git-worktrees-practical-guide-2026/",
+          "snippet": "Apr 25, 2026 · Git Worktrees 실전 가이드 — worktree 개념과 동작 원리, 핵심 서브 명령 8가지, AI 에이전트 병렬 실행 패턴, IDE 연동, 흔한 함정과 해결책까지 멀티 브랜치 워크플로우를 코드 예제와 함께 정리한다."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 2470,
+      "stdout_sha256": "4cc9e951a3b811716cd8ae62ebcc84e983910920005479c60a75f44b84796ed5",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "git-worktree-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Git - git-worktree Documentation",
+          "url": "https://git-scm.com/docs/git-worktree",
+          "snippet": "A git repository can support multiple working trees, allowing you to check out more than one branch at a time. With git worktree add a new working tree is associated with the repository, along with additional metadata that differentiates that working tree from others in the same repository. The working tree, along with this metadata, is called a \"worktree\"."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 효율적인 멀티 브랜치 워크플로우 구축하기",
+          "url": "https://jonny-cho.github.io/git/2025-07-02-git-worktree-complete-guide",
+          "snippet": "Jul 2, 2025Git Worktree 완벽 가이드 브랜치 전환할 때마다 작업 중인 파일들을 stash 해야 하는 게 번거롭다면 Git Worktree를 사용하면 이런 고민을 해결할 수 있습니다. 이 글에서는 Git Worktree의 개념부터 실무 활용까지, 그리고 최신 Git 2.50의 새로운 기능들까지 다루겠습니다. 1. Git Worktree란? 1.1 개념과 정의 Git Worktree ..."
+        },
+        {
+          "title": "Git Worktree 완벽 가이드 - 병렬 작업으로 개발 속도 2배 올리기 (2026)",
+          "url": "https://knightk.tistory.com/261",
+          "snippet": "Feb 19, 2026Git을 쓰는 개발자라면 한 번쯤 이런 상황을 겪어봤을 것이다. A 기능을 개발하다가 급하게 B 버그를 고쳐야 할 때, 현재 작업을 stash하거나 다른 폴더에 별도 클론을 만든다. 이 문제를 우아하게 해결하는 것이 바로 Git Worktree다. 2026년에도 여전히 많은 개발자들이 모르고 지나치는 Git의 강력한 기능 ..."
+        },
+        {
+          "title": "Worktrees — Orca Docs",
+          "url": "https://www.onorca.dev/docs/model/worktrees",
+          "snippet": "The model Each repo has a base ref (usually origin/main). Each worktree has a start-from ref — what it branches off. Each worktree has its own branch, its own files on disk, and its own agent terminals. Deleting a worktree removes both the directory and the branch (with confirmation). If git keeps a local branch because it may still have unmerged commits, Orca can offer a review step — see ..."
+        },
+        {
+          "title": "Git Worktrees 실전 가이드 — 핵심 명령부터 병렬 워크플로우까지",
+          "url": "https://dev-post.com/git-worktrees-practical-guide-2026",
+          "snippet": "Apr 25, 2026Git Worktrees 실전 가이드 — worktree 개념과 동작 원리, 핵심 서브 명령 8가지, AI 에이전트 병렬 실행 패턴, IDE 연동, 흔한 함정과 해결책까지 멀티 브랜치 워크플로우를 코드 예제와 함께 정리한다."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:04+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-buodjcsu]\\\"\"\n",
+      "elapsed_ms": 1817,
+      "stdout_sha256": "2b5da0d48fd701c5e93c2c68967bf17bdd6a1f5f3dd234ded27f5af4ad220b91",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "rust-cargo-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/rust-by-example/ko/cargo/deps.html",
+          "snippet": "Rust by Example (RBE) is a collection of runnable examples that illustrate various Rust concepts and standard libraries."
+        },
+        {
+          "title": "게임존 - 게임정보 커뮤니티 - [Rust 공식문서 한국어 정리] 55. Rust...",
+          "url": "https://gamezone.live/board_rLBa73/14803889",
+          "snippet": "Jun 8, 2026 · [Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드 원문 제목: Specifying Dependencies — Cargo Reference 작성자: Rust Cargo Team ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 📌 1. 서론 — 이 문서가 다루는 내용 ..."
+        },
+        {
+          "title": "카고를 사용해봅시다 - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch01-03-hello-cargo.html",
+          "snippet": "카고를 사용해봅시다 카고 (Cargo) 는 러스타시안이라면 대부분 사용하는 러스트 빌드 시스템 및 패키지 매니저입니다. 이 도구는 코드 빌드나, 코드 작성에 필요한 외부 라이브러리를 다운로드할 때나, 라이브러리를 제작할 때 겪는 귀찮은 일들을 상당수 줄여주는 편리한 도구입니다. (앞으로 외부 ..."
+        },
+        {
+          "title": "[IT-안내] Rust Cargo 기초 공식 문서 및 필수 자료 가이드 - 초보 개...",
+          "url": "https://amsoft.kr/704/it-안내-rust-cargo-기초-공식-문서-및-필수-자료-가이드-초보-개/",
+          "snippet": "Rust 개발의 시작, 왜 Cargo부터 정복해야 할까요 새로운 언어를 배울 때 가장 당혹스러운 순간은 문법을 다 익혔는데도 정작 코드를 어떻게 실행하고, 외부 라이브러리는 어떻게 가져오는지 모를 때예요. Rust를 처음 접하는 분들이 흔히 겪는 일이죠. 컴파일러는 엄격하고, 의존성 관리는 복잡하게 ..."
+        },
+        {
+          "title": "Cargo Guide - The Cargo Book - Learn Rust",
+          "url": "https://doc.rust-lang.org/stable/cargo/guide/",
+          "snippet": "Cargo Guide This guide will give you all that you need to know about how to use Cargo to develop Rust packages. Why Cargo Exists Creating a New Package Working on an Existing Cargo Package Dependencies Package Layout Cargo.toml vs Cargo.lock Tests Continuous Integration Publishing on crates.io Cargo Home Optimizing Build Performance"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "elapsed_ms": 1367,
+      "stdout_sha256": "93a0c1065e99368c85b07c74118280b7eb13ddcf52cc6fbf736f82a7565a56d5",
+      "official_rank": 1
+    },
+    {
+      "backend": "openserp",
+      "case": "rust-cargo-ko",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/nightly/rust-by-example/ko/cargo/deps.html",
+          "snippet": "대부분의 프로그램은 일부 라이브러리에 의존성을 가집니다. 의존성을 수동으로 관리해 본 적이 있다면 그것이 얼마나 고통스러운 일인지 알 것입니다. 다행히도 Rust 생태계에는 cargo 가 표준으로 포함되어 있습니다! cargo 는 프로젝트의 의존성을 관리할 수 있습니다."
+        },
+        {
+          "title": "의존성 - Rust By Example",
+          "url": "https://doc.rust-lang.org/rust-by-example/ko/cargo/deps.html",
+          "snippet": "Rust by Example (RBE) is a collection of runnable examples that illustrate various Rust concepts and standard libraries."
+        },
+        {
+          "title": "게임존 - 게임정보 커뮤니티 - [Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드",
+          "url": "https://gamezone.live/board_rLBa73/14803889",
+          "snippet": "Jun 8, 2026[Rust 공식문서 한국어 정리] 55. Rust 의존성 관리 가이드 원문 제목: Specifying Dependencies — Cargo Reference 작성자: Rust Cargo Team ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 📌 1. 서론 — 이 문서가 다루는 내용 ..."
+        },
+        {
+          "title": "카고를 사용해봅시다 - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch01-03-hello-cargo.html",
+          "snippet": "카고를 사용해봅시다 카고 (Cargo) 는 러스타시안이라면 대부분 사용하는 러스트 빌드 시스템 및 패키지 매니저입니다. 이 도구는 코드 빌드나, 코드 작성에 필요한 외부 라이브러리를 다운로드할 때나, 라이브러리를 제작할 때 겪는 귀찮은 일들을 상당수 줄여주는 편리한 도구입니다. (앞으로 외부 ..."
+        },
+        {
+          "title": "카고 - Rust By Example",
+          "url": "https://dev-doc.rust-lang.org/rust-by-example/ko/cargo.html",
+          "snippet": "cargo 는 Rust 공식 패키지 관리 도구입니다. 코드 품질과 개발 속도를 향상시키기 위한 정말 유용한 기능들을 많이 가지고 있습니다! 다음과 같은 기능들이 포함됩니다:"
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:06+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-jn_eg9x0]\\\"\"\n",
+      "elapsed_ms": 2167,
+      "stdout_sha256": "abc810756570ba847be335bfac2450e86acfc15c3fee43db0931bd22f71d5167",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "recent-python",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "backend_failed",
+      "results": [],
+      "exit_code": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    print(json.dumps(DDGS(timeout=8).text(sys.argv[1], max_results=5, backend='auto'), ensure_ascii=False))\n                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 227, in text\n    return self._search_sync(\"text\", query, **kwargs)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 223, in _search_sync\n    raise DDGSException(err or \"No results found.\")\nddgs.exceptions.DDGSException: No results found.\n",
+      "elapsed_ms": 4972,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "official_rank": null
+    },
+    {
+      "backend": "openserp",
+      "case": "recent-python",
+      "split": "held_out",
+      "language": "en",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "Python 3.10.22, 3.11.17, 3.12.15, 3.13.16 and 3.14.8 are now available ...",
+          "url": "https://blog.python.org/2026/10/python-31022-31117",
+          "snippet": "3 days agoPython 3.12.15 is also a source-only security release, with security support continuing until October 2028. Python 3.13.16 is the last full maintenance release of 3.13; future 3.13 releases will contain security fixes only."
+        },
+        {
+          "title": "Python Release Python 3.14.8 | Python.org",
+          "url": "https://www.python.org/downloads/latest",
+          "snippet": "Python 3.14.8 Release date: Sept. 30, 2026 This is the eighth maintenance release of Python 3.14 Python 3.14.8 is an expedited security release and the eighth maintenance release of 3.14, containing around 354 bugfixes, build improvements and documentation changes from 142 contributors since 3.14.7. Security content in this releases CVE-2026-19445 gh-156293 Use-after-free of a server-side ..."
+        },
+        {
+          "title": "Python Release Python 3.15.0rc3 | Python.org",
+          "url": "https://www.python.org/downloads/release/python-3150rc3",
+          "snippet": "2 days agoPython 3.15.0rc3 Release date: Oct. 2, 2026 Following recent tradition, here's a surprise third release candidate for Python 3.15.0! We got some last-minute lazy-import release blockers, and it makes sense to include them in 3.15.0 final. It also makes sense to give a bit of time to test them properly, so this week's planned 3.15.0 final is postponed until next week, and here's an extra 3.15 ..."
+        },
+        {
+          "title": "Python 3.15.0 candidate 3 is here! | Python Insider",
+          "url": "https://blog.python.org/2026/10/python-3150-rc3",
+          "snippet": "2 days agoThe next release of Python 3.15 will be 3.15.0 final, scheduled for 2026-10-09. There will be no ABI changes from this point forward in the 3.15 series, and the goal is that there will be as few code changes as possible."
+        },
+        {
+          "title": "Latest Python Releases, Changelog & Updates - ReleaseBytes",
+          "url": "https://releasebytes.com/python",
+          "snippet": "1 day agoPython 3.15.0 Release Candidate 3 Issued; Final Release Due October 2026 Python 3.15.0 Release Candidate 3 (rc3) is now available, incorporating last-minute lazy-import blockers and over 150 bugfixes, build improvements, and documentation changes since rc2."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:08+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-tsiwnh1v]\\\"\"\n",
+      "elapsed_ms": 1667,
+      "stdout_sha256": "68f705fd0254f8dee79de3eff83bb184c6e90afa7b42a81944905ce228c6d89c",
+      "official_rank": 1
+    },
+    {
+      "backend": "ddgs",
+      "case": "recent-korean",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "backend_failed",
+      "results": [],
+      "exit_code": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 3, in <module>\n    print(json.dumps(DDGS(timeout=8).text(sys.argv[1], max_results=5, backend='auto'), ensure_ascii=False))\n                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 227, in text\n    return self._search_sync(\"text\", query, **kwargs)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/xgen-tool-backends-x8720rsk/venv/lib/python3.14/site-packages/ddgs/ddgs.py\", line 223, in _search_sync\n    raise DDGSException(err or \"No results found.\")\nddgs.exceptions.DDGSException: No results found.\n",
+      "elapsed_ms": 4371,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "official_rank": null
+    },
+    {
+      "backend": "openserp",
+      "case": "recent-korean",
+      "split": "held_out",
+      "language": "ko",
+      "repetition": 2,
+      "status": "ok",
+      "results": [
+        {
+          "title": "통화신용정책보고서 (2026년 9월) | (상세) | 한국은행 홈페이지",
+          "url": "https://www.bok.or.kr/portal/bbs/B0000156/view.do?menuNo=200754&nttId=11064613",
+          "snippet": "한눈에 보는 통화신용정책보고서 통화신용정책 운영 기준금리를 2.50%에서 3.00%로 두 차례 연속 인상 통화신용정책 운영 여건 및 전망 물가는 상당기간 목표수준을 상회할 전망 성장은 수출 및 투자 호조, 소비 회복으로 견조한 흐름 지속 예상 수도권 주택가격 오름세 및 가계대출 증가세 확대 향후 ..."
+        },
+        {
+          "title": "한국은행 2026년 9월 통화신용정책 보고서 핵심 정리...기준금리 3% ...",
+          "url": "https://dj2hrnf.tistory.com/1082",
+          "snippet": "Sep 15, 2026한국은행은 7월과 8월 기준금리를 연속 인상하면서 2.50%였던 기준금리를 3.00%까지 끌어올렸습니다. 그리고 9월 10일 발표한 통화신용정책보고서에서 물가가 상당 기간 목표 수준을 웃돌 것으로 예상하면서 향후 추가 금리 인상의 시기와 속도를 검토하겠다는 방향 을 제시했습니다. 그렇다고 한국 경제가 침체에 빠진 상황도 아닙니다. 오히려 한국은행은 2026년 경제성장률을 3.3%, 2027년을 **2.9%**로 전망하고 있습니다. 반도체 호황과 수출 증가, 투자 확대와 소비 회복이 동시에 나타나면서 성장률이 예상보다 높아졌습니다. 소비자물가 상승률은 2026년 2.7%, 2027년 **2.3%**로 예상했습니다."
+        },
+        {
+          "title": "| 통화정책방향 결정회의 | 통화정책방향 결정회의 일정 및 자료 ...",
+          "url": "https://www.bok.or.kr/portal/main/contents.do?menuNo=200755",
+          "snippet": "유용한 정보가 되었나요?"
+        },
+        {
+          "title": "세계가 다시 브레이크를 밟았다: 2026년 9월 통화신용정책보고서",
+          "url": "https://www.wednesdata.com/monetary-policy-report-2026-09",
+          "snippet": "왜 전 세계가 갑자기 다시 브레이크를 밟기 시작했을까요. 그리고 이게 내 대출 이자와는 정확히 어떤 관계가 있을까요. 한국은행이 반년마다 국회에 내는 통화신용정책보고서에 그 답이 있습니다."
+        },
+        {
+          "title": "한국은행, 2026년 9월 통화신용정책보고서 설명회",
+          "url": "https://www.newspim.com/news/view/20260910000881",
+          "snippet": "Sep 10, 2026[서울=뉴스핌] 박종우 한국은행 부총재보가 10일 오전 서울 중구 한국은행에서 열린 2026년 9월 통화신용정책보고서 설명회에서 발언하고 있다.왼쪽 ..."
+        }
+      ],
+      "exit_code": 0,
+      "stderr": "time=\"2026-10-05T04:21:12+09:00\" level=warning msg=\"cannot read config: Config File \\\"config\\\" Not Found in \\\"[/tmp/xgen-search-trial-3m41gpfq]\\\"\"\n",
+      "elapsed_ms": 1466,
+      "stdout_sha256": "cb93a65495fabfc54d581769775339c85f85819adc746a9f4c066618d36a037a",
+      "official_rank": 1
+    }
+  ]
+}
