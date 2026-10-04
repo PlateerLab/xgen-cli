@@ -1,0 +1,18 @@
+[
+  {
+    "case": "node-pair-small-quote",
+    "variant": "quote_only",
+    "attempt": 1,
+    "quoted_visible_passed": false,
+    "quoted_hidden_passed": false,
+    "classification": "stale_initial_buggy_source"
+  },
+  {
+    "case": "node-pair-small-quote",
+    "variant": "quote_only",
+    "attempt": 2,
+    "quoted_visible_passed": true,
+    "quoted_hidden_passed": true,
+    "classification": "equivalent_implementation_rewritten"
+  }
+]
