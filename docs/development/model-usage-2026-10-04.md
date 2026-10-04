@@ -74,3 +74,12 @@ usage는 null이며 과거 RRSI 결과를 새 관측으로 바꾸지 않는다.
 
 최종 검증: Rust workspace 635 passed, 0 failed, 4 ignored; Python 평가 테스트 17개 통과.
 workspace Clippy `-D warnings`, fmt, 공개 문서·release workflow 검사와 release build도 통과했다.
+
+## macOS 경로 호환성 보완
+
+첫 플랫폼 CI에서 Intel·Apple Silicon 모두 SQLite NOFOLLOW가 정상적인 상위 경로 별칭까지 거절해
+usage store 생성과 조회가 실패했다. SQLite에 전달하기 전에 부모 경로만 표준 canonicalization으로
+정규화하고, leaf 파일의 symlink 검사와 NOFOLLOW는 유지한다. OS 이름이나 특정 경로를 조건으로
+분기하지 않는다. 직접 부모 별칭과 그 아래 nested directory 두 경우를 검증했으며 기존 leaf symlink
+거절도 유지했다. 로컬 사용량 단위 테스트 5개, 거절→재개→조회 integration과 Clippy가 통과했다.
+macOS 실제 통과 여부는 수정 HEAD의 플랫폼 CI로 확인한다.

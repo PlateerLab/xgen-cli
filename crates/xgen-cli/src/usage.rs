@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, params};
 use serde::Serialize;
@@ -16,6 +16,7 @@ pub(crate) struct UsageStore(Connection);
 
 impl UsageStore {
     pub(crate) fn open(path: &Path) -> Result<Self, ()> {
+        let path = canonical_database_path(path)?;
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -23,12 +24,12 @@ impl UsageStore {
             use std::os::unix::fs::OpenOptionsExt as _;
             options.mode(0o600);
         }
-        match options.open(path) {
+        match options.open(&path) {
             Ok(file) => drop(file),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(_) => return Err(()),
         }
-        validate_file(path)?;
+        validate_file(&path)?;
         let connection = Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NOFOLLOW,
@@ -73,13 +74,20 @@ fn validate_file(path: &Path) -> Result<(), ()> {
     Ok(())
 }
 
+fn canonical_database_path(path: &Path) -> Result<PathBuf, ()> {
+    // Resolve legitimate ancestor aliases (e.g. macOS /var) while keeping the leaf unfollowed.
+    let parent = fs::canonicalize(path.parent().ok_or(())?).map_err(|_| ())?;
+    Ok(parent.join(path.file_name().ok_or(())?))
+}
+
 fn read_observations(path: &Path) -> Result<Vec<ModelCallObservation>, ()> {
-    match fs::symlink_metadata(path) {
+    let path = canonical_database_path(path)?;
+    match fs::symlink_metadata(&path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(_) => return Err(()),
         Ok(_) => {}
     }
-    validate_file(path)?;
+    validate_file(&path)?;
     let connection = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NOFOLLOW,
@@ -406,6 +414,29 @@ mod tests {
             "18446744073709551615",
         ] {
             assert!(invalid.parse::<UsdPerMillion>().is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parent_directory_aliases_support_storage_without_following_leaf_symlinks() {
+        for nested in [false, true] {
+            let fixture = tempfile::tempdir().unwrap();
+            let actual = fixture.path().join("actual");
+            fs::create_dir(&actual).unwrap();
+            let alias = fixture.path().join("alias");
+            std::os::unix::fs::symlink(&actual, &alias).unwrap();
+            let directory = if nested {
+                fs::create_dir(actual.join("nested")).unwrap();
+                alias.join("nested")
+            } else {
+                alias
+            };
+            let path = directory.join("usage.sqlite3");
+            let mut store = UsageStore::open(&path).unwrap();
+            store.record(&observation("a")).unwrap();
+            drop(store);
+            assert_eq!(read_observations(&path).unwrap().len(), 1);
         }
     }
 
