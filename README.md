@@ -98,6 +98,10 @@ RC3의 포함 범위와 알려진 한계는 [Developer Preview RC3 후보](docs/
 summary 전에는 Thinking 표시만 출력한다. `--debug` 또는 pipe 입력에서는 기존 redacted durable progress를
 출력한다.
 
+모델 응답이 거절되면 최종 답변이 저장되지 않았음을 표시하고 `/resume RUN_ID`를 안내한다. 이미 저장된
+실행 결과는 유지되지만 작업 완료를 보장하지는 않는다. 같은 세션에서 `/resume`으로 명시적으로 이어가거나
+`/clear`로 새 작업을 시작할 수 있다. 재개에는 원래 workspace·도구 catalog·모델 설정과 남은 budget이 필요하다.
+
 `model check` 기본형은 선택 profile의 endpoint에 `GET /v1/models` 하나만 보내 기존 자동화 계약을
 유지한다. `--compatibility`를 지정하면 strict structured output POST를 한 번 더 보낸다. `model setup`은
 두 검증을 모두 통과한 뒤에만 profile을 활성화하며 workspace·Run state는 만들지 않는다.

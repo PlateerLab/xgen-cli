@@ -242,6 +242,182 @@ fn bare_xgen_streams_durable_progress_prompts_separate_approvals_and_replays_off
 }
 
 #[test]
+fn changed_safe_environment_is_named_and_blocks_resume_until_restored() {
+    for key in ["LANG", "NO_COLOR"] {
+        let fixture = tempdir().unwrap();
+        let workspace = fixture.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("README.md"), "fixture").unwrap();
+        let state_root = fixture.path().join("state");
+        let server = SequentialServer::with_responses(vec![
+            plan_response(
+                "read",
+                "Read file",
+                "xgeny.fs/read-text",
+                &json!({"path":"README.md"}),
+            ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
+            completion_response(),
+        ]);
+        let command = |value| {
+            let mut cmd = Command::new(env!("CARGO_BIN_EXE_xgen"));
+            cmd.current_dir(&workspace)
+                .env("XGEN_STATE_HOME", &state_root)
+                .env("XGEN_CONFIG_HOME", fixture.path().join("config"))
+                .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .env_remove("XGEN_OPENAI_API_KEY")
+                .env(key, value);
+            cmd
+        };
+        let permissions = "/permissions model allow\n/permissions read allow\n";
+        let first = bounded_scripted_output(
+            &mut command("original-diagnostic-value"),
+            format!("{permissions}Read the file.\n/exit\n").as_bytes(),
+        )
+        .unwrap();
+        let id = extract_run_id(&stderr(&first));
+        let database = state_root.join("runs").join(&id).join("run.sqlite3");
+        let journal_before = fs::read(&database).unwrap();
+        let blocked = bounded_scripted_output(
+            &mut command("changed-diagnostic-value"),
+            format!("{permissions}/resume {id}\n/exit\n").as_bytes(),
+        )
+        .unwrap();
+        let stdout = String::from_utf8_lossy(&blocked.stdout);
+        assert!(
+            stdout.contains("configuration: execution_profile"),
+            "{stdout}"
+        );
+        assert!(stdout.contains(&format!("environment:{key}")));
+        assert!(!stdout.contains("changed-diagnostic-value"));
+        assert!(!stdout.contains("original-diagnostic-value"));
+        assert_eq!(journal_before, fs::read(&database).unwrap());
+        let restored = bounded_scripted_output(
+            &mut command("original-diagnostic-value"),
+            format!("{permissions}/resume {id}\n/exit\n").as_bytes(),
+        )
+        .unwrap();
+        assert!(String::from_utf8_lossy(&restored.stdout).contains(COMPLETION));
+        assert_eq!(
+            SqliteRunStore::open_existing(database)
+                .unwrap()
+                .load_execution_receipts()
+                .unwrap()
+                .len(),
+            1
+        );
+        for _ in 0..3 {
+            server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        }
+        server.handle.join().unwrap();
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn rejected_final_response_resumes_after_restart_without_replaying_writes_or_failed_command() {
+    for invalid in [
+        json!({"formatVersion": 1, "kind": "completion_candidate", "steps": [], "summary": ""}),
+        json!({"formatVersion": 2, "kind": "completion_candidate", "steps": [], "summary": "invalid version"}),
+    ] {
+        let fixture = tempdir().unwrap();
+        let state_root = fixture.path().join("state");
+        let config_root = fixture.path().join("config");
+        let workspace = fixture.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let mut responses = Vec::new();
+        for name in ["first.txt", "second.txt"] {
+            responses.push(plan_response(
+                name,
+                "Save a requested file",
+                "xgeny.fs/write-atomic",
+                &json!({"path": name, "content": name, "expectedDigest": null}),
+            ));
+        }
+        responses.push(plan_response(
+            "failed_command",
+            "Observe a failed command",
+            "xgeny.process/execute",
+            &json!({"executable": "git", "args": ["--definitely-invalid-option"],
+                "cwd": ".", "env": {}, "timeoutMs": 30000, "maxOutputBytes": 32768}),
+        ));
+        responses.push(provider_response(&invalid));
+        responses.push(provider_response(&json!({"formatVersion": 1,
+            "kind": "completion_candidate", "steps": [], "summary": "Files saved; command failed."})));
+        let server = SequentialServer::with_responses(responses);
+        let command = || {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_xgen"));
+            command
+                .current_dir(&workspace)
+                .env("XGEN_STATE_HOME", &state_root)
+                .env("XGEN_CONFIG_HOME", &config_root)
+                .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .env_remove("XGEN_OPENAI_API_KEY");
+            command
+        };
+        let permissions = "/permissions model allow\n/permissions read allow\n/permissions write allow\n/permissions execute allow\n";
+        let first = bounded_scripted_output(
+            &mut command(),
+            format!("{permissions}Save two files, run a command, and report.\n/status\n/exit\n")
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(first.status.success(), "{}", stderr(&first));
+        let run_id = extract_run_id(&stderr(&first));
+        let first_stdout = String::from_utf8_lossy(&first.stdout);
+        assert!(first_stdout.contains("no final answer was saved"));
+        assert!(first_stdout.contains(&format!("Continue this Run: /resume {run_id}")));
+        assert!(first_stdout.contains("status: rejected"));
+        let database = state_root.join("runs").join(&run_id).join("run.sqlite3");
+        let before = SqliteRunStore::open_existing(&database)
+            .unwrap()
+            .load_execution_receipts()
+            .unwrap();
+        assert_eq!(before.len(), 3);
+
+        let resumed = bounded_scripted_output(
+            &mut command(),
+            format!("{permissions}/resume {run_id}\n/resume\n/status\n/exit\n").as_bytes(),
+        )
+        .unwrap();
+        assert!(resumed.status.success(), "{}", stderr(&resumed));
+        let stdout = String::from_utf8_lossy(&resumed.stdout);
+        assert_eq!(stdout.matches("Files saved; command failed.").count(), 2);
+        assert!(stdout.contains("status: completed"));
+        assert!(!stdout.contains("progress: effect_starting"));
+        let after = SqliteRunStore::open_existing(database)
+            .unwrap()
+            .load_execution_receipts()
+            .unwrap();
+        assert_eq!(
+            before, after,
+            "resume must preserve exact execution receipts"
+        );
+        for name in ["first.txt", "second.txt"] {
+            assert_eq!(fs::read_to_string(workspace.join(name)).unwrap(), name);
+        }
+        let requests: Vec<_> = (0..5)
+            .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+            .collect();
+        server.handle.join().unwrap();
+        let context = planning_context(&requests[4]);
+        let outputs = context["toolOutputs"].as_array().unwrap();
+        assert_eq!(outputs.len(), 3);
+        let process = outputs
+            .iter()
+            .find(|o| o["capability"]["capabilityId"] == "xgeny.process/execute")
+            .unwrap();
+        assert_eq!(process["output"]["success"], false);
+    }
+}
+
+#[test]
 fn headless_run_keeps_the_legacy_contract_and_rejects_conversation_proposals() {
     let fixture = tempdir().unwrap();
     let server = SequentialServer::with_responses(vec![provider_response(&json!({
