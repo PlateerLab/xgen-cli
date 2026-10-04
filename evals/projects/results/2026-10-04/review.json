@@ -1,0 +1,36 @@
+{
+  "literal_quote_mismatches": [
+    {
+      "case": "rust-chunks",
+      "attempt": 1,
+      "classification": "literal_mismatch_equivalent_for_unsigned_remainder",
+      "detail": "실제 != 0 조건을 > 0으로 인용했다. usize remainder에서는 동작이 같지만 literal 요청은 충족하지 못했다."
+    },
+    {
+      "case": "node-query",
+      "attempt": 1,
+      "classification": "literal_mismatch_changes_unseen_boundary_behavior",
+      "detail": "실제 파일은 첫 = 뒤의 value를 재결합하지만 인용은 모든 =를 나눠 배열로 반환했다. 실제 파일도 leading ? 경계는 실패했다."
+    },
+    {
+      "case": "python-transpose",
+      "attempt": 1,
+      "classification": "literal_mismatch_reimplementation",
+      "detail": "실제 padding 뒤 zip 대신 인덱스 comprehension을 인용했다. fixture 입력에서는 동작이 같았지만 파일 원문은 아니다."
+    },
+    {
+      "case": "python-transpose",
+      "attempt": 2,
+      "classification": "literal_mismatch_reimplementation",
+      "detail": "실제 별도 padded 배열 대신 row 복사·extend 구현을 인용했다. 자연어 전체의 사실성 실패로 일반화하지 않는다."
+    }
+  ],
+  "node_query_hidden_failure": "두 실행 모두 앞의 ? 처리를 놓쳤으며 두 번째는 bare key의 빈 값과 value 내부 =도 보존하지 못했다. 추가 경계 요구는 visible 테스트에 모두 명시되지 않아 기존 명세 위반이나 engine 결함으로 단정하지 않는다.",
+  "measurement_correction": "원본 runner의 Unknown event 이름이 실제 protocol과 달라 journal을 별도로 재검사했다. 정확한 두 Unknown event 이름으로 12회 모두 0건이며 중복 effect starts도 0건이다. 원시 report와 실행 source는 변경하지 않았다.",
+  "runner_revision": "현재 runner는 Unknown 이름·중복 effect 측정과 실패 시 부분 journal 관측을 보완했다. 새 runner로 API 실험을 재실행하지 않았다.",
+  "runtime_versions_collected_after_trials": {
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "node": "v22.22.1",
+    "python": "Python 3.12.3"
+  }
+}

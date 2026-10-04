@@ -1,0 +1,162 @@
+[
+  {
+    "id": "rust-chunks",
+    "split": "design",
+    "language": "rust",
+    "mode": "bare",
+    "source": "src/lib.rs",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"project_fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+      "src/lib.rs": "pub fn chunk_sizes(total: usize, width: usize) -> Vec<usize> {\n    if width == 0 { return Vec::new(); }\n    vec![width; total / width]\n}\n",
+      "tests/visible.rs": "use project_fixture::chunk_sizes;\n#[test] fn remainder() { assert_eq!(chunk_sizes(8, 3), vec![3, 3, 2]); }\n#[test] fn empty() { assert_eq!(chunk_sizes(0, 3), vec![]); }\n#[test] fn zero_width() { assert_eq!(chunk_sizes(4, 0), vec![]); }\n"
+    },
+    "commands": [
+      [
+        "cargo",
+        "test",
+        "--offline"
+      ],
+      [
+        "cargo",
+        "build",
+        "--offline"
+      ]
+    ],
+    "hidden_path": "tests/heldout.rs",
+    "hidden_tests": "use project_fixture::chunk_sizes;\n#[test] fn boundaries() {\n    assert_eq!(chunk_sizes(2, 5), vec![2]);\n    assert_eq!(chunk_sizes(6, 3), vec![3, 3]);\n    assert_eq!(chunk_sizes(5, 1), vec![1; 5]);\n}\n"
+  },
+  {
+    "id": "node-unique",
+    "split": "design",
+    "language": "node",
+    "mode": "run-resume",
+    "source": "source.mjs",
+    "files": {
+      "package.json": "{\"name\":\"project-fixture\",\"private\":true,\"type\":\"module\"}\n",
+      "source.mjs": "export function uniqueById(items) {\n  return [...new Map(items.map(item => [item.id, item])).values()];\n}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { uniqueById } from './source.mjs';\ntest('retains first occurrence and insertion order', () => {\n  assert.deepEqual(uniqueById([{id:'b',value:1},{id:'a',value:2},{id:'b',value:3}]), [{id:'b',value:1},{id:'a',value:2}]);\n});\ntest('empty', () => assert.deepEqual(uniqueById([]), []));\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { uniqueById } from './source.mjs';\ntest('numeric and string IDs remain distinct', () => {\n  assert.deepEqual(uniqueById([{id:1,v:0},{id:'1',v:1},{id:1,v:2}]), [{id:1,v:0},{id:'1',v:1}]);\n});\n"
+  },
+  {
+    "id": "python-counts",
+    "split": "design",
+    "language": "python",
+    "mode": "run-resume",
+    "source": "source.py",
+    "files": {
+      "source.py": "def ordered_counts(items):\n    counts = {}\n    for item in items:\n        counts[item] = counts.get(item, 0) + 1\n    return sorted(counts.items(), key=lambda pair: pair[1])\n",
+      "test_visible.py": "import unittest\nfrom source import ordered_counts\nclass CountsTests(unittest.TestCase):\n    def test_frequency_then_name(self):\n        self.assertEqual(ordered_counts(['b','a','b','c','a','b']), [('b',3),('a',2),('c',1)])\n    def test_tie(self):\n        self.assertEqual(ordered_counts(['z','a']), [('a',1),('z',1)])\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-v"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom source import ordered_counts\nclass HiddenCounts(unittest.TestCase):\n    def test_boundaries(self):\n        self.assertEqual(ordered_counts([]), [])\n        self.assertEqual(ordered_counts(['c','b','a','c','b','a']), [('a',2),('b',2),('c',2)])\n"
+  },
+  {
+    "id": "rust-lines",
+    "split": "held_out",
+    "language": "rust",
+    "mode": "bare",
+    "source": "src/lib.rs",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"project_fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+      "src/lib.rs": "pub fn nonempty_lines(input: &str) -> Vec<String> {\n    input.lines().filter(|line| !line.is_empty()).map(String::from).collect()\n}\n",
+      "tests/visible.rs": "use project_fixture::nonempty_lines;\n#[test] fn trims_before_filtering() { assert_eq!(nonempty_lines(\" a \\n   \\nb\\n\"), vec![\"a\", \"b\"]); }\n#[test] fn empty() { assert!(nonempty_lines(\"\").is_empty()); }\n"
+    },
+    "commands": [
+      [
+        "cargo",
+        "test",
+        "--offline"
+      ],
+      [
+        "cargo",
+        "build",
+        "--offline"
+      ]
+    ],
+    "hidden_path": "tests/heldout.rs",
+    "hidden_tests": "use project_fixture::nonempty_lines;\n#[test] fn unicode_and_crlf() { assert_eq!(nonempty_lines(\"\\t가\\r\\n\\t\\r\\n 나 \"), vec![\"가\", \"나\"]); }\n"
+  },
+  {
+    "id": "node-query",
+    "split": "held_out",
+    "language": "node",
+    "mode": "run-resume",
+    "source": "source.mjs",
+    "files": {
+      "package.json": "{\"name\":\"project-fixture\",\"private\":true,\"type\":\"module\"}\n",
+      "source.mjs": "export function parseQuery(query) {\n  return query.split('&').map(pair => pair.split('='));\n}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { parseQuery } from './source.mjs';\ntest('query decoding and repeated keys', () => {\n  assert.deepEqual(parseQuery('q=a+b&q=x%3Dy&empty='), [['q','a b'],['q','x=y'],['empty','']]);\n});\ntest('empty query', () => assert.deepEqual(parseQuery(''), []));\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { parseQuery } from './source.mjs';\ntest('leading question mark and bare value', () => {\n  assert.deepEqual(parseQuery('?flag&k=a=b'), [['flag',''],['k','a=b']]);\n});\n"
+  },
+  {
+    "id": "python-transpose",
+    "split": "held_out",
+    "language": "python",
+    "mode": "run-resume",
+    "source": "source.py",
+    "files": {
+      "source.py": "def transpose(rows):\n    return [list(column) for column in zip(*rows)]\n",
+      "test_visible.py": "import unittest\nfrom source import transpose\nclass TransposeTests(unittest.TestCase):\n    def test_ragged_padding(self):\n        self.assertEqual(transpose([[1,2,3],[4]]), [[1,4],[2,None],[3,None]])\n    def test_empty(self):\n        self.assertEqual(transpose([]), [])\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-v"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom source import transpose\nclass HiddenTranspose(unittest.TestCase):\n    def test_empty_row_and_none(self):\n        self.assertEqual(transpose([[],[None,2]]), [[None,None],[None,2]])\n        self.assertEqual(transpose([[],[]]), [])\n"
+  }
+]
