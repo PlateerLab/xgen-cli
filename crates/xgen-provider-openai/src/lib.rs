@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::time::Duration;
+use std::time::Instant;
 
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -19,6 +20,9 @@ use xgen_runtime::{
     PlanDependency, PlanProposal, PlannerCallRequest, PlannerPort, PlannerPortFailure,
     ProposedPlanStep,
 };
+
+mod usage;
+pub use usage::{ModelCallObservation, ModelCallOutcome, TokenUsage};
 
 const REQUEST_PROFILE_DOMAIN: &str = "xgeny.openai-request-profile/v1";
 const REQUEST_ENVELOPE_PROFILE: &str = "xgeny.planner-request/v2";
@@ -571,6 +575,7 @@ pub struct OpenAiPlanner {
     config: OpenAiPlannerConfig,
     credential: Option<BearerCredential>,
     transport: Box<dyn Transport + Send>,
+    usage_observer: Option<Box<dyn FnMut(ModelCallObservation) + Send>>,
 }
 
 impl OpenAiPlanner {
@@ -591,6 +596,7 @@ impl OpenAiPlanner {
             config,
             credential,
             transport: Box::new(transport),
+            usage_observer: None,
         })
     }
 
@@ -607,7 +613,37 @@ impl OpenAiPlanner {
             config,
             credential,
             transport: Box::new(transport),
+            usage_observer: None,
         }
+    }
+
+    fn decode_proposal(&self, response: &[u8]) -> Result<PlanProposal, PlannerPortFailure> {
+        let proposal = decode_chat_response_with_codec(
+            response,
+            &self.config.model,
+            self.config.max_proposal_bytes,
+            self.config.max_json_depth,
+            self.config.response_format == ResponseFormat::JsonSchemaAtomicJson,
+        )?;
+        if matches!(proposal, PlanProposal::ResponseCandidate { .. })
+            && !self.config.conversation_responses
+        {
+            return Err(PlannerPortFailure::InvalidResponse);
+        }
+        if let Some(validator) = &self.config.artifact_validator {
+            validate_artifact_response(response, &self.config, validator)?;
+        }
+        Ok(proposal)
+    }
+
+    /// Observe completed HTTP attempts without changing proposal or request semantics.
+    #[must_use]
+    pub fn with_usage_observer(
+        mut self,
+        observer: impl FnMut(ModelCallObservation) + Send + 'static,
+    ) -> Self {
+        self.usage_observer = Some(Box::new(observer));
+        self
     }
 }
 
@@ -849,6 +885,7 @@ impl fmt::Debug for OpenAiPlanner {
                 &self.credential.as_ref().map(|_| "<redacted>"),
             )
             .field("transport", &"<redacted>")
+            .field("usage_observer", &self.usage_observer.is_some())
             .finish()
     }
 }
@@ -887,28 +924,35 @@ impl PlannerPort for OpenAiPlanner {
         if body.len() > self.config.max_request_bytes {
             return Err(PlannerPortFailure::RequestTooLarge);
         }
+        let started = Instant::now();
         let response = self.transport.send(TransportRequest {
             endpoint: &self.config.endpoint,
             authorization: self.credential.as_ref().map(|value| &value.0),
             body: &body,
             max_response_bytes: self.config.max_response_bytes,
-        })?;
-        let proposal = decode_chat_response_with_codec(
-            &response,
-            &self.config.model,
-            self.config.max_proposal_bytes,
-            self.config.max_json_depth,
-            self.config.response_format == ResponseFormat::JsonSchemaAtomicJson,
-        )?;
-        if matches!(proposal, PlanProposal::ResponseCandidate { .. })
-            && !self.config.conversation_responses
-        {
-            return Err(PlannerPortFailure::InvalidResponse);
+        });
+        let elapsed_millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let usage = response.as_ref().ok().and_then(|body| {
+            usage::decode_usage(body, self.config.max_json_depth, &self.config.model)
+        });
+        let transport_failed = response.is_err();
+        let result = response.and_then(|response| self.decode_proposal(&response));
+        if let Some(observer) = &mut self.usage_observer {
+            observer(ModelCallObservation {
+                call_id: request.call_id().to_owned(),
+                request_digest: request.request_digest().to_owned(),
+                elapsed_millis,
+                outcome: if transport_failed {
+                    ModelCallOutcome::TransportFailed
+                } else if result.is_ok() {
+                    ModelCallOutcome::ProposalDecoded
+                } else {
+                    ModelCallOutcome::ResponseRejected
+                },
+                usage,
+            });
         }
-        if let Some(validator) = &self.config.artifact_validator {
-            validate_artifact_response(&response, &self.config, validator)?;
-        }
-        Ok(proposal)
+        result
     }
 }
 

@@ -723,6 +723,150 @@ fn provider_response(content: &Value) -> Vec<u8> {
     .expect("provider response should serialize")
 }
 
+#[test]
+#[allow(clippy::too_many_lines)]
+fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay() {
+    for native_cache in [false, true] {
+        let fixture = tempdir().unwrap();
+        let workspace = fixture.path().join("workspace");
+        let state_root = fixture.path().join("state");
+        let config_root = fixture.path().join("config");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("README.md"), "usage fixture\n").unwrap();
+        let mut responses = vec![
+            plan_response(
+                "read",
+                "Read README",
+                "xgeny.fs/read-text",
+                &json!({"path":"README.md"}),
+            ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
+            completion_response(),
+        ];
+        for (index, response) in responses.iter_mut().take(2).enumerate() {
+            let mut envelope: Value = serde_json::from_slice(response).unwrap();
+            let input = if index == 0 { 100 } else { 200 };
+            let output = if index == 0 { 20 } else { 30 };
+            envelope["usage"] = json!({"prompt_tokens":input,"completion_tokens":output,"total_tokens":input+output});
+            if native_cache {
+                envelope["usage"]["prompt_cache_hit_tokens"] = json!(input * 3 / 5);
+                envelope["usage"]["prompt_cache_miss_tokens"] = json!(input * 2 / 5);
+            } else {
+                envelope["usage"]["prompt_tokens_details"] = json!({"cached_tokens":input * 3 / 5});
+            }
+            *response = serde_json::to_vec(&envelope).unwrap();
+        }
+        let server = SequentialServer::with_responses(responses);
+        let initial = bounded_scripted_output(
+            Command::new(env!("CARGO_BIN_EXE_xgen"))
+                .current_dir(&workspace)
+                .env("XGEN_STATE_HOME", &state_root)
+                .env("XGEN_CONFIG_HOME", &config_root)
+                .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .env_remove("XGEN_OPENAI_API_KEY"),
+            b"/permissions model allow\n/permissions read allow\nRead README.\n/usage\n/exit\n",
+        )
+        .unwrap();
+        assert!(initial.status.success(), "{}", stderr(&initial));
+        let run_id = extract_run_id(&stderr(&initial));
+        let stdout = String::from_utf8_lossy(&initial.stdout);
+        assert!(
+            stdout.contains("usage: calls=2/2 input=300 output=50 cached=180 partial=false"),
+            "{stdout}"
+        );
+        assert!(stdout.contains("model_rejected.planner_invalid_response"));
+        let resume = format!(
+            "/permissions model allow\n/permissions read allow\n/resume {run_id}\n/usage\n/exit\n"
+        );
+        let resumed = bounded_scripted_output(
+            Command::new(env!("CARGO_BIN_EXE_xgen"))
+                .current_dir(&workspace)
+                .env("XGEN_STATE_HOME", &state_root)
+                .env("XGEN_CONFIG_HOME", &config_root)
+                .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .env_remove("XGEN_OPENAI_API_KEY"),
+            resume.as_bytes(),
+        )
+        .unwrap();
+        assert!(resumed.status.success(), "{}", stderr(&resumed));
+        let stdout = String::from_utf8_lossy(&resumed.stdout);
+        assert!(stdout.contains(COMPLETION));
+        assert!(
+            stdout.contains("usage: calls=3/3 input=300 output=50 cached=unknown partial=true"),
+            "{stdout}"
+        );
+        for _ in 0..3 {
+            server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        }
+        server.handle.join().unwrap();
+        let directory = state_root.join("runs").join(&run_id);
+        let before_usage = fs::read(directory.join("usage.sqlite3")).unwrap();
+        let before_journal = fs::read(directory.join("run.sqlite3")).unwrap();
+        let offline = Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .args(["usage", &run_id])
+            .env("XGEN_STATE_HOME", &state_root)
+            .env("XGEN_CONFIG_HOME", &config_root)
+            .env("XGEN_OPENAI_BASE_URL", "invalid-unused")
+            .env_remove("XGEN_OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        assert!(offline.status.success(), "{}", stderr(&offline));
+        let report: Value = serde_json::from_slice(&offline.stdout).unwrap();
+        assert_eq!(report["observedCalls"], 3);
+        assert_eq!(report["callsWithTokenUsage"], 2);
+        assert_eq!(report["tokenSubtotal"]["totalTokens"], 350);
+        assert_eq!(report["calls"][1]["outcome"], "response_rejected");
+        assert_eq!(report["calls"][2]["usage"], Value::Null);
+        let priced = Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .args([
+                "usage",
+                &run_id,
+                "--input-price",
+                "1",
+                "--cached-input-price",
+                "0.1",
+                "--output-price",
+                "2",
+            ])
+            .env("XGEN_STATE_HOME", &state_root)
+            .env("XGEN_CONFIG_HOME", &config_root)
+            .output()
+            .unwrap();
+        assert!(priced.status.success(), "{}", stderr(&priced));
+        let priced: Value = serde_json::from_slice(&priced.stdout).unwrap();
+        assert_eq!(
+            priced["costEstimate"]["estimatedUsdSubtotal"],
+            "0.000238000"
+        );
+        assert_eq!(priced["costEstimate"]["partial"], true);
+        assert_eq!(
+            fs::read(directory.join("usage.sqlite3")).unwrap(),
+            before_usage
+        );
+        assert_eq!(
+            fs::read(directory.join("run.sqlite3")).unwrap(),
+            before_journal
+        );
+        let replayed = Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .args(["resume", &run_id])
+            .env("XGEN_STATE_HOME", &state_root)
+            .env("XGEN_CONFIG_HOME", &config_root)
+            .output()
+            .unwrap();
+        assert!(replayed.status.success(), "{}", stderr(&replayed));
+        assert_eq!(
+            fs::read(directory.join("usage.sqlite3")).unwrap(),
+            before_usage
+        );
+    }
+}
+
 fn bounded_scripted_output(command: &mut Command, input: &[u8]) -> io::Result<Output> {
     let mut child = command
         .stdin(Stdio::piped())

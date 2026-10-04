@@ -114,6 +114,7 @@ def evaluate(binary, case, root, attempt, timeout, claim_style, goal_suffix=""):
         "claim_style": claim_style, "cli_exit_code": result.returncode,
         "elapsed_seconds": elapsed,
         "goal_suffix_sha256": hashlib.sha256(goal_suffix.encode()).hexdigest(),
+        "usage": None,
         "initial_tests_failed": before.returncode != 0,
         "tests_passed": after.returncode == 0, "tests_unchanged": unchanged_tests,
         "task_completed": False, "quote_status": "missing_claim" if claim_style == "literal" else "not_claimed",
@@ -123,6 +124,14 @@ def evaluate(binary, case, root, attempt, timeout, claim_style, goal_suffix=""):
     if len(databases) > 1:
         raise RuntimeError("expected exactly one Run per fixture")
     for database in databases:
+        try:
+            usage_result = subprocess.run([str(binary), "usage", database.parent.name],
+                env=environment, capture_output=True, text=True, timeout=min(timeout, 30))
+            if usage_result.returncode == 0:
+                record["usage"] = json.loads(usage_result.stdout)
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            # Auxiliary observations must not discard an already completed trial.
+            record["usage_error"] = "observation_unavailable"
         manifest = json.loads((database.parent / "manifest.json").read_text())["record"]
         record["model"] = manifest["model"]
         record["request_profile_digest"] = manifest["requestProfileDigest"]
