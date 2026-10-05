@@ -38,6 +38,8 @@ struct RunManifestRecord {
     conversation_responses: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     final_response_schema: Option<SavedFinalResponseSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completion_checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,6 +161,7 @@ impl RunManifest {
             budget,
             conversation_responses: false,
             final_response_schema: None,
+            completion_checks: None,
         };
         validate_record(&record)?;
         let record_digest = digest_record(&record)?;
@@ -176,6 +179,20 @@ impl RunManifest {
         validate_record(&self.record)?;
         self.record_digest = digest_record(&self.record)?;
         Ok(self)
+    }
+
+    pub(crate) fn with_completion_checks(
+        mut self,
+        checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
+    ) -> Result<Self, ManifestError> {
+        self.record.completion_checks = checks;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn completion_checks(&self) -> Option<&[xgen_provider_openai::CompletionCheck]> {
+        self.record.completion_checks.as_deref()
     }
 
     pub(crate) fn final_response_schema(&self) -> Option<&serde_json::Value> {
@@ -308,6 +325,15 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     if let Some(schema) = &record.final_response_schema {
         let encoded = serde_jcs::to_string(schema).map_err(|_| ManifestError::Invalid)?;
         xgen_provider_openai::parse_completion_schema(&encoded)
+            .map_err(|_| ManifestError::Invalid)?;
+    }
+    if let Some(checks) = &record.completion_checks {
+        let schema = record
+            .final_response_schema
+            .as_ref()
+            .ok_or(ManifestError::Invalid)?;
+        let contract = serde_json::json!({"response_schema":schema.0,"checks":checks});
+        xgen_provider_openai::parse_completion_contract(&contract.to_string())
             .map_err(|_| ManifestError::Invalid)?;
     }
     if record.process_fingerprints.as_ref().is_some_and(|items| {
@@ -490,6 +516,40 @@ mod tests {
                 .with_final_response_schema(Some(serde_json::json!({"type":"array"})))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn completion_checks_are_manifest_bound_and_require_a_saved_schema() {
+        use xgen_provider_openai::CompletionCheck;
+        let check = CompletionCheck {
+            id: "result".into(),
+            argv: vec!["verify".into()],
+        };
+        assert!(
+            fixture()
+                .with_completion_checks(Some(vec![check.clone()]))
+                .is_err()
+        );
+        let base = fixture()
+            .with_final_response_schema(Some(serde_json::json!({"type":"object"})))
+            .unwrap();
+        assert!(
+            !String::from_utf8(base.to_bytes().unwrap())
+                .unwrap()
+                .contains("completionChecks")
+        );
+        let bound = base
+            .clone()
+            .with_completion_checks(Some(vec![check.clone()]))
+            .unwrap();
+        assert_ne!(base.authority(), bound.authority());
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap())
+                .unwrap()
+                .completion_checks(),
+            Some([check].as_slice())
+        );
+        assert!(base.with_completion_checks(Some(Vec::new())).is_err());
     }
 
     #[test]

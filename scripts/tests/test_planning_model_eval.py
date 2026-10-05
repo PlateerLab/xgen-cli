@@ -185,7 +185,7 @@ class RunnerContractTests(unittest.TestCase):
             try:
                 # Linux may briefly expose X (dead) before the process disappears.
                 self.assertIn(status.read_text().rsplit(')',1)[1].split()[0],('Z','X','x'))
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 pass
 
     def test_budget_reservation_retains_unknown_and_blocks_next_call(self):

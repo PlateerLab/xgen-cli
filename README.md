@@ -143,6 +143,9 @@ Headless `run --response-schema FILE`로 최종 응답의 JSON Schema를 지정�
 Host가 `response`와 검증된 Receipt 기반 `commands`를 조립하고, 명령·종료 코드·실행 순서를
 durable completion에 저장해. 기존 기본 출력은 유지해.
 [응답 계약 사용법과 보장 범위](docs/development/final-response-contract.md)를 확인해.
+`run --completion-contract FILE`은 응답 schema와 필수 검증 명령을 한 파일로 지정해.
+검증이 누락·실패했거나 이후 변경으로 낡았으면 완료를 거절해.
+[완료 검증 조건](docs/development/receipt-completion-checks.md)을 확인해.
 
 ## 제품 원칙
 

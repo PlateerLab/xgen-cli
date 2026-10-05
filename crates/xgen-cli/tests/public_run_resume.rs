@@ -1667,13 +1667,20 @@ fn provider_response(content: &Value) -> Vec<u8> {
 }
 
 fn final_contract_server(plan: Value, summary: String) -> (String, thread::JoinHandle<()>) {
+    contract_sequence_server(vec![plan], summary)
+}
+
+fn contract_sequence_server(
+    mut proposals: Vec<Value>,
+    summary: String,
+) -> (String, thread::JoinHandle<()>) {
+    proposals.push(
+        json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":Value::String(summary)}),
+    );
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
-        for proposal in [
-            plan,
-            json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":summary}),
-        ] {
+        for proposal in proposals {
             let mut stream = accept_with_timeout(&listener).unwrap();
             let request = read_http_request(&mut stream);
             assert!(String::from_utf8_lossy(&request).contains("RECEIPT_EXECUTION_REPORT_V1"));
@@ -1885,6 +1892,220 @@ fn final_contract_rejects_prose_missing_fields_and_model_written_commands_after_
             valid
         );
         assert_eq!(store.load_execution_receipts().unwrap().len(), 1);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[allow(clippy::too_many_lines)] // Exercise real tool effects and completion rejection across independent task families.
+fn completion_checks_require_latest_success_after_changes_on_design_and_held_out_inputs() {
+    use std::os::unix::fs::PermissionsExt as _;
+    for (family, input, correct, oracle) in [
+        (
+            "numeric-design",
+            json!([2, 3]),
+            json!(5),
+            "expected=sum(json.load(open('input.json')))",
+        ),
+        (
+            "numeric-held-out",
+            json!([-4, 9, 0]),
+            json!(5),
+            "expected=sum(json.load(open('input.json')))",
+        ),
+        (
+            "text-design",
+            json!(["b", "a", "b"]),
+            json!(["b", "a"]),
+            "expected=list(dict.fromkeys(json.load(open('input.json'))))",
+        ),
+        (
+            "text-held-out",
+            json!(["日本語", "", "日本語", "a", ""]),
+            json!(["日本語", "", "a"]),
+            "expected=list(dict.fromkeys(json.load(open('input.json'))))",
+        ),
+    ] {
+        for (scenario, actions, valid, reason) in [
+            ("valid", vec!["correct", "check"], true, ""),
+            ("missing", vec!["correct"], false, "missing"),
+            ("failed", vec!["wrong", "check"], false, "failed"),
+            ("stale", vec!["correct", "check", "wrong"], false, "stale"),
+            (
+                "latest-failed",
+                vec!["correct", "check", "wrong", "check"],
+                false,
+                "failed",
+            ),
+            (
+                "repaired",
+                vec!["wrong", "check", "correct", "check"],
+                true,
+                "",
+            ),
+        ] {
+            let root = tempdir().unwrap();
+            let workspace = root.path().join("workspace");
+            fs::create_dir(&workspace).unwrap();
+            fs::write(workspace.join("input.json"), input.to_string()).unwrap();
+            let writer = root.path().join("writer");
+            fs::write(&writer, "#!/bin/sh\nprintf '%s' \"$1\" > result.json\n").unwrap();
+            let checker = root.path().join("checker");
+            fs::write(&checker,format!("#!/usr/bin/python3\nimport json\n{oracle}\nraise SystemExit(0 if json.load(open('result.json')) == expected else 1)\n")).unwrap();
+            for path in [&writer, &checker] {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let steps: Vec<Value> = actions.iter().enumerate().map(|(i,action)| {
+                let key = format!("step{i}");
+                let depends = if i == 0 { json!([]) } else {json!([{"kind":"proposed_step","stepId":"","key":format!("step{}",i-1)}])};
+                let (executable, args) = if *action == "check" { ("checker",json!([])) }
+                    else { ("writer",json!([if *action == "correct" {correct.to_string()} else {json!({"incorrect":true}).to_string()}])) };
+                json!({"key":key,"objective":"execute declared action","dependsOn":depends,
+                    "capability":{"capabilityId":"xgeny.process/execute","contractVersion":"1.0.0"},
+                    "arguments":{"executable":executable,"args":args,"cwd":".","env":{},"timeoutMs":10000,"maxOutputBytes":4096}})
+            }).collect();
+            let proposals = steps
+                .into_iter()
+                .map(|mut step| {
+                    step["dependsOn"] = json!([]);
+                    json!({"formatVersion":1,"kind":"plan","summary":"","steps":[step]})
+                })
+                .collect();
+            let (base_url, server) =
+                contract_sequence_server(proposals, json!({"outcome":"completed"}).to_string());
+            let contract = root.path().join("contract.json");
+            let mut checks = vec![json!({"id":"result","argv":["checker"]})];
+            if scenario.starts_with("multi-") {
+                checks.push(json!({"id":"secondary","argv":["checker","secondary"]}));
+            }
+            fs::write(&contract,json!({"response_schema":{"type":"object","properties":{"outcome":{"type":"string"}},"required":["outcome"],"additionalProperties":false},"checks":checks}).to_string()).unwrap();
+            let state = root.path().join("state");
+            let mut command = xgen(&state);
+            command.args([
+                "run",
+                "transform and verify the supplied input",
+                "--workspace",
+                path_text(&workspace),
+                "--base-url",
+                &base_url,
+                "--model",
+                MODEL,
+                "--tokenizer",
+                TOKENIZER,
+                "--response-format",
+                "json_object",
+                "--completion-contract",
+                path_text(&contract),
+                "--allow-dir",
+                ".",
+                "--allow-executable",
+                &format!("writer={}", writer.display()),
+                "--allow-executable",
+                &format!("checker={}", checker.display()),
+                "--allow-remote-model-egress",
+                "--max-model-turns",
+                "16",
+                "--max-ticks",
+                "128",
+            ]);
+            let approval_resume = scenario == "valid" && family == "text-held-out";
+            if !approval_resume {
+                command.arg("--allow-execute");
+            }
+            let first = command.bounded_output().unwrap();
+            let output = if approval_resume {
+                assert_exit(&first, 10);
+                let run_id = extract_run_id(&stderr(&first));
+                fs::remove_file(&contract).unwrap();
+                xgen(&state)
+                    .env("XGEN_OPENAI_MODEL", MODEL)
+                    .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                    .args([
+                        "resume",
+                        &run_id,
+                        "--workspace",
+                        path_text(&workspace),
+                        "--base-url",
+                        &base_url,
+                        "--response-format",
+                        "json_object",
+                        "--allow-dir",
+                        ".",
+                        "--allow-executable",
+                        &format!("writer={}", writer.display()),
+                        "--allow-executable",
+                        &format!("checker={}", checker.display()),
+                        "--allow-remote-model-egress",
+                        "--allow-execute",
+                        "--max-ticks",
+                        "128",
+                    ])
+                    .bounded_output()
+                    .unwrap()
+            } else {
+                first
+            };
+            if valid {
+                assert_exit(&output, 0);
+            } else {
+                assert!(
+                    stderr(&output).contains(&format!("XGEN_COMPLETION_CHECK reason={reason}")),
+                    "{family}/{scenario}: {}",
+                    stderr(&output)
+                );
+            }
+            server.join().unwrap();
+            let run_id = extract_run_id(&stderr(&output));
+            let database = run_database(&state, &run_id);
+            let connection = rusqlite::Connection::open(&database).unwrap();
+            let completions: i64 = connection
+                .query_row("SELECT COUNT(*) FROM completion_outputs", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            if valid {
+                assert_exit(&output, 0);
+                assert_eq!(completions, 1, "{family}/{scenario}");
+                let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(report["format_version"], 2);
+                let evidence = &report["verification"]["checks"][0];
+                assert_eq!(evidence["id"], "result");
+                assert_eq!(evidence["exit_code"], 0);
+                assert_eq!(report["verification"]["status"], "passed");
+                assert!(
+                    report["commands"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|command| command["receipt_id"] == evidence["receipt_id"])
+                );
+                assert_eq!(
+                    report["verification"]["checks"].as_array().unwrap().len(),
+                    if scenario.starts_with("multi-") { 2 } else { 1 }
+                );
+                let before = fs::read(&database).unwrap();
+                let replay = xgen(&state)
+                    .args(["resume", &run_id])
+                    .bounded_output()
+                    .unwrap();
+                assert_exit(&replay, 0);
+                assert_eq!(replay.stdout, output.stdout);
+                assert_eq!(fs::read(&database).unwrap(), before);
+            } else {
+                assert!(!output.status.success(), "{family}/{scenario}");
+                assert_eq!(completions, 0, "{family}/{scenario}");
+                assert!(output.stdout.is_empty());
+                assert!(
+                    stderr(&output).contains(&format!("XGEN_COMPLETION_CHECK reason={reason}")),
+                    "{family}/{scenario}: {}",
+                    stderr(&output)
+                );
+            }
+            assert_eq!(
+                fs::read_to_string(workspace.join("input.json")).unwrap(),
+                input.to_string()
+            );
+        }
     }
 }
 

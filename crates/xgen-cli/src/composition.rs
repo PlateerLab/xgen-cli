@@ -137,6 +137,8 @@ pub struct LocalRunRequest {
     pub max_model_turns: Option<u32>,
     /// Optional local JSON object schema; enables receipt-execution-report/v1 final output.
     pub final_response_schema: Option<serde_json::Value>,
+    /// Optional exact process checks required before completion. Requires a response schema.
+    pub completion_checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
 }
 
 impl LocalRunRequest {
@@ -169,6 +171,7 @@ impl LocalRunRequest {
             max_ticks: 32,
             max_model_turns: None,
             final_response_schema: None,
+            completion_checks: None,
         }
     }
 }
@@ -1023,7 +1026,12 @@ where
     } else {
         config
     };
-    let config = final_response_contract(config, request.final_response_schema.as_ref())?;
+    validate_completion_catalog(request.completion_checks.as_deref(), process.as_ref())?;
+    let config = final_response_contract(
+        config,
+        request.final_response_schema.as_ref(),
+        request.completion_checks.as_deref(),
+    )?;
     let local_execution_profile_digest =
         local_execution_profile_digest(&workspace, &catalog, process.as_ref())?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
@@ -1043,6 +1051,8 @@ where
     .map_err(|_| PublicRunError::Configuration)?;
     let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?
         .with_final_response_schema(request.final_response_schema)
+        .map_err(|_| PublicRunError::Configuration)?
+        .with_completion_checks(request.completion_checks)
         .map_err(|_| PublicRunError::Configuration)?;
     let planner = remote_planner(config, request.credential)?;
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
@@ -1309,7 +1319,12 @@ where
             catalog.workspace_discovery() || process.is_some(),
         )?;
         let config = response_contract(config, manifest.conversation_responses())?;
-        let config = final_response_contract(config, manifest.final_response_schema())?;
+        validate_completion_catalog(manifest.completion_checks(), process.as_ref())?;
+        let config = final_response_contract(
+            config,
+            manifest.final_response_schema(),
+            manifest.completion_checks(),
+        )?;
         if manifest.request_profile_digest() != config.request_profile_digest() {
             return Err(PublicRunError::ConfigurationMismatch {
                 field: "model_profile",
@@ -1455,6 +1470,7 @@ fn continue_incomplete(
                     &material_catalog_path.with_file_name("run.sqlite3"),
                     material_catalog_path,
                     manifest.run_id(),
+                    manifest.completion_checks(),
                 )
                 .map_err(|()| PublicRunError::Integrity)?,
             )
@@ -1908,16 +1924,45 @@ fn response_contract(
 fn final_response_contract(
     config: OpenAiPlannerConfig,
     schema: Option<&serde_json::Value>,
+    checks: Option<&[xgen_provider_openai::CompletionCheck]>,
 ) -> Result<OpenAiPlannerConfig, PublicRunError> {
-    if let Some(schema) = schema {
+    let config = if let Some(schema) = schema {
         config
             .with_completion_schema(
                 &serde_jcs::to_string(schema).map_err(|_| PublicRunError::Configuration)?,
             )
+            .map_err(map_provider_config)?
+    } else {
+        config
+    };
+    if let Some(checks) = checks {
+        config
+            .with_completion_checks(checks)
             .map_err(map_provider_config)
     } else {
         Ok(config)
     }
+}
+
+fn validate_completion_catalog(
+    checks: Option<&[xgen_provider_openai::CompletionCheck]>,
+    process: Option<&ProcessTooling>,
+) -> Result<(), PublicRunError> {
+    if let Some(checks) = checks {
+        let process = process.ok_or(PublicRunError::Configuration)?;
+        for check in checks {
+            let executable = check.argv.first().ok_or(PublicRunError::Configuration)?;
+            let resource = process
+                .workspace()
+                .resolver()
+                .resolve(PROCESS_EXECUTE_SCOPE, executable)
+                .map_err(|_| PublicRunError::Configuration)?;
+            if !process.authorization().authorizes_resource(&resource) {
+                return Err(PublicRunError::Configuration);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn planner_config(
@@ -3531,6 +3576,7 @@ mod tests {
             max_ticks: 32,
             max_model_turns: None,
             final_response_schema: None,
+            completion_checks: None,
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -3588,6 +3634,7 @@ mod tests {
             max_ticks: 32,
             max_model_turns: None,
             final_response_schema: None,
+            completion_checks: None,
         };
         assert!(matches!(
             run_local_with_process_session_progress(

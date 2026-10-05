@@ -116,3 +116,6 @@ python3 evals/final-response-contract/results/2026-10-05/analysis-at-execution.p
 ```
 
 분석 시 source·binary·등록 schedule·config·fixture hash도 대조해. 다른 checkout이나 소스 변경 후에는 기존 실험의 source 일치 검사가 실패할 수 있어.
+
+후속으로 [Receipt 기반 완료 검증 조건](receipt-completion-checks.md)을 추가했어.
+Host가 지정한 검증 명령의 최신 성공을 완료 조건으로 선택할 수 있어. 기존 24회 실험은 그대로 보존해.

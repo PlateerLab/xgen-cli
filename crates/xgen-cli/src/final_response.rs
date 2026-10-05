@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 use xgen_adapter_process::PROCESS_EXECUTE_CAPABILITY_ID;
 use xgen_local_store::{RunStore, SqliteRunStore};
-use xgen_provider_openai::OpenAiPlanner;
+use xgen_provider_openai::{CompletionCheck, OpenAiPlanner};
 use xgen_runtime::{PlanProposal, PlannerCallRequest, PlannerPort, PlannerPortFailure};
-use xgen_workgraph::{RunEventBody, validate_completion_summary_candidate};
+use xgen_workgraph::{EffectClass, RunEventBody, validate_completion_summary_candidate};
 
 use crate::material_catalog::RunMaterialCatalog;
 
@@ -14,6 +14,7 @@ pub(crate) struct ReceiptReportPlanner {
     inner: OpenAiPlanner,
     database: PathBuf,
     catalog: Option<RunMaterialCatalog>,
+    checks: Option<Vec<CompletionCheck>>,
 }
 
 impl ReceiptReportPlanner {
@@ -22,9 +23,11 @@ impl ReceiptReportPlanner {
         database: &Path,
         material: &Path,
         run_id: &str,
+        checks: Option<&[CompletionCheck]>,
     ) -> Result<Self, ()> {
         Ok(Self {
             inner,
+            checks: checks.map(<[CompletionCheck]>::to_vec),
             database: database.to_path_buf(),
             catalog: if material.exists() {
                 Some(
@@ -37,6 +40,7 @@ impl ReceiptReportPlanner {
         })
     }
 
+    #[allow(clippy::too_many_lines)] // Keep the verified receipt/recipe/output projection in one audit boundary.
     fn project(
         &self,
         request: &PlannerCallRequest<'_>,
@@ -86,6 +90,7 @@ impl ReceiptReportPlanner {
                 .copied()
         });
         let mut commands = Vec::new();
+        let mut check_steps = std::collections::BTreeSet::new();
         for receipt in receipts {
             if receipt.capability.capability_id != PROCESS_EXECUTE_CAPABILITY_ID {
                 continue;
@@ -126,6 +131,16 @@ impl ReceiptReportPlanner {
                     argument.as_str().ok_or_else(invalid)?.to_owned(),
                 ));
             }
+            let is_check = arguments["cwd"] == json!(".")
+                && arguments["env"]
+                    .as_object()
+                    .is_some_and(serde_json::Map::is_empty)
+                && self.checks.as_ref().is_some_and(|checks| {
+                    checks.iter().any(|check| json!(check.argv) == json!(argv))
+                });
+            if is_check {
+                check_steps.insert(receipt.step_id.clone());
+            }
             let exit_code = output.output()["exitCode"].as_i64().ok_or_else(invalid)?;
             let sequence = starts.get(intent.effect_id.as_str()).ok_or_else(invalid)?;
             commands.push(
@@ -134,10 +149,14 @@ impl ReceiptReportPlanner {
             );
         }
         let response: Value = serde_json::from_str(summary).map_err(|_| invalid())?;
-        let result = serde_jcs::to_string(
-            &json!({"format_version":1,"response":response,"commands":commands}),
-        )
-        .map_err(|_| invalid())?;
+        let report = completion_report(
+            &snapshot,
+            self.checks.as_deref(),
+            &response,
+            &commands,
+            &check_steps,
+        )?;
+        let result = serde_jcs::to_string(&report).map_err(|_| invalid())?;
         validate_completion_summary_candidate(&result).map_err(|_| invalid())?;
         Ok(result)
     }
@@ -164,4 +183,71 @@ impl PlannerPort for ReceiptReportPlanner {
             other @ PlanProposal::Plan { .. } => Ok(other),
         }
     }
+}
+
+fn completion_evidence(
+    checks: &[CompletionCheck],
+    commands: &[Value],
+    eligible_steps: &std::collections::BTreeSet<String>,
+    mutation_boundary: u64,
+) -> Result<Value, &'static str> {
+    let mut evidence = Vec::new();
+    for check in checks {
+        let command = commands
+            .iter()
+            .rev()
+            .find(|command| {
+                command["argv"] == json!(check.argv)
+                    && command["step_id"]
+                        .as_str()
+                        .is_some_and(|id| eligible_steps.contains(id))
+            })
+            .ok_or("missing")?;
+        if command["exit_code"] != json!(0) {
+            return Err("failed");
+        }
+        if command["execution_sequence"].as_u64().ok_or("invalid")? <= mutation_boundary {
+            return Err("stale");
+        }
+        let mut item = command.clone();
+        item["id"] = json!(check.id);
+        item["status"] = json!("passed");
+        evidence.push(item);
+    }
+    Ok(json!({"status":"passed","checks":evidence}))
+}
+
+fn completion_report(
+    snapshot: &xgen_local_store::RunSnapshot,
+    checks: Option<&[CompletionCheck]>,
+    response: &Value,
+    commands: &[Value],
+    check_steps: &std::collections::BTreeSet<String>,
+) -> Result<Value, PlannerPortFailure> {
+    let mut report = json!({"format_version":1,"response":response,"commands":commands});
+    if let Some(checks) = checks {
+        let boundary = snapshot
+            .records
+            .iter()
+            .filter_map(|record| {
+                if let RunEventBody::VerificationRecorded { step_id, .. } = &record.event.body {
+                    let intent = snapshot.state.steps.get(step_id)?.intent.as_ref()?;
+                    if intent.effect_class != EffectClass::ReadOnly
+                        && !check_steps.contains(step_id)
+                    {
+                        return Some(record.sequence);
+                    }
+                }
+                None
+            })
+            .max()
+            .unwrap_or(0);
+        report["verification"] = completion_evidence(checks, commands, check_steps, boundary)
+            .map_err(|reason| {
+                eprintln!("XGEN_COMPLETION_CHECK reason={reason}");
+                PlannerPortFailure::InvalidResponse
+            })?;
+        report["format_version"] = json!(2);
+    }
+    Ok(report)
 }
