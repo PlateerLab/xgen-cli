@@ -23,6 +23,7 @@ use xgen_provider_openai::{BearerCredential, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
 
 mod repl;
+mod tools;
 
 const PROJECT_LICENSE: &str = include_str!("../../../LICENSE");
 const CARGO_DEPENDENCY_NOTICES: &str = include_str!("../../../THIRD_PARTY_LICENSES.txt");
@@ -47,6 +48,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Build and search local tool graphs without executing business tools.
+    Tools {
+        #[command(subcommand)]
+        command: tools::ToolsCommand,
+    },
     /// Print licenses and notices embedded in this binary.
     Licenses,
     /// Inspect and validate bundled protocol contracts.
@@ -338,6 +344,7 @@ struct RequestOptionArgs {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
+        Some(Command::Tools { command }) => tools::run(command),
         None => interactive_command(cli.debug),
         Some(Command::Licenses) => print_licenses(),
         Some(Command::Protocol {

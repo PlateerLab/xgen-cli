@@ -2842,6 +2842,7 @@ dependencies = [
  "ctrlc",
  "getrandom 0.3.4",
  "keyring",
+ "process-wrap",
  "rpassword",
  "rusqlite",
  "serde",

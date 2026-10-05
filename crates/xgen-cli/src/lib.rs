@@ -21,3 +21,11 @@ pub use usage::{CostEstimate, TokenPrices, UsageReport, UsdPerMillion, inspect_l
 
 #[doc(hidden)]
 pub use environment::compatible_environment;
+
+/// Resolve the catalog directory using the same platform and legacy state roots as Runs.
+#[doc(hidden)]
+pub fn tool_catalog_directory() -> Result<std::path::PathBuf, &'static str> {
+    run_layout::discover_state_root()
+        .map(|root| root.join("tool-collections"))
+        .map_err(|_| "invalid_state_home")
+}

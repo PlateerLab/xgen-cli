@@ -17,6 +17,7 @@ cap-std.workspace = true
 clap.workspace = true
 ctrlc.workspace = true
 getrandom.workspace = true
+process-wrap.workspace = true
 keyring.workspace = true
 rpassword.workspace = true
 rusqlite.workspace = true
