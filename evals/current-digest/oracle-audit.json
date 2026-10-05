@@ -1,0 +1,30 @@
+[
+  {
+    "case": "design-window-extrema",
+    "both_initially_fail": true,
+    "only_digest_differs": true,
+    "digest_matches_raw_bytes": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-integer-runs",
+    "both_initially_fail": true,
+    "only_digest_differs": true,
+    "digest_matches_raw_bytes": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "design-unicode-ordinals",
+    "both_initially_fail": true,
+    "only_digest_differs": true,
+    "digest_matches_raw_bytes": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-ascii-case-flip",
+    "both_initially_fail": true,
+    "only_digest_differs": true,
+    "digest_matches_raw_bytes": true,
+    "reference_checker_and_oracle_passed": true
+  }
+]

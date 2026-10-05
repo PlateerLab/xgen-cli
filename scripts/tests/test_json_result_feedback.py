@@ -1,10 +1,12 @@
 import contextlib
 import importlib.util
+import hashlib
 import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('json_feedback', Path(__file__).resolve().parents[1] / 'check-json-result.py')
 M = importlib.util.module_from_spec(spec)
@@ -37,6 +39,28 @@ class JsonFeedbackTests(unittest.TestCase):
             self.assertEqual(diagnostic['reason'], 'value_mismatch')
             self.assertEqual(self.run_check(expected, actual, False), (1, ''))
 
+    def test_digest_tracks_raw_snapshot_and_preserves_concurrent_edit(self):
+        for source, changed in [(' {"total":4}\n', '{"total":7}\n'), ('{"text":"é"}\n', '{"text":"서울"}\n')]:
+            with tempfile.TemporaryDirectory() as temp:
+                path = Path(temp) / 'result.json'
+                path.write_text(source)
+                original = M.read_json_snapshot
+                def changing_read(actual_path):
+                    value, digest = original(actual_path)
+                    path.write_text(changed)
+                    return value, digest
+                stream = io.StringIO()
+                with mock.patch.object(M, 'read_json_snapshot', side_effect=changing_read), contextlib.redirect_stderr(stream):
+                    self.assertEqual(M.verify({}, path), 1)
+                diagnostic = json.loads(stream.getvalue())
+                self.assertEqual(diagnostic['actual'], json.loads(source))
+                self.assertEqual(diagnostic['actual_digest'], 'sha256:' + hashlib.sha256(source.encode()).hexdigest())
+                self.assertEqual(path.read_text(), changed)
+                stream = io.StringIO()
+                with contextlib.redirect_stderr(stream):
+                    M.verify({}, path, include_digest=False)
+                self.assertNotIn('actual_digest', json.loads(stream.getvalue()))
+
     def test_missing_invalid_and_oversized_result(self):
         for content, reason in [(None, 'missing_result'), ('{', 'invalid_result_json'),
                                 ('{"x":1,"x":2}', 'invalid_result_json'),
@@ -51,6 +75,7 @@ class JsonFeedbackTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertLessEqual(len(output.encode()), M.MAX_DIAGNOSTIC_BYTES)
         self.assertTrue(json.loads(output)['values_omitted'])
+        self.assertRegex(json.loads(output)['actual_digest'], r'^sha256:[a-f0-9]{64}$')
         _, output = self.run_check({'text': '\x1b[2J'}, '{"text":"x"}')
         self.assertNotIn('\x1b', output)
         self.assertEqual(json.loads(output)['expected']['text'], '\x1b[2J')

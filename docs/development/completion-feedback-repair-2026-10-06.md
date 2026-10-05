@@ -90,3 +90,7 @@ python3 scripts/analyze-completion-gate.py \
 입력 보존·쓰기 범위·독립 oracle 성공, durable 완료, 실패→성공 check Receipt, model calls와 모든 trial의 비용을 따로 집계해. 승인/material/output/Receipt 관계와 실패 effect의 sidecar coverage를 검사해. 독립적인 cryptographic 재계산이나 OS sandbox 증명은 하지 않아. Python 실행 권한이 OS 파일 접근을 격리해 준다는 주장은 하지 않아.
 
 가격은 [DeepSeek 공식 가격표](https://api-docs.deepseek.com/quick_start/pricing/)의 해당 UTC off-peak quote와 보존한 usage로 재계산해. 공급자 청구서와 대사한 금액은 아니야. 직전 40회 비용 $0.126004878을 포함해서 총 $0.50 이내로 제한했어.
+
+## 현재 digest 후속 작업
+
+[현재 digest 비교](current-digest-repair-2026-10-06.md)에서 같은 bounded raw read의 digest를 mismatch 진단에 추가했어. 새 paired 16회에서 digest 없음 4/8, digest 있음 8/8 성공을 관측했어. 직전 단계와 성공률을 합치지 않으며, 작은 표본의 결과로만 해석해.

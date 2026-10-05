@@ -107,3 +107,5 @@ Rust workspace 669개 PASS, 기존 live 검사 4개 ignored. Python 71개 PASS�
 [2026-10-06 실제 모델 비교](completion-gate-live-pilot-2026-10-06.md)에서 최초 24회와 다른 입력의 후속 16회를 보존했어. 후속 단계에서 틀린 완료 차단은 관측했지만 실제 작업 성공·수정 개선은 입증하지 못했어. 선택 옵션을 유지하고 기본 적용은 보류해.
 
 [검증 진단 후속 비교](completion-feedback-repair-2026-10-06.md)에서 bounded JSON 기대/실제 진단을 추가했어. 새 paired 16회는 진단 없음 7/8, 진단 있음 6/8 성공으로 전체 개선은 입증하지 못했고 자동 적용하지 않아. 실패 진단 전달·현재 digest 수정·재검증 경로의 계약 검사는 통과했어.
+
+[현재 digest 후속 비교](current-digest-repair-2026-10-06.md)에서는 진단의 actual과 같은 raw bytes의 digest를 다음 write에 사용할 수 있게 했어. 새 4개 입력의 16회 비교에서 4/8→8/8 성공을 관측했고, 외부 변경이 있을 때의 기존 쓰기 거절을 유지했어.

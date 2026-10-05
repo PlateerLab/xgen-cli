@@ -1,0 +1,38 @@
+[
+  {
+    "trial": "0000-design-unicode-ordinals-0-D0",
+    "arguments": {
+      "content": "{\"codepoints\":[[233],[44032],[101,769],[],[134071]]}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0003-validation-integer-runs-0-D0",
+    "arguments": {
+      "content": "{\"runs\":[{\"value\":2,\"count\":2},{\"value\":-1,\"count\":3},{\"value\":0,\"count\":1},{\"value\":2,\"count\":2}]}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0011-validation-integer-runs-1-D0",
+    "arguments": {
+      "content": "{\"runs\":[{\"value\":2,\"count\":2},{\"value\":-1,\"count\":3},{\"value\":0,\"count\":1},{\"value\":2,\"count\":2}]}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0012-design-unicode-ordinals-1-D0",
+    "arguments": {
+      "content": "{\"codepoints\":[[233],[44032],[101,769],[],[134071]]}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  }
+]
