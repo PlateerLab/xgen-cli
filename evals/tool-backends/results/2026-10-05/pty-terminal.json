@@ -1,0 +1,178 @@
+{
+  "binary_sha256": "fb1718762b7fb40ce9dbe4e56fc9bdbc19fc434fceed20888540c2f19b8498c5",
+  "platform": "linux",
+  "cases": [
+    {
+      "case": "english-input",
+      "cohort": "design",
+      "mode": "input",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "approval_pause": true,
+      "fixture_started_before_approval": false,
+      "model_calls": 4,
+      "tool_effects": 3,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "resume_exit_code": 0,
+      "receipt_count": 3,
+      "capability_counts": {
+        "xgen.terminal/start": 1,
+        "xgen.terminal/read": 1,
+        "xgen.terminal/write": 1,
+        "xgen.terminal/terminate": 0,
+        "xgeny.process/execute": 0
+      },
+      "final_observation": {
+        "acceptedBytes": 0,
+        "baseOffset": 0,
+        "exitCode": 0,
+        "nextOffset": 61,
+        "output": "READY\r\nEnglish terminal reply\r\nREPLY:English terminal reply\r\n",
+        "sessionId": "pty-dc2de504f161d76a2c15a600fe9fea09291645eed6343c190974ab03c133df42",
+        "state": "exited",
+        "truncated": false
+      },
+      "claims_match_observation": true,
+      "expected_state": true,
+      "expected_payload": true,
+      "fixture_started_once": true,
+      "descendant_stopped": true,
+      "task_completed": true,
+      "offline_replay": true,
+      "replay_storage_unchanged": true
+    },
+    {
+      "case": "korean-input",
+      "cohort": "design",
+      "mode": "input",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "approval_pause": true,
+      "fixture_started_before_approval": false,
+      "model_calls": 4,
+      "tool_effects": 3,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "resume_exit_code": 0,
+      "receipt_count": 3,
+      "capability_counts": {
+        "xgen.terminal/start": 1,
+        "xgen.terminal/read": 1,
+        "xgen.terminal/write": 1,
+        "xgen.terminal/terminate": 0,
+        "xgeny.process/execute": 0
+      },
+      "final_observation": {
+        "acceptedBytes": 0,
+        "baseOffset": 0,
+        "exitCode": 0,
+        "nextOffset": 71,
+        "output": "READY\r\n한국어 터미널 응답\r\nREPLY:한국어 터미널 응답\r\n\r\n",
+        "sessionId": "pty-4c7d5f5db3bc4517b310fb61e0da5011f537e37339f673a02824a168322a8801",
+        "state": "exited",
+        "truncated": false
+      },
+      "claims_match_observation": true,
+      "expected_state": true,
+      "expected_payload": true,
+      "fixture_started_once": true,
+      "descendant_stopped": true,
+      "task_completed": true,
+      "offline_replay": true,
+      "replay_storage_unchanged": true
+    },
+    {
+      "case": "nonzero-exit",
+      "cohort": "validation",
+      "mode": "failure",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "approval_pause": true,
+      "fixture_started_before_approval": false,
+      "model_calls": 3,
+      "tool_effects": 2,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "resume_exit_code": 0,
+      "receipt_count": 2,
+      "capability_counts": {
+        "xgen.terminal/start": 1,
+        "xgen.terminal/read": 1,
+        "xgen.terminal/write": 0,
+        "xgen.terminal/terminate": 0,
+        "xgeny.process/execute": 0
+      },
+      "final_observation": {
+        "acceptedBytes": 0,
+        "baseOffset": 0,
+        "exitCode": 7,
+        "nextOffset": 18,
+        "output": "OBSERVED_FAILURE\r\n",
+        "sessionId": "pty-96180cafc4da739c601ac2a26dd2ba86d39bb228858498ced70256943c60927d",
+        "state": "exited",
+        "truncated": false
+      },
+      "claims_match_observation": true,
+      "expected_state": true,
+      "expected_payload": true,
+      "fixture_started_once": true,
+      "descendant_stopped": true,
+      "task_completed": true,
+      "offline_replay": true,
+      "replay_storage_unchanged": true
+    },
+    {
+      "case": "terminate-process-tree",
+      "cohort": "validation",
+      "mode": "tree",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "approval_pause": true,
+      "fixture_started_before_approval": false,
+      "model_calls": 5,
+      "tool_effects": 4,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "resume_exit_code": 0,
+      "receipt_count": 4,
+      "capability_counts": {
+        "xgen.terminal/start": 1,
+        "xgen.terminal/read": 2,
+        "xgen.terminal/write": 0,
+        "xgen.terminal/terminate": 1,
+        "xgeny.process/execute": 0
+      },
+      "final_observation": {
+        "acceptedBytes": 0,
+        "baseOffset": 0,
+        "exitCode": 1,
+        "nextOffset": 17,
+        "output": "READY_TO_STOP\r\n\r\n",
+        "sessionId": "pty-86aa121ce9c9c1245a3c0d8b304f55787540dcf51b9b5c4fb80eee68e3f96a80",
+        "state": "terminated",
+        "truncated": false
+      },
+      "claims_match_observation": true,
+      "expected_state": true,
+      "expected_payload": true,
+      "fixture_started_once": true,
+      "descendant_stopped": true,
+      "task_completed": true,
+      "offline_replay": true,
+      "replay_storage_unchanged": true
+    }
+  ]
+}

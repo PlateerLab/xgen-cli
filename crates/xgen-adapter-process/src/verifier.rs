@@ -13,6 +13,7 @@ use crate::{PROCESS_EXECUTE_CAPABILITY_ID, PROCESS_EXECUTE_CONTRACT_VERSION};
 pub struct ProcessExecuteVerifier {
     expected_binding: InstanceBinding,
     web_search: bool,
+    terminal: Option<crate::TerminalOperation>,
 }
 
 impl ProcessExecuteVerifier {
@@ -20,6 +21,7 @@ impl ProcessExecuteVerifier {
         Self {
             expected_binding,
             web_search: false,
+            terminal: None,
         }
     }
 
@@ -27,6 +29,17 @@ impl ProcessExecuteVerifier {
         Self {
             expected_binding,
             web_search: true,
+            terminal: None,
+        }
+    }
+    pub(crate) const fn terminal(
+        expected_binding: InstanceBinding,
+        operation: crate::TerminalOperation,
+    ) -> Self {
+        Self {
+            expected_binding,
+            web_search: false,
+            terminal: Some(operation),
         }
     }
 }
@@ -45,7 +58,9 @@ impl EffectVerifier for ProcessExecuteVerifier {
         &mut self,
         request: VerificationRequest<'_>,
     ) -> Result<VerificationReport, VerificationPortFailure> {
-        let (capability, version) = if self.web_search {
+        let (capability, version) = if let Some(operation) = self.terminal {
+            (operation.capability_id(), crate::TERMINAL_VERSION)
+        } else if self.web_search {
             (
                 crate::WEB_SEARCH_CAPABILITY_ID,
                 crate::WEB_SEARCH_CONTRACT_VERSION,
@@ -60,7 +75,9 @@ impl EffectVerifier for ProcessExecuteVerifier {
         let output = request
             .tool_output()
             .ok_or(VerificationPortFailure::EvidenceUnavailable)?;
-        let inspect = if self.web_search {
+        let inspect = if self.terminal.is_some() {
+            crate::terminal::inspect_output
+        } else if self.web_search {
             crate::web_search::inspect_search_output
         } else {
             inspect_output
@@ -92,7 +109,9 @@ impl EffectVerifier for ProcessExecuteVerifier {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let artifact = VerifiedArtifactDescriptor::new(
-            if self.web_search {
+            if self.terminal.is_some() {
+                "terminal-session-observation"
+            } else if self.web_search {
                 "web-search-results"
             } else {
                 "process-execute-output"

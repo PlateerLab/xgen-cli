@@ -112,6 +112,13 @@ impl ProcessTooling {
         }))
     }
 
+    pub(crate) fn with_fresh_terminal_sessions(&self) -> Self {
+        Self {
+            workspace: self.workspace.with_fresh_terminal_sessions(),
+            authorization: self.authorization.clone(),
+        }
+    }
+
     pub(crate) const fn workspace(&self) -> &ProcessWorkspace {
         &self.workspace
     }

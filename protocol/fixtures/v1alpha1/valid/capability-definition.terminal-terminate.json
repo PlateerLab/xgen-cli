@@ -1,0 +1,139 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgen.terminal/terminate",
+    "contractVersion": "1.0.0",
+    "displayName": "Terminal terminate",
+    "labels": {
+      "xgeny.io/pack": "core-os"
+    }
+  },
+  "spec": {
+    "summary": "Terminate the owned PTY process group. stopping means cleanup is pending; read until a settled state. Never signal a PID supplied by the model.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "sessionId"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^pty-[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "sessionId",
+        "state",
+        "exitCode",
+        "output",
+        "baseOffset",
+        "nextOffset",
+        "truncated",
+        "acceptedBytes"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^pty-[0-9a-f]{64}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "running",
+            "stopping",
+            "draining",
+            "exited",
+            "terminated",
+            "timed_out",
+            "launch_failed",
+            "session_lost",
+            "session_limit",
+            "input_partial",
+            "input_failed",
+            "offset_invalid"
+          ],
+          "description": "running/stopping/draining are unsettled. exited/terminated/timed_out are settled only after PTY capture reaches EOF."
+        },
+        "exitCode": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            }
+          ]
+        },
+        "output": {
+          "type": "string",
+          "maxLength": 12288
+        },
+        "baseOffset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Byte position immediately after the returned output. Empty snapshots from start/write/terminate use baseOffset; retain the cursor from the last read instead of advancing past unseen output."
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "acceptedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
+        }
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "class": "non_idempotent",
+      "resourceSelectors": [
+        {
+          "scope": "terminal.session",
+          "argumentPointer": "/sessionId"
+        }
+      ],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": [
+        "sync"
+      ],
+      "cancellable": false,
+      "idempotencyKeySupported": true,
+      "durableToolOutput": true,
+      "defaultTimeoutMs": 2000,
+      "maxTimeoutMs": 2000
+    },
+    "verification": [
+      {
+        "strategy": "output_schema",
+        "required": true,
+        "description": "Verify the bounded durable PTY observation without repeating input, spawning a command, or re-reading a live terminal."
+      }
+    ],
+    "discovery": {
+      "keywords": [
+        "terminal",
+        "pty",
+        "session",
+        "terminate"
+      ],
+      "examples": [
+        "Terminate the owned PTY process group. stopping means cleanup is pending; read until a settled state. Never signal a PID supplied by the model."
+      ]
+    }
+  }
+}

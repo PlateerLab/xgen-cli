@@ -59,3 +59,17 @@ python3 scripts/smoke-web-search.py \
 ```
 
 [구현·검증 기록](../../docs/development/typed-web-search-2026-10-05.md)을 참고한다.
+
+## Native PTY session live 연결
+
+현재 Linux에서 활성화된 start/read/write/terminate capability를 실제 model로 검사한다.
+영어·한국어 input과 별도 nonzero exit·process tree 종료를 사용한다. 승인 전 시작 0회,
+정확한 최종 응답·Receipt·offline replay·fixture 시작 횟수 불변성을 검사하고 자동 retry하지 않는다.
+
+```bash
+python3 scripts/smoke-pty-terminal.py \
+  --binary /absolute/path/to/xgen \
+  --root /absolute/path/to/new-private-pty-experiment
+```
+
+[구현·검증 기록](../../docs/development/pty-terminal-sessions-2026-10-05.md)을 참고한다.

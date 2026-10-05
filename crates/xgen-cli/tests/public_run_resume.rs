@@ -1473,6 +1473,186 @@ fn find_header_end(bytes: &[u8]) -> Option<usize> {
     bytes.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
+#[cfg(target_os = "linux")]
+fn terminal_plan(operation: &str, arguments: &Value) -> Vec<u8> {
+    provider_response(
+        &json!({"formatVersion":1,"kind":"plan","steps":[{"key":format!("terminal_{operation}"),"objective":"Observe an owned terminal fixture","dependsOn":[],"capability":{"capabilityId":format!("xgen.terminal/{operation}"),"contractVersion":"1.0.0"},"arguments":arguments}],"summary":""}),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn find_terminal_observation(value: &Value) -> Option<&Value> {
+    if value
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.starts_with("pty-"))
+        && value.get("state").and_then(Value::as_str).is_some()
+    {
+        return Some(value);
+    }
+    match value {
+        Value::Array(rows) => rows.iter().rev().find_map(find_terminal_observation),
+        Value::Object(object) => object.values().find_map(find_terminal_observation),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn terminal_model_server(text: &str) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let payload = text.to_owned();
+    let checked = format!("REPLY:{text}");
+    let server = thread::spawn(move || {
+        for phase in 0..8 {
+            let mut stream = accept_with_timeout(&listener).unwrap();
+            let request = read_http_request(&mut stream);
+            let context = planning_context(&request);
+            let observation = find_terminal_observation(&context);
+            let complete = phase >= 3
+                && observation.is_some_and(|output| {
+                    output["state"] == "exited"
+                        && output["output"]
+                            .as_str()
+                            .is_some_and(|text| text.contains(&checked))
+                });
+            let response = match phase {
+                0 => terminal_plan(
+                    "start",
+                    &json!({"executable":"helper","args":[],"cwd":".","env":{},"timeoutMs":10000,"maxOutputBytes":4096}),
+                ),
+                1 => terminal_plan(
+                    "write",
+                    &json!({"sessionId":observation.unwrap()["sessionId"],"input":format!("{payload}\n")}),
+                ),
+                2 => terminal_plan(
+                    "read",
+                    &json!({"sessionId":observation.unwrap()["sessionId"],"offset":0,"maxBytes":4096,"waitMs":1000}),
+                ),
+                _ if !complete => terminal_plan(
+                    "read",
+                    &json!({"sessionId":observation.unwrap()["sessionId"],"offset":0,"maxBytes":4096,"waitMs":1000}),
+                ),
+                _ => {
+                    let output = observation.unwrap();
+                    assert_eq!(output["state"], "exited");
+                    assert_eq!(output["exitCode"], 0);
+                    assert!(output["output"].as_str().unwrap().contains(&checked));
+                    provider_response(
+                        &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":checked}),
+                    )
+                }
+            };
+            let headers = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                response.len()
+            );
+            stream.write_all(headers.as_bytes()).unwrap();
+            stream.write_all(&response).unwrap();
+            if complete {
+                return;
+            }
+        }
+    });
+    (base_url, server)
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn pty_cli_approves_start_commits_input_output_receipts_and_replays_offline() {
+    use std::os::unix::fs::PermissionsExt as _;
+    for text in ["English fixture", "한국어 검증"] {
+        let root = tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let helper = workspace.join("terminal-helper");
+        fs::write(
+            &helper,
+            "#!/bin/sh\nprintf '1\\n' >> terminal-started\nprintf 'READY\\n'\nIFS= read -r input\nprintf 'REPLY:%s\\n' \"$input\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+        let expected = format!("REPLY:{text}");
+        let (base_url, server) = terminal_model_server(text);
+        let state = root.path().join("state");
+        let base_command = |command: &str| {
+            let mut cmd = Command::new(env!("CARGO_BIN_EXE_xgen"));
+            cmd.arg(command)
+                .env("XGEN_STATE_HOME", &state)
+                .env("XGEN_OPENAI_BASE_URL", &base_url)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .env_remove("XGEN_OPENAI_API_KEY");
+            cmd
+        };
+        let common = [
+            "--workspace",
+            path_text(&workspace),
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--allow-read",
+        ];
+        let specification = format!("helper={}", helper.display());
+        let first = base_command("run")
+            .args(["--max-model-turns", "8"])
+            .args(common)
+            .args([
+                "--allow-executable",
+                &specification,
+                "exercise owned terminal",
+            ])
+            .bounded_output()
+            .unwrap();
+        assert_exit(&first, 10);
+        assert!(stderr(&first).contains("execute_approval_required"));
+        assert!(!workspace.join("terminal-started").exists());
+        let run_id = extract_run_id(&stderr(&first));
+        let database = state.join("runs").join(&run_id).join("run.sqlite3");
+        let before = SqliteRunStore::open_existing(&database).unwrap();
+        assert_eq!(before.load_execution_receipts().unwrap().len(), 0);
+        drop(before);
+        let resumed = base_command("resume")
+            .arg(&run_id)
+            .args(common)
+            .args(["--allow-executable", &specification, "--allow-execute"])
+            .bounded_output()
+            .unwrap();
+        assert_exit(&resumed, 0);
+        assert_eq!(String::from_utf8(resumed.stdout).unwrap(), expected);
+        server.join().unwrap();
+        let store = SqliteRunStore::open_existing(&database).unwrap();
+        let completed = store.load_current().unwrap().unwrap();
+        assert!(completed.steps.len() >= 3);
+        for step in completed.steps.values() {
+            assert!(
+                store
+                    .load_tool_output(&step.intent.as_ref().unwrap().effect_id)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        assert_eq!(
+            store.load_execution_receipts().unwrap().len(),
+            completed.steps.len()
+        );
+        drop(store);
+        let original = fs::read(&database).unwrap();
+        let replay = base_command("resume")
+            .arg(&run_id)
+            .env("XGEN_OPENAI_BASE_URL", "unused-invalid-endpoint")
+            .bounded_output()
+            .unwrap();
+        assert_exit(&replay, 0);
+        assert_eq!(String::from_utf8(replay.stdout).unwrap(), expected);
+        assert_eq!(fs::read(&database).unwrap(), original);
+        assert_eq!(
+            fs::read_to_string(workspace.join("terminal-started")).unwrap(),
+            "1\n"
+        );
+    }
+}
+
 fn provider_response(content: &Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "id": RAW_RESPONSE_SENTINEL,
