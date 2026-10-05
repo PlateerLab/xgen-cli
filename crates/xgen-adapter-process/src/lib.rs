@@ -4,6 +4,7 @@ mod catalog;
 mod execution;
 mod path;
 mod verifier;
+mod web_search;
 
 use std::fmt;
 use std::path::Path;
@@ -25,6 +26,10 @@ pub use catalog::{
 };
 pub use execution::{MAX_CAPTURE_BYTES, MAX_PROCESS_TIMEOUT_MS, MIN_CAPTURE_BYTES};
 pub use verifier::ProcessExecuteVerifier;
+pub use web_search::{
+    WEB_SEARCH_CAPABILITY_ID, WEB_SEARCH_CONTRACT_VERSION, WEB_SEARCH_EXECUTABLE_ID,
+    WEB_SEARCH_SCOPE, WebSearchAdapter, resolve_web_search_query,
+};
 
 use crate::execution::parse_prepared;
 
@@ -160,6 +165,13 @@ impl ProcessWorkspace {
         ProcessExecuteAdapter {
             workspace: self.clone(),
         }
+    }
+
+    /// Offer typed web search only when the host explicitly catalogued `OpenSERP`.
+    #[must_use]
+    pub fn web_search_adapter(&self) -> Option<WebSearchAdapter> {
+        self.catalog.entry(WEB_SEARCH_EXECUTABLE_ID)?;
+        Some(WebSearchAdapter::new(self.clone()))
     }
 
     /// Revalidate normalized process material without starting a process.

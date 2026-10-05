@@ -20,7 +20,7 @@ fn protocol_check_succeeds_and_reports_conformance_scope() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be UTF-8");
     assert!(stdout.contains("XGEN protocol v0.1: PASS"));
     assert!(stdout.contains("schemas: 9"));
-    assert!(stdout.contains("fixtures: 28 (18 valid, 10 invalid)"));
+    assert!(stdout.contains("fixtures: 29 (19 valid, 10 invalid)"));
     assert!(stdout.contains("reference resolution: bundled/offline"));
 }
 

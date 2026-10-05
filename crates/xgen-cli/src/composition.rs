@@ -22,6 +22,8 @@ use xgen_adapter_filesystem::{
 use xgen_adapter_process::{
     MAX_CAPTURE_BYTES, MAX_PROCESS_TIMEOUT_MS, MIN_CAPTURE_BYTES, PROCESS_EXECUTE_CAPABILITY_ID,
     PROCESS_EXECUTE_CONTRACT_VERSION, PROCESS_EXECUTE_SCOPE, ProcessResourceResolver,
+    WEB_SEARCH_CAPABILITY_ID, WEB_SEARCH_CONTRACT_VERSION, WEB_SEARCH_SCOPE,
+    resolve_web_search_query,
 };
 use xgen_domain::{
     Architecture, CapabilityDefinitionBody, CapabilityInstanceBody, CapabilityRef, DataBoundary,
@@ -65,9 +67,10 @@ use crate::manifest::{ManifestBudget, RunManifest};
 use crate::material_catalog::{
     MAX_RECIPE_BYTES, PROCESS_MATERIAL_PROVIDER_ID, PROCESS_RECIPE_DOMAIN,
     PROCESS_RECIPE_FORMAT_VERSION, ProcessMaterialProvider, ProcessMaterializer,
-    RunMaterialCatalog, WORKSPACE_READ_MATERIAL_CATALOG_SCHEMA_VERSION,
-    WORKSPACE_READ_MATERIAL_PROVIDER_ID, WORKSPACE_READ_RECIPE_DOMAIN,
-    WORKSPACE_READ_RECIPE_FORMAT_VERSION, WorkspaceReadMaterialProvider, WorkspaceReadMaterializer,
+    RunMaterialCatalog, WEB_SEARCH_RECIPE_DOMAIN, WEB_SEARCH_RECIPE_FORMAT_VERSION,
+    WORKSPACE_READ_MATERIAL_CATALOG_SCHEMA_VERSION, WORKSPACE_READ_MATERIAL_PROVIDER_ID,
+    WORKSPACE_READ_RECIPE_DOMAIN, WORKSPACE_READ_RECIPE_FORMAT_VERSION,
+    WorkspaceReadMaterialProvider, WorkspaceReadMaterializer,
 };
 use crate::model_profile::{InferenceLimits, RequestOptions};
 use crate::run_layout::{RunLayout, discover_state_root, generate_run_id};
@@ -105,6 +108,7 @@ const PROCESS_APPROVAL_PROFILE: &str = "xgeny.cli.process-approval/v1";
 const PROCESS_HOST_POLICY_PROFILE: &str = "xgeny.cli.host-process-catalog/v1";
 const USER_EXECUTE_POLICY_PROFILE: &str = "xgeny.cli.explicit-allow-execute-flag/v1";
 const PROCESS_PLANNING_CONSTRAINT_PROFILE: &str = "xgeny.cli.process-catalog-constraint/v1";
+const WEB_SEARCH_HOST_POLICY_PROFILE: &str = "xgen.cli.host-catalogued-web-search/v1";
 
 /// One new local Run invocation. Remote model transfer and local reads are separate decisions.
 #[allow(clippy::struct_excessive_bools)] // Four independent process-local consent gates.
@@ -1357,8 +1361,10 @@ impl PlanMaterializer for LocalMaterializer {
         &mut self,
         request: PlanMaterializationRequest<'_>,
     ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
-        if request.capability().capability_id == PROCESS_EXECUTE_CAPABILITY_ID
-            && request.capability().contract_version == PROCESS_EXECUTE_CONTRACT_VERSION
+        if (request.capability().capability_id == PROCESS_EXECUTE_CAPABILITY_ID
+            && request.capability().contract_version == PROCESS_EXECUTE_CONTRACT_VERSION)
+            || (request.capability().capability_id == WEB_SEARCH_CAPABILITY_ID
+                && request.capability().contract_version == WEB_SEARCH_CONTRACT_VERSION)
         {
             return self
                 .process
@@ -1433,6 +1439,8 @@ fn continue_incomplete(
     let resolver = LocalResourceResolver {
         filesystem: workspace.resolver(),
         process: process.map(|process| process.workspace().resolver()),
+        web_search_enabled: process
+            .is_some_and(|process| process.authorization().web_search_enabled()),
     };
     let mut providers = MaterialProviderRegistry::new();
     let (filesystem_materializer, approval_catalog) = match catalog {
@@ -2208,6 +2216,18 @@ struct ProcessExecutionProfileDescriptor<'a> {
     approval_profile: &'static str,
     host_policy_profile: &'static str,
     user_execute_policy_profile: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    web_search: Option<WebSearchExecutionProfileDescriptor>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchExecutionProfileDescriptor {
+    definition: CapabilityDefinitionBody,
+    instance: CapabilityInstanceBody,
+    host_policy_profile: &'static str,
+    material_recipe_domain: &'static str,
+    material_recipe_format_version: u32,
 }
 
 fn bind_manifest_options(
@@ -2262,6 +2282,15 @@ fn local_execution_profile_digest(
         approval_profile: PROCESS_APPROVAL_PROFILE,
         host_policy_profile: PROCESS_HOST_POLICY_PROFILE,
         user_execute_policy_profile: USER_EXECUTE_POLICY_PROFILE,
+        web_search: web_search_spec(process.workspace())?.map(|(definition, instance)| {
+            WebSearchExecutionProfileDescriptor {
+                definition,
+                instance,
+                host_policy_profile: WEB_SEARCH_HOST_POLICY_PROFILE,
+                material_recipe_domain: WEB_SEARCH_RECIPE_DOMAIN,
+                material_recipe_format_version: WEB_SEARCH_RECIPE_FORMAT_VERSION,
+            }
+        }),
     })
     .map_err(|_| PublicRunError::Internal)?;
     Ok(sha256_digest(&canonical))
@@ -2356,6 +2385,26 @@ fn process_spec(
         "local.process.execute.builtin.v1",
         workspace.binding(),
     )
+}
+
+fn web_search_spec(
+    workspace: &xgen_adapter_process::ProcessWorkspace,
+) -> Result<Option<(CapabilityDefinitionBody, CapabilityInstanceBody)>, PublicRunError> {
+    let Some(adapter) = workspace.web_search_adapter() else {
+        return Ok(None);
+    };
+    let (definition, mut instance) = filesystem_spec(
+        include_str!(
+            "../../../protocol/fixtures/v1alpha1/valid/capability-definition.web-search.json"
+        ),
+        WEB_SEARCH_CAPABILITY_ID,
+        WEB_SEARCH_CONTRACT_VERSION,
+        "local.web.search.builtin.v1",
+        adapter.binding(),
+    )?;
+    instance.data_boundary = DataBoundary::External;
+    instance.hints = None;
+    Ok(Some((definition, instance)))
 }
 
 fn filesystem_spec(
@@ -2464,6 +2513,9 @@ fn local_tool_product(
     };
     if let Some(process) = process {
         specs.push(process_spec(process.workspace())?);
+        if let Some(spec) = web_search_spec(process.workspace())? {
+            specs.push(spec);
+        }
     }
     let mut capabilities = CapabilityRegistry::new();
     let mut routes = Vec::with_capacity(specs.len());
@@ -2541,6 +2593,7 @@ fn local_tool_product(
         verifiers
             .register(&process.workspace().binding(), process_verifier)
             .map_err(|_| PublicRunError::Internal)?;
+        register_web_search(process.workspace(), &mut adapters, &mut verifiers)?;
     }
     Ok(LocalToolProduct {
         capabilities,
@@ -2550,13 +2603,39 @@ fn local_tool_product(
     })
 }
 
+fn register_web_search(
+    workspace: &xgen_adapter_process::ProcessWorkspace,
+    adapters: &mut EffectAdapterRegistry,
+    verifiers: &mut EffectVerifierRegistry,
+) -> Result<(), PublicRunError> {
+    if let Some(search_adapter) = workspace.web_search_adapter() {
+        let binding = search_adapter.binding();
+        let search_verifier = search_adapter.verifier();
+        adapters
+            .register(&binding, search_adapter)
+            .map_err(|_| PublicRunError::Internal)?;
+        verifiers
+            .register(&binding, search_verifier)
+            .map_err(|_| PublicRunError::Internal)?;
+    }
+    Ok(())
+}
+
 struct LocalResourceResolver {
     filesystem: WorkspaceResourceResolver,
     process: Option<ProcessResourceResolver>,
+    web_search_enabled: bool,
 }
 
 impl ResourceResolver for LocalResourceResolver {
     fn resolve(&self, scope: &str, resource: &str) -> Result<String, ResourceResolutionFailure> {
+        if scope == WEB_SEARCH_SCOPE {
+            return if self.web_search_enabled {
+                resolve_web_search_query(resource)
+            } else {
+                Err(ResourceResolutionFailure::UnsupportedScope)
+            };
+        }
         if scope == PROCESS_EXECUTE_SCOPE {
             return self
                 .process
@@ -2588,7 +2667,9 @@ impl PlannedRoutePort for ExactLocalRoute {
             || (planned.capability_id() == APPLY_PATCH_CAPABILITY_ID
                 && planned.contract_version() == APPLY_PATCH_CONTRACT_VERSION)
             || (planned.capability_id() == PROCESS_EXECUTE_CAPABILITY_ID
-                && planned.contract_version() == PROCESS_EXECUTE_CONTRACT_VERSION);
+                && planned.contract_version() == PROCESS_EXECUTE_CONTRACT_VERSION)
+            || (planned.capability_id() == WEB_SEARCH_CAPABILITY_ID
+                && planned.contract_version() == WEB_SEARCH_CONTRACT_VERSION);
         if !local_profile_matches_effect_kind(once, planned.execution_profile()) {
             return Err(PlannedRouteFailure::Rejected);
         }
@@ -2613,7 +2694,11 @@ impl PlannedRoutePort for ExactLocalRoute {
                 idempotency_query: false,
             },
             allowed_trust_levels: vec![TrustLevel::Verified],
-            allowed_data_boundaries: vec![DataBoundary::Local],
+            allowed_data_boundaries: vec![if planned.capability_id() == WEB_SEARCH_CAPABILITY_ID {
+                DataBoundary::External
+            } else {
+                DataBoundary::Local
+            }],
             trust_preference: Vec::new(),
             data_boundary_preference: Vec::new(),
             preferred_instance_ids: Vec::new(),
@@ -2709,6 +2794,9 @@ impl ExplicitLocalApproval {
         request: &ResolvedPermissionRequest,
     ) -> Option<(&'static str, &'static str, bool)> {
         if request.effect_class() == EffectClass::NonIdempotent {
+            if request.capability().capability_id == WEB_SEARCH_CAPABILITY_ID {
+                return self.authorized_web_search_profiles(request);
+            }
             return self.authorized_process_profiles(request);
         }
         let expected_scope = match request.effect_class() {
@@ -2775,6 +2863,34 @@ impl ExplicitLocalApproval {
             && request.critical_actions().is_empty();
         exact.then_some((
             PROCESS_HOST_POLICY_PROFILE,
+            USER_EXECUTE_POLICY_PROFILE,
+            self.allow_execute,
+        ))
+    }
+
+    fn authorized_web_search_profiles(
+        &self,
+        request: &ResolvedPermissionRequest,
+    ) -> Option<(&'static str, &'static str, bool)> {
+        let enabled = self.process.as_ref()?.web_search_enabled();
+        let exact = enabled
+            && request.run_id() == self.run_id
+            && request.requested_lifetime() == GrantLifetime::Once
+            && request.requested_scopes().len() == 1
+            && request
+                .requested_scopes()
+                .first()
+                .is_some_and(|scope| scope == WEB_SEARCH_SCOPE)
+            && request.resources().len() == 1
+            && request.resources().first().is_some_and(|resource| {
+                resource.scope() == WEB_SEARCH_SCOPE
+                    && resolve_web_search_query(resource.canonical_resource()).is_ok()
+            })
+            && request.capability().capability_id == WEB_SEARCH_CAPABILITY_ID
+            && request.capability().contract_version == WEB_SEARCH_CONTRACT_VERSION
+            && request.critical_actions().is_empty();
+        exact.then_some((
+            WEB_SEARCH_HOST_POLICY_PROFILE,
             USER_EXECUTE_POLICY_PROFILE,
             self.allow_execute,
         ))
@@ -3550,6 +3666,75 @@ mod tests {
                 .unwrap(),
             ApprovalDecision::Denied
         ));
+    }
+
+    #[test]
+    fn search_approval_requires_catalogued_backend_exact_query_and_once_lifetime() {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("README.md"), "fixture").unwrap();
+        let executable = std::env::current_exe().unwrap();
+        let specification = format!("openserp={}", executable.display());
+        let process = ProcessTooling::build(directory.path(), WORKSPACE_ID, [&specification])
+            .unwrap()
+            .unwrap();
+        let workspace =
+            WorkspaceRoot::open_ambient(directory.path(), WorkspaceId::new(WORKSPACE_ID).unwrap())
+                .unwrap();
+        let catalog = AllowFileCatalog::new(&workspace.resolver(), ["README.md"]).unwrap();
+        let mut approval = ExplicitLocalApproval {
+            allow_read: true,
+            allow_write: false,
+            allow_execute: false,
+            run_id: "run-0123456789abcdef0123456789abcdef".to_owned(),
+            catalog: ApprovalCatalog::ExactFiles(catalog),
+            process: Some(process.authorization().clone()),
+        };
+        let (definition, instance) = web_search_spec(process.workspace()).unwrap().unwrap();
+        assert_eq!(instance.data_boundary, DataBoundary::External);
+        let resolver = PermissionRequestResolver::new(PassthroughResolver);
+        for query in ["English docs", "한국어 공식 문서"] {
+            let arguments = json!({"query": query, "maxResults": 2});
+            let exact = resolver
+                .resolve_invocation(
+                    "request-1",
+                    &approval.run_id,
+                    "step-1",
+                    &definition,
+                    &arguments,
+                    GrantLifetime::Once,
+                )
+                .unwrap();
+            approval.allow_execute = false;
+            assert!(matches!(
+                approval.decide(exact.permission_request()).unwrap(),
+                ApprovalDecision::Pending
+            ));
+            approval.allow_execute = true;
+            assert!(matches!(
+                approval.decide(exact.permission_request()).unwrap(),
+                ApprovalDecision::Approved(_)
+            ));
+            let run_lifetime = resolver
+                .resolve_invocation(
+                    "request-2",
+                    &approval.run_id,
+                    "step-1",
+                    &definition,
+                    &arguments,
+                    GrantLifetime::Run,
+                )
+                .unwrap();
+            assert!(matches!(
+                approval.decide(run_lifetime.permission_request()).unwrap(),
+                ApprovalDecision::Denied
+            ));
+            approval.process = None;
+            assert!(matches!(
+                approval.decide(exact.permission_request()).unwrap(),
+                ApprovalDecision::Denied
+            ));
+            approval.process = Some(process.authorization().clone());
+        }
     }
 
     struct PassthroughResolver;
