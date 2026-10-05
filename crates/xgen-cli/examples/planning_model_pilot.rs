@@ -35,6 +35,8 @@ struct TrialConfig {
     max_model_turns: u32,
     max_ticks: u32,
     allow_executables: Vec<String>,
+    #[serde(default)]
+    final_response_schema: Option<serde_json::Value>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     request.allow_write = true;
     request.allow_execute = !request.allow_executables.is_empty();
     request.max_model_turns = Some(config.max_model_turns);
+    request.final_response_schema = config.final_response_schema;
     request.max_ticks = config.max_ticks;
     let result = run_local_with_evaluation_profile(
         request,

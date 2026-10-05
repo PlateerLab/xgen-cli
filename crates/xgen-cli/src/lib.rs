@@ -6,6 +6,7 @@ mod allow_process;
 mod composition;
 mod driver;
 mod environment;
+mod final_response;
 mod manifest;
 mod material_catalog;
 mod model_profile;

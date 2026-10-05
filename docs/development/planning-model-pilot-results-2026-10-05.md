@@ -105,3 +105,7 @@ Python 검사 70개 PASS. Analysis 검사 9개 중 실제 development SQLite를 
 다음 작업은 범용 **최종 응답 계약과 evidence projection** 설계야. 선택적 응답 schema를 host 설정·request profile에 명시하고, 명령/exit status/실행 순서는 Receipt에서 파생하도록 하는 방향을 검토해. 내용의 의미적 정답은 여전히 task별 독립 oracle로 검사해야 해. 도메인 규칙을 engine에 넣거나 이번 사례 이름에 맞춘 분기를 추가하지 않아.
 
 형식 강제와 관찰 사실 연결은 다른 수정이므로 따로 평가해. 지금 확인한 서로 다른 사례의 실패를 regression으로 보존하되, 수정 전에 새로운 입력 계약과 두 family 이상의 design/held-out 사례를 따로 고정해야 해. 새 prompt나 schema가 기존 response/resume digest와 어떻게 공존할지도 설계 항목이야. 이번에는 그 수정이나 production 배포를 수행하지 않았어.
+
+후속 작업에서 선택적 [최종 응답 계약과 Receipt projection](final-response-contract.md)을 구현했어.
+별도 새 사례 24회의 형식·실행 기록은 모두 일치했지만 작업 oracle는 14/24였어.
+이전 120회의 결과와 등록 gate는 그대로 보존하고, 두 실험의 정확도를 직접 비교하지 않아.

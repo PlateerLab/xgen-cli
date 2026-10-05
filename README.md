@@ -139,6 +139,11 @@ Headless `run`/`resume`에서 도구 인자 검증이 거절되면 기존 verdic
 함께 전달합니다. 같은 호출 ID라도 조회 후 기록이 바뀌었으면 native lease 안에서 거부합니다.
 [복구 절차와 호스트 연동 경계](docs/development/local-model-call-recovery.md)를 먼저 확인하세요.
 
+Headless `run --response-schema FILE`로 최종 응답의 JSON Schema를 지정할 수 있어.
+Host가 `response`와 검증된 Receipt 기반 `commands`를 조립하고, 명령·종료 코드·실행 순서를
+durable completion에 저장해. 기존 기본 출력은 유지해.
+[응답 계약 사용법과 보장 범위](docs/development/final-response-contract.md)를 확인해.
+
 ## 제품 원칙
 
 - 사용자는 `xgen` 하나만 설치합니다.

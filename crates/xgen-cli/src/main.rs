@@ -213,6 +213,9 @@ struct RunArgs {
     /// Goal sent to the bounded planner.
     #[arg(help = format!("Goal sent to the bounded planner. XGEN_MAX_GOAL_BYTES={} XGEN_OPENAI_ARTIFACT_SCHEMA=atomic-json-schema-v1 (optional per-invocation JSON Schema; also required unchanged on resume)", xgen_cli::MAX_GOAL_BYTES))]
     goal: String,
+    /// Local JSON object schema for final response; commands come from verified Receipts.
+    #[arg(long, value_name = "FILE")]
+    response_schema: Option<PathBuf>,
     /// Workspace root opened as the local filesystem capability.
     #[arg(long, default_value = ".")]
     workspace: PathBuf,
@@ -493,6 +496,7 @@ impl repl::ReplHost for InteractiveHost {
                 allow_execute: grants.execute,
                 max_ticks: REPL_MAX_TICKS,
                 max_model_turns: None,
+                final_response_schema: None,
             },
             &process_session,
             |run_id| {
@@ -764,6 +768,23 @@ fn run_model_command(command: ModelCommand) -> ExitCode {
 }
 
 fn run_command(args: RunArgs) -> ExitCode {
+    let final_response_schema = match args.response_schema {
+        Some(path) => {
+            if let Some(schema) = std::fs::File::open(path).ok().and_then(|file| {
+                let mut bytes = Vec::new();
+                std::io::Read::read_to_end(&mut std::io::Read::take(file, 32_769), &mut bytes)
+                    .ok()?;
+                let text = std::str::from_utf8(&bytes).ok()?;
+                xgen_provider_openai::parse_completion_schema(text).ok()
+            }) {
+                Some(schema)
+            } else {
+                eprintln!("XGEN_CONFIG reason=invalid_response_schema");
+                return ExitCode::FAILURE;
+            }
+        }
+        None => None,
+    };
     let resolved = match resolve_model(
         args.base_url,
         args.model,
@@ -795,6 +816,7 @@ fn run_command(args: RunArgs) -> ExitCode {
             allow_execute: args.allow_execute,
             max_ticks: args.max_ticks,
             max_model_turns: args.max_model_turns,
+            final_response_schema,
         },
         |run_id| eprintln!("XGEN_STARTED run_id={run_id}"),
     ))

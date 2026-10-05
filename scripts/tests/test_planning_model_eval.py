@@ -4,6 +4,7 @@ import http.server
 import importlib.util
 import json
 import os
+import sqlite3
 from pathlib import Path
 import tempfile
 import subprocess
@@ -41,6 +42,27 @@ def cases():
 
 
 class RunnerContractTests(unittest.TestCase):
+    def test_receipt_evidence_uses_start_order_and_checks_output_binding(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database=Path(temp)/'run.sqlite3'
+            with sqlite3.connect(database) as connection:
+                connection.executescript('CREATE TABLE run_events(sequence INTEGER,event_json BLOB); CREATE TABLE execution_receipts(effect_id TEXT,receipt_json BLOB);')
+                outputs=[]
+                for effect,step,sequence,code in [('effect-b','step-b',10,7),('effect-a','step-a',20,0)]:
+                    connection.execute('INSERT INTO run_events VALUES (?,?)',(sequence,json.dumps({'body':{'type':'effect_execution_started','effectId':effect}}).encode()))
+                    connection.execute('INSERT INTO execution_receipts VALUES (?,?)',(effect,json.dumps({'stepId':step,'receiptId':'receipt-'+step,'outputDigest':'digest-'+step}).encode()))
+                    outputs.append({'effectId':effect,'stepId':step,'outputDigest':'digest-'+step,'invocation':{'capabilityId':'xgeny.process/execute'},'output':{'exitCode':code}})
+            with sqlite3.connect(database.parent/'materials.sqlite3') as connection:
+                connection.execute('CREATE TABLE material_recipe(record BLOB)')
+                for step in ['step-a','step-b']:
+                    connection.execute('INSERT INTO material_recipe VALUES (?)',(json.dumps({'stepId':step,'capability':{'capabilityId':'xgeny.process/execute'},'arguments':{'executable':'process:primary/executables/helper','args':[step]}}).encode(),))
+            evidence=M.receipt_command_evidence(database,list(reversed(outputs)))
+            self.assertEqual([x['step_id'] for x in evidence],['step-b','step-a'])
+            self.assertEqual([x['exit_code'] for x in evidence],[7,0])
+            self.assertEqual([x['execution_sequence'] for x in evidence],[10,20])
+            outputs[0]['outputDigest']='unbound'
+            with self.assertRaises(ValueError):M.receipt_command_evidence(database,outputs)
+
     def test_preregistration_checks_binary_config_fixtures_sources_and_schedule(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
@@ -274,6 +296,8 @@ class RunnerContractTests(unittest.TestCase):
                     commands=[{'argv':['python3','-c',"print('ready')"],'exit_code':0}] if process else []
                     proposal={'formatVersion':1,'kind':'completion_candidate','steps':[],
                               'summary':json.dumps({'commands':commands,'changed_files':['result.txt']})}
+                    if 'RECEIPT_EXECUTION_REPORT_V1' in system:
+                        proposal['summary']=json.dumps({'outcome':'completed'})
                     if getattr(self.server,'wrong_claim',False):
                         proposal['summary']=json.dumps({'commands':[],'changed_files':[]})
                 if getattr(self.server,'invalid_proposal',False):
@@ -302,6 +326,13 @@ class RunnerContractTests(unittest.TestCase):
                 self.assertTrue(all(r['actual_cost_nano_usd'] is not None for r in results))
                 self.assertTrue(any(r['observed_commands'] for r in results))
                 self.assertTrue(any(max(r['accepted_plan_sizes'])>1 for r in results if r['condition']=='XN'))
+                contracted_config=config()
+                contracted_config['final_response_schema']={'type':'object','properties':{'outcome':{'type':'string','enum':['completed']}},'required':['outcome'],'additionalProperties':False}
+                contracted=Path(temp)/'contracted'
+                M.execute(Path(os.environ['XGEN_PILOT_TEST_BINARY']).resolve(),cases(),contracted_config,contracted,f'http://127.0.0.1:{server.server_port}/v1',input_paths=[Path(__file__)])
+                reports=[json.loads(line) for line in (contracted/'trials.jsonl').read_text().splitlines()]
+                self.assertTrue(all(r['accepted'] and r['validated_response']=={'outcome':'completed'} for r in reports))
+                self.assertTrue(any(r['observed_command_evidence'] for r in reports))
                 server.invalid_proposal=True
                 rejected=Path(temp)/'rejected'
                 M.execute(Path(os.environ['XGEN_PILOT_TEST_BINARY']).resolve(),cases(),config(),rejected,f'http://127.0.0.1:{server.server_port}/v1',input_paths=[Path(__file__)])

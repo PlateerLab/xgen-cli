@@ -1666,6 +1666,228 @@ fn provider_response(content: &Value) -> Vec<u8> {
     .expect("provider response should serialize")
 }
 
+fn final_contract_server(plan: Value, summary: String) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        for proposal in [
+            plan,
+            json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":summary}),
+        ] {
+            let mut stream = accept_with_timeout(&listener).unwrap();
+            let request = read_http_request(&mut stream);
+            assert!(String::from_utf8_lossy(&request).contains("RECEIPT_EXECUTION_REPORT_V1"));
+            let response = provider_response(&proposal);
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",response.len()).unwrap();
+            stream.write_all(&response).unwrap();
+        }
+    });
+    (base_url, server)
+}
+
+#[cfg(unix)]
+#[test]
+#[allow(clippy::too_many_lines)] // Keep process execution, approval continuation and offline replay in one scenario.
+fn final_contract_projects_process_arguments_exits_and_actual_order_then_replays_offline() {
+    use std::os::unix::fs::PermissionsExt as _;
+    for (label, preapproved) in [
+        ("initial observation", true),
+        ("alternate Unicode 日本語", false),
+    ] {
+        let root = tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let helper = workspace.join("helper");
+        fs::write(
+            &helper,
+            "#!/bin/sh\nprintf '%s:%s\\n' \"$1\" \"$2\" >> actual.log\nexit \"$1\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+        let step = |key: &str, code: &str, dependencies: Value| {
+            json!({"key":key,"objective":"observe process outcome",
+            "dependsOn":dependencies,"capability":{"capabilityId":"xgeny.process/execute","contractVersion":"1.0.0"},
+            "arguments":{"executable":"helper","args":[code,label],"cwd":".","env":{},"timeoutMs":10000,"maxOutputBytes":4096}})
+        };
+        let plan = json!({"formatVersion":1,"kind":"plan","summary":"","steps":[
+            step("first","0",json!([{"kind":"proposed_step","stepId":"","key":"second"}])),step("second","7",json!([]))]});
+        let (base_url, server) = final_contract_server(plan, json!({"label":label}).to_string());
+        let schema = root.path().join("schema.json");
+        fs::write(&schema,json!({"type":"object","properties":{"label":{"type":"string"}},"required":["label"],"additionalProperties":false}).to_string()).unwrap();
+        let state = root.path().join("state");
+        let specification = format!("helper={}", helper.display());
+        let mut command = xgen(&state);
+        command.args([
+            "run",
+            "observe both processes",
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &base_url,
+            "--model",
+            MODEL,
+            "--tokenizer",
+            TOKENIZER,
+            "--response-format",
+            "json_object",
+            "--response-schema",
+            path_text(&schema),
+            "--allow-dir",
+            ".",
+            "--allow-executable",
+            &specification,
+            "--allow-remote-model-egress",
+            "--allow-read",
+            "--max-model-turns",
+            "8",
+        ]);
+        if preapproved {
+            command.arg("--allow-execute");
+        }
+        let first = command.bounded_output().unwrap();
+        let output = if preapproved {
+            first
+        } else {
+            assert_exit(&first, 10);
+            assert!(!workspace.join("actual.log").exists());
+            let run_id = extract_run_id(&stderr(&first));
+            fs::remove_file(&schema).unwrap();
+            xgen(&state)
+                .env("XGEN_OPENAI_MODEL", MODEL)
+                .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+                .args([
+                    "resume",
+                    &run_id,
+                    "--workspace",
+                    path_text(&workspace),
+                    "--base-url",
+                    &base_url,
+                    "--response-format",
+                    "json_object",
+                    "--allow-dir",
+                    ".",
+                    "--allow-executable",
+                    &specification,
+                    "--allow-remote-model-egress",
+                    "--allow-read",
+                    "--allow-execute",
+                ])
+                .bounded_output()
+                .unwrap()
+        };
+        server.join().unwrap();
+        assert_exit(&output, 0);
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["response"], json!({"label":label}));
+        assert_eq!(report["format_version"], 1);
+        let commands = report["commands"].as_array().unwrap();
+        assert_eq!(commands.len(), 2);
+        assert_eq!(commands[0]["argv"], json!(["helper", "7", label]));
+        assert_eq!(commands[0]["exit_code"], 7);
+        assert_eq!(commands[1]["argv"], json!(["helper", "0", label]));
+        assert_eq!(commands[1]["exit_code"], 0);
+        assert!(
+            commands[0]["execution_sequence"].as_u64().unwrap()
+                < commands[1]["execution_sequence"].as_u64().unwrap()
+        );
+        let observed = format!("7:{label}\n0:{label}\n");
+        assert_eq!(
+            fs::read_to_string(workspace.join("actual.log")).unwrap(),
+            observed
+        );
+        let run_id = extract_run_id(&stderr(&output));
+        let database = run_database(&state, &run_id);
+        let store = SqliteRunStore::open_existing_read_only(&database).unwrap();
+        let receipts = store.load_execution_receipts().unwrap();
+        for command in commands {
+            assert!(
+                receipts
+                    .iter()
+                    .any(|r| command["receipt_id"] == r.receipt_id
+                        && command["step_id"] == r.step_id)
+            );
+        }
+        drop(store);
+        let before = fs::read(&database).unwrap();
+        let replay = xgen(&state)
+            .args(["resume", &run_id])
+            .bounded_output()
+            .unwrap();
+        assert_exit(&replay, 0);
+        assert_eq!(replay.stdout, output.stdout);
+        assert_eq!(fs::read(database).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(workspace.join("actual.log")).unwrap(),
+            observed
+        );
+    }
+}
+
+#[test]
+fn final_contract_rejects_prose_missing_fields_and_model_written_commands_after_read() {
+    for (summary, valid) in [
+        ("Read complete", false),
+        ("{}", false),
+        (r#"{"count":3,"commands":[]}"#, false),
+        (r#"{"count":3}"#, true),
+    ] {
+        let root = tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("input.txt"), "one\ntwo\nthree\n").unwrap();
+        let plan = json!({"formatVersion":1,"kind":"plan","summary":"","steps":[{
+            "key":"read","objective":"inspect input","dependsOn":[],"capability":{"capabilityId":"xgeny.fs/read-text","contractVersion":"1.0.0"},
+            "arguments":{"path":"workspace:primary/input.txt"}}]});
+        let (base_url, server) = final_contract_server(plan, summary.into());
+        let schema = root.path().join("schema.json");
+        fs::write(&schema,json!({"type":"object","properties":{"count":{"type":"integer"}},"required":["count"],"additionalProperties":false}).to_string()).unwrap();
+        let state = root.path().join("state");
+        let output = xgen(&state)
+            .args([
+                "run",
+                "count lines",
+                "--workspace",
+                path_text(&workspace),
+                "--base-url",
+                &base_url,
+                "--model",
+                MODEL,
+                "--tokenizer",
+                TOKENIZER,
+                "--response-format",
+                "json_object",
+                "--response-schema",
+                path_text(&schema),
+                "--allow-dir",
+                ".",
+                "--allow-read",
+                "--allow-remote-model-egress",
+            ])
+            .bounded_output()
+            .unwrap();
+        server.join().unwrap();
+        assert_eq!(output.status.success(), valid);
+        if valid {
+            let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(report["commands"], json!([]));
+            assert_eq!(report["response"], json!({"count":3}));
+        } else {
+            assert!(output.stdout.is_empty());
+        }
+        let run_id = extract_run_id(&stderr(&output));
+        let store = SqliteRunStore::open_existing_read_only(run_database(&state, &run_id)).unwrap();
+        let snapshot = store.load().unwrap().unwrap();
+        assert_eq!(
+            snapshot.records.iter().any(|r| matches!(
+                r.event.body,
+                RunEventBody::CompletionCandidateRecorded { .. }
+            )),
+            valid
+        );
+        assert_eq!(store.load_execution_receipts().unwrap().len(), 1);
+    }
+}
+
 fn plan_response() -> Vec<u8> {
     provider_response(&json!({
         "formatVersion": 1,

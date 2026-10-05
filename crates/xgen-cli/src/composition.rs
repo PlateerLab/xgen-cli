@@ -135,6 +135,8 @@ pub struct LocalRunRequest {
     pub max_ticks: u32,
     /// Host-selected agent loop budget for workspace discovery; `None` keeps the built-in one.
     pub max_model_turns: Option<u32>,
+    /// Optional local JSON object schema; enables receipt-execution-report/v1 final output.
+    pub final_response_schema: Option<serde_json::Value>,
 }
 
 impl LocalRunRequest {
@@ -166,6 +168,7 @@ impl LocalRunRequest {
             allow_execute: false,
             max_ticks: 32,
             max_model_turns: None,
+            final_response_schema: None,
         }
     }
 }
@@ -1020,6 +1023,7 @@ where
     } else {
         config
     };
+    let config = final_response_contract(config, request.final_response_schema.as_ref())?;
     let local_execution_profile_digest =
         local_execution_profile_digest(&workspace, &catalog, process.as_ref())?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
@@ -1037,7 +1041,9 @@ where
         manifest_budget(planning_constraints_required, request.max_model_turns)?,
     )
     .map_err(|_| PublicRunError::Configuration)?;
-    let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?;
+    let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?
+        .with_final_response_schema(request.final_response_schema)
+        .map_err(|_| PublicRunError::Configuration)?;
     let planner = remote_planner(config, request.credential)?;
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
     let layout = RunLayout::create(&state_root, manifest.run_id()).map_err(map_layout_create)?;
@@ -1303,6 +1309,7 @@ where
             catalog.workspace_discovery() || process.is_some(),
         )?;
         let config = response_contract(config, manifest.conversation_responses())?;
+        let config = final_response_contract(config, manifest.final_response_schema())?;
         if manifest.request_profile_digest() != config.request_profile_digest() {
             return Err(PublicRunError::ConfigurationMismatch {
                 field: "model_profile",
@@ -1441,7 +1448,20 @@ fn continue_incomplete(
             eprintln!("XGEN_USAGE warning=store_unavailable");
             planner
         };
-        LocalPlanner::Remote(Box::new(planner))
+        let planner: Box<dyn PlannerPort> = if manifest.final_response_schema().is_some() {
+            Box::new(
+                crate::final_response::ReceiptReportPlanner::new(
+                    planner,
+                    &material_catalog_path.with_file_name("run.sqlite3"),
+                    material_catalog_path,
+                    manifest.run_id(),
+                )
+                .map_err(|()| PublicRunError::Integrity)?,
+            )
+        } else {
+            Box::new(planner)
+        };
+        LocalPlanner::Remote(planner)
     } else {
         LocalPlanner::Disabled {
             planner_id: manifest.planner_id().to_owned(),
@@ -1609,7 +1629,7 @@ fn classify_durable_boundary_after_driver_error(
 }
 
 enum LocalPlanner {
-    Remote(Box<OpenAiPlanner>),
+    Remote(Box<dyn PlannerPort>),
     Disabled {
         planner_id: String,
         request_profile_digest: String,
@@ -1879,6 +1899,21 @@ fn response_contract(
     if conversation_responses {
         config
             .with_conversation_responses()
+            .map_err(map_provider_config)
+    } else {
+        Ok(config)
+    }
+}
+
+fn final_response_contract(
+    config: OpenAiPlannerConfig,
+    schema: Option<&serde_json::Value>,
+) -> Result<OpenAiPlannerConfig, PublicRunError> {
+    if let Some(schema) = schema {
+        config
+            .with_completion_schema(
+                &serde_jcs::to_string(schema).map_err(|_| PublicRunError::Configuration)?,
+            )
             .map_err(map_provider_config)
     } else {
         Ok(config)
@@ -3495,6 +3530,7 @@ mod tests {
             allow_execute: false,
             max_ticks: 32,
             max_model_turns: None,
+            final_response_schema: None,
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -3551,6 +3587,7 @@ mod tests {
             allow_execute: false,
             max_ticks: 32,
             max_model_turns: None,
+            final_response_schema: None,
         };
         assert!(matches!(
             run_local_with_process_session_progress(

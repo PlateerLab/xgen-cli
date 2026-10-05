@@ -36,6 +36,18 @@ struct RunManifestRecord {
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    final_response_schema: Option<SavedFinalResponseSchema>,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+struct SavedFinalResponseSchema(serde_json::Value);
+
+impl std::fmt::Debug for SavedFinalResponseSchema {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("<redacted final response schema>")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +158,7 @@ impl RunManifest {
             process_fingerprints: None,
             budget,
             conversation_responses: false,
+            final_response_schema: None,
         };
         validate_record(&record)?;
         let record_digest = digest_record(&record)?;
@@ -153,6 +166,23 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_final_response_schema(
+        mut self,
+        schema: Option<serde_json::Value>,
+    ) -> Result<Self, ManifestError> {
+        self.record.final_response_schema = schema.map(SavedFinalResponseSchema);
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn final_response_schema(&self) -> Option<&serde_json::Value> {
+        self.record
+            .final_response_schema
+            .as_ref()
+            .map(|schema| &schema.0)
     }
 
     pub(crate) fn with_conversation_responses(mut self) -> Result<Self, ManifestError> {
@@ -275,6 +305,11 @@ pub(crate) enum ManifestError {
 }
 
 fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
+    if let Some(schema) = &record.final_response_schema {
+        let encoded = serde_jcs::to_string(schema).map_err(|_| ManifestError::Invalid)?;
+        xgen_provider_openai::parse_completion_schema(&encoded)
+            .map_err(|_| ManifestError::Invalid)?;
+    }
     if record.process_fingerprints.as_ref().is_some_and(|items| {
         items.len() > 128
             || items.iter().any(|(key, value)| {
@@ -427,6 +462,34 @@ mod tests {
         assert_eq!(loaded, manifest);
         assert!(loaded.authority().starts_with(AUTHORITY_PREFIX));
         assert_eq!(loaded.authority().len(), AUTHORITY_PREFIX.len() + 64);
+    }
+
+    #[test]
+    fn final_response_schema_is_bound_redacted_and_omitted_for_legacy_records() {
+        let original = fixture();
+        assert!(
+            !String::from_utf8(original.to_bytes().unwrap())
+                .unwrap()
+                .contains("finalResponseSchema")
+        );
+        let schema = serde_json::json!({"type":"object","properties":{"label":{"type":"string","enum":["SCHEMA-SENTINEL"]}},"required":["label"],"additionalProperties":false});
+        let bound = original
+            .clone()
+            .with_final_response_schema(Some(schema.clone()))
+            .unwrap();
+        assert_ne!(bound.authority(), original.authority());
+        assert!(!format!("{bound:?}").contains("SCHEMA-SENTINEL"));
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap())
+                .unwrap()
+                .final_response_schema(),
+            Some(&schema)
+        );
+        assert!(
+            original
+                .with_final_response_schema(Some(serde_json::json!({"type":"array"})))
+                .is_err()
+        );
     }
 
     #[test]

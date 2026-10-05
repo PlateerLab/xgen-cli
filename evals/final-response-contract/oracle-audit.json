@@ -1,0 +1,26 @@
+[
+  {
+    "case": "design-text-metadata",
+    "initial_oracle_failed": true,
+    "reference_oracle_passed": true,
+    "fixture_sha256": "737553548b57e8aa03019484d847476b11839209fc5a545b84d5e48ad38a2d4e"
+  },
+  {
+    "case": "design-median-cli",
+    "initial_oracle_failed": true,
+    "reference_oracle_passed": true,
+    "fixture_sha256": "4b95d60fccaf113051ef7174967aaeb272ec85a9ba6f95481c7fefef46e5d973"
+  },
+  {
+    "case": "validation-chunk-decoding",
+    "initial_oracle_failed": true,
+    "reference_oracle_passed": true,
+    "fixture_sha256": "8cab5bbd2a21ad0e8f2a4935efb44df35659ce759f15f4380b7e05328a5341a2"
+  },
+  {
+    "case": "validation-stable-unique-cli",
+    "initial_oracle_failed": true,
+    "reference_oracle_passed": true,
+    "fixture_sha256": "fda79f3e92c98fe073d0424b6afba7fb73341bf8ebef8a6ed602c21453b4ba3b"
+  }
+]
