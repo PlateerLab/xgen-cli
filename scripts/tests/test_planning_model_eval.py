@@ -281,8 +281,13 @@ class RunnerContractTests(unittest.TestCase):
                 process='xgeny.process/execute' in json.dumps(context['capabilities'])
                 steps=[('read','xgeny.fs/read-text',{'path':'input.txt'}),
                        ('write','xgeny.fs/write-atomic',{'path':'result.txt','content':'ready\n','expectedDigest':None})]
+                if getattr(self.server,'wrong_artifact',False):
+                    steps[1][2]['content']='wrong\n'
                 if process:
                     steps.append(('execute','xgeny.process/execute',{'executable':'python3','args':['-c',"print('ready')"],
+                                  'cwd':'.','env':{},'timeoutMs':1000,'maxOutputBytes':1024}))
+                if 'verify' in body['messages'][1]['content']:
+                    steps.append(('check','xgeny.process/execute',{'executable':'verify','args':[],
                                   'cwd':'.','env':{},'timeoutMs':1000,'maxOutputBytes':1024}))
                 completed=len(context['toolOutputs'])
                 if completed < len(steps):
@@ -333,6 +338,21 @@ class RunnerContractTests(unittest.TestCase):
                 reports=[json.loads(line) for line in (contracted/'trials.jsonl').read_text().splitlines()]
                 self.assertTrue(all(r['accepted'] and r['validated_response']=={'outcome':'completed'} for r in reports))
                 self.assertTrue(any(r['observed_command_evidence'] for r in reports))
+                comparison_config=dict(contracted_config,conditions=['C0','C1'])
+                comparison_cases=[dict(cases()[1],id=name,completion_checker="from pathlib import Path\nassert Path('result.txt').read_text() == 'ready\\n'\n") for name in ('comparison-one','comparison-two')]
+                comparison=Path(temp)/'comparison'
+                report=M.execute(Path(os.environ['XGEN_PILOT_TEST_BINARY']).resolve(),comparison_cases,comparison_config,comparison,f'http://127.0.0.1:{server.server_port}/v1',input_paths=[Path(__file__)])
+                self.assertEqual(set(report['conditions']),{'C0','C1'})
+                rows=[json.loads(line) for line in (comparison/'trials.jsonl').read_text().splitlines()]
+                self.assertTrue(all(row['accepted'] and row['check_executions']==1 for row in rows),json.dumps(rows,indent=2))
+                server.wrong_artifact=True
+                comparison_bad=Path(temp)/'comparison-bad'
+                M.execute(Path(os.environ['XGEN_PILOT_TEST_BINARY']).resolve(),comparison_cases,comparison_config,comparison_bad,f'http://127.0.0.1:{server.server_port}/v1',input_paths=[Path(__file__)])
+                bad=[json.loads(line) for line in (comparison_bad/'trials.jsonl').read_text().splitlines()]
+                self.assertTrue(all(not row['oracle_passed'] for row in bad))
+                self.assertTrue(all(row['false_completion'] and not row['gate_rejections'] for row in bad if row['condition']=='C0'))
+                self.assertTrue(all(not row['task_completed'] and row['gate_rejections']==['failed'] for row in bad if row['condition']=='C1'))
+                server.wrong_artifact=False
                 server.invalid_proposal=True
                 rejected=Path(temp)/'rejected'
                 M.execute(Path(os.environ['XGEN_PILOT_TEST_BINARY']).resolve(),cases(),config(),rejected,f'http://127.0.0.1:{server.server_port}/v1',input_paths=[Path(__file__)])

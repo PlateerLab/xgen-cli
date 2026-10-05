@@ -1,0 +1,82 @@
+[
+  {
+    "id": "design-parity-partition",
+    "split": "design",
+    "family": "numeric-json",
+    "goal": "input.json을 읽고 integer array를 원래 순서대로 짝수와 홀수로 나눠 {\"even\":array,\"odd\":array,\"count\":전체 개수}를 저장해. result.json은 처음에는 없어. 최초 fs/write-atomic 생성에는 expectedDigest=null을 써. 이미 생성한 파일을 다시 덮어쓸 때는 현재 파일을 읽어서 얻은 digest를 expectedDigest로 넣어; 기존 파일에 null을 쓰면 실패해. 먼저 verify를 실행해서 파일이 없는 상태의 실패를 확인하고, 결과를 생성한 뒤 verify를 다시 실행해서 통과를 확인해. verify는 인자 없이 cwd ., env override {}로 실행해. input.json은 보존하고 result.json만 생성하거나 수정해.",
+    "files": {
+      "input.json": "[-9, 0, 6, 5, -2, 12]\n"
+    },
+    "writable": [
+      "result.json"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys\np=Path(sys.argv[1])\nassert json.loads((p/\"result.json\").read_text()) == {'even': [0, 6, -2, 12], 'odd': [-9, 5], 'count': 6}\nassert json.loads((p/\"input.json\").read_text()) == [-9, 0, 6, 5, -2, 12]\n"
+    },
+    "completion_checker": "import json\nfrom pathlib import Path\nsource=json.loads(Path(\"input.json\").read_text())\nexpected={\"even\":[v for v in source if v%2==0],\"odd\":[v for v in source if v%2!=0],\"count\":len(source)}\nif not Path(\"result.json\").is_file():\n    raise SystemExit(1)\nactual=json.loads(Path(\"result.json\").read_text())\nraise SystemExit(0 if actual == expected else 1)\n"
+  },
+  {
+    "id": "validation-bounded-clamp",
+    "split": "validation",
+    "family": "numeric-json",
+    "goal": "input.json을 읽고 object의 values array를 lower 이상 upper 이하로 clamp해 {\"values\":clamp 결과 array,\"clipped\":변경된 원소 수}를 저장해. result.json은 처음에는 없어. 최초 fs/write-atomic 생성에는 expectedDigest=null을 써. 이미 생성한 파일을 다시 덮어쓸 때는 현재 파일을 읽어서 얻은 digest를 expectedDigest로 넣어; 기존 파일에 null을 쓰면 실패해. 먼저 verify를 실행해서 파일이 없는 상태의 실패를 확인하고, 결과를 생성한 뒤 verify를 다시 실행해서 통과를 확인해. verify는 인자 없이 cwd ., env override {}로 실행해. input.json은 보존하고 result.json만 생성하거나 수정해.",
+    "files": {
+      "input.json": "{\"values\": [-12, -3, 0, 4, 9, 21], \"lower\": -3, \"upper\": 9}\n"
+    },
+    "writable": [
+      "result.json"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys\np=Path(sys.argv[1])\nassert json.loads((p/\"result.json\").read_text()) == {'values': [-3, -3, 0, 4, 9, 9], 'clipped': 2}\nassert json.loads((p/\"input.json\").read_text()) == {'values': [-12, -3, 0, 4, 9, 21], 'lower': -3, 'upper': 9}\n"
+    },
+    "completion_checker": "import json\nfrom pathlib import Path\nsource=json.loads(Path(\"input.json\").read_text())\nexpected={\"values\":[min(source[\"upper\"],max(source[\"lower\"],v)) for v in source[\"values\"]],\"clipped\":sum(v<source[\"lower\"] or v>source[\"upper\"] for v in source[\"values\"])}\nif not Path(\"result.json\").is_file():\n    raise SystemExit(1)\nactual=json.loads(Path(\"result.json\").read_text())\nraise SystemExit(0 if actual == expected else 1)\n"
+  },
+  {
+    "id": "design-utf8-prefix-offsets",
+    "split": "design",
+    "family": "unicode-json",
+    "goal": "input.json을 읽고 string array에서 각 문자열이 UTF-8로 이어 붙여질 때의 시작 byte offset을 {\"offsets\":array,\"total_bytes\":전체 byte 수}로 저장해. result.json은 처음에는 없어. 최초 fs/write-atomic 생성에는 expectedDigest=null을 써. 이미 생성한 파일을 다시 덮어쓸 때는 현재 파일을 읽어서 얻은 digest를 expectedDigest로 넣어; 기존 파일에 null을 쓰면 실패해. 먼저 verify를 실행해서 파일이 없는 상태의 실패를 확인하고, 결과를 생성한 뒤 verify를 다시 실행해서 통과를 확인해. verify는 인자 없이 cwd ., env override {}로 실행해. input.json은 보존하고 result.json만 생성하거나 수정해.",
+    "files": {
+      "input.json": "[\"ñ\", \"\", \"한\", \"🙂\", \"ab\"]\n"
+    },
+    "writable": [
+      "result.json"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys\np=Path(sys.argv[1])\nassert json.loads((p/\"result.json\").read_text()) == {'offsets': [0, 2, 2, 5, 9], 'total_bytes': 11}\nassert json.loads((p/\"input.json\").read_text()) == ['ñ', '', '한', '🙂', 'ab']\n"
+    },
+    "completion_checker": "import json\nfrom pathlib import Path\nsource=json.loads(Path(\"input.json\").read_text())\nexpected={\"offsets\":[sum(len(s.encode(\"utf-8\")) for s in source[:i]) for i in range(len(source))],\"total_bytes\":sum(len(s.encode(\"utf-8\")) for s in source)}\nif not Path(\"result.json\").is_file():\n    raise SystemExit(1)\nactual=json.loads(Path(\"result.json\").read_text())\nraise SystemExit(0 if actual == expected else 1)\n"
+  },
+  {
+    "id": "validation-ascii-edge-trim",
+    "split": "validation",
+    "family": "unicode-json",
+    "goal": "input.json을 읽고 string array의 양 끝 ASCII 공백(space, tab, CR, LF)만 제거해. NBSP와 Unicode는 유지해. {\"items\":제거 결과 array,\"removed_bytes\":각 원문 대비 줄어든 UTF-8 byte 수 array}를 저장해. result.json은 처음에는 없어. 최초 fs/write-atomic 생성에는 expectedDigest=null을 써. 이미 생성한 파일을 다시 덮어쓸 때는 현재 파일을 읽어서 얻은 digest를 expectedDigest로 넣어; 기존 파일에 null을 쓰면 실패해. 먼저 verify를 실행해서 파일이 없는 상태의 실패를 확인하고, 결과를 생성한 뒤 verify를 다시 실행해서 통과를 확인해. verify는 인자 없이 cwd ., env override {}로 실행해. input.json은 보존하고 result.json만 생성하거나 수정해.",
+    "files": {
+      "input.json": "[\" \\té\\r\\n\", \" 한 \", \"\\t\\n\", \"x y \", \"🙂\"]\n"
+    },
+    "writable": [
+      "result.json"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys\np=Path(sys.argv[1])\nassert json.loads((p/\"result.json\").read_text()) == {'items': ['é', '\\xa0한\\xa0', '', 'x y', '🙂'], 'removed_bytes': [4, 0, 2, 1, 0]}\nassert json.loads((p/\"input.json\").read_text()) == [' \\té\\r\\n', '\\xa0한\\xa0', '\\t\\n', 'x y ', '🙂']\n"
+    },
+    "completion_checker": "import json\nfrom pathlib import Path\nsource=json.loads(Path(\"input.json\").read_text())\nexpected={\"items\":[s.strip(\" \\t\\r\\n\") for s in source],\"removed_bytes\":[len(s.encode(\"utf-8\"))-len(s.strip(\" \\t\\r\\n\").encode(\"utf-8\")) for s in source]}\nif not Path(\"result.json\").is_file():\n    raise SystemExit(1)\nactual=json.loads(Path(\"result.json\").read_text())\nraise SystemExit(0 if actual == expected else 1)\n"
+  }
+]

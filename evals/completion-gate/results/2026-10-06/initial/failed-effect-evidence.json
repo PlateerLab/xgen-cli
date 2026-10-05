@@ -1,0 +1,288 @@
+[
+  {
+    "trial": "0000-design-utf8-token-lengths-2-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"items\":[{\"text\":\"é\",\"bytes\":2},{\"text\":\"서울\",\"bytes\":6},{\"text\":\"\",\"bytes\":0},{\"text\":\"a b\",\"bytes\":3},{\"text\":\"𠮷\",\"bytes\":4}],\"total_bytes\":15}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0001-design-utf8-token-lengths-2-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"items\":[{\"text\":\"é\",\"bytes\":2},{\"text\":\"서울\",\"bytes\":6},{\"text\":\"\",\"bytes\":0},{\"text\":\"a b\",\"bytes\":3},{\"text\":\"𠮷\",\"bytes\":4}],\"total_bytes\":15}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0002-design-utf8-token-lengths-1-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"items\":[{\"text\":\"é\",\"bytes\":2},{\"text\":\"서울\",\"bytes\":6},{\"text\":\"\",\"bytes\":0},{\"text\":\"a b\",\"bytes\":3},{\"text\":\"𠮷\",\"bytes\":4}],\"total_bytes\":15}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0003-design-utf8-token-lengths-1-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"items\":[{\"text\":\"é\",\"bytes\":2},{\"text\":\"서울\",\"bytes\":6},{\"text\":\"\",\"bytes\":0},{\"text\":\"a b\",\"bytes\":3},{\"text\":\"𠮷\",\"bytes\":4}],\"total_bytes\":15}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0004-design-prefix-balances-1-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0005-design-prefix-balances-1-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0006-design-prefix-balances-0-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0007-design-prefix-balances-0-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0008-validation-codepoint-segments-1-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0009-validation-codepoint-segments-1-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0010-design-utf8-token-lengths-0-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"items\":[{\"text\":\"é\",\"bytes\":2},{\"text\":\"서울\",\"bytes\":6},{\"text\":\"\",\"bytes\":0},{\"text\":\"a b\",\"bytes\":3},{\"text\":\"𠮷\",\"bytes\":4}],\"total_bytes\":15}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0012-design-prefix-balances-2-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0013-design-prefix-balances-2-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"prefix\":[7,4,4,9,7],\"total\":7}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0014-validation-adjacent-deltas-0-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"deltas\":[0,21,-13,25],\"count\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0016-validation-codepoint-segments-0-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}\n",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0017-validation-codepoint-segments-0-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0018-validation-adjacent-deltas-1-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"deltas\":[0,21,-13,25],\"count\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0019-validation-adjacent-deltas-1-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"deltas\":[0,21,-13,25],\"count\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0020-validation-adjacent-deltas-2-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"deltas\": [0, 21, -13, 25], \"count\": 4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0021-validation-adjacent-deltas-2-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"deltas\":[0,21,-13,25],\"count\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0022-validation-codepoint-segments-2-C1",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0023-validation-codepoint-segments-2-C0",
+    "capability": {
+      "capabilityId": "xgeny.fs/write-atomic",
+      "contractVersion": "1.0.0"
+    },
+    "arguments": {
+      "content": "{\"lengths\":[2,2,0,1,3],\"nonempty\":4}",
+      "expectedDigest": null,
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  }
+]

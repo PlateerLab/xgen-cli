@@ -101,3 +101,7 @@ Check 목록을 manifest에 저장하고 request profile digest에 묶어. 승�
 검증 프로그램이 자신의 입력이나 다른 check의 결과를 변경하거나, 모델이 수정한 코드만으로 스스로 통과를 선언하면 기준이 약해질 수 있어. 프로그램·의존성과 검사 대상의 범위는 host가 정해야 해. 엔진에 작업별 정답이나 데이터셋 이름을 넣지 않았어.
 
 Rust workspace 669개 PASS, 기존 live 검사 4개 ignored. Python 71개 PASS에는 새 빌드의 기존 mock bridge 검증과 private journal mutation 검사를 포함해. 전체 workspace clippy, fmt, 공개 문서 계약 검사도 PASS야. Python 검사에서는 종료된 프로세스의 `/proc` read가 `ESRCH`를 반환하는 경합을 한 번 관측했어. 기존 runner와 같이 테스트도 `FileNotFoundError`와 `ProcessLookupError`를 모두 이미 사라진 프로세스로 처리한 뒤 전체 71개를 통과했어. 실행·정리 코드는 바꾸지 않았어.
+
+## 실제 모델 후속 비교
+
+[2026-10-06 실제 모델 비교](completion-gate-live-pilot-2026-10-06.md)에서 최초 24회와 다른 입력의 후속 16회를 보존했어. 후속 단계에서 틀린 완료 차단은 관측했지만 실제 작업 성공·수정 개선은 입증하지 못했어. 선택 옵션을 유지하고 기본 적용은 보류해.

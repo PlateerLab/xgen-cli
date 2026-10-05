@@ -1,0 +1,245 @@
+{
+  "format_version": 1,
+  "state": "REGISTERED_NOT_RUN",
+  "created_utc": "2026-10-05T15:55:23.685074+00:00",
+  "source_base_commit": "d04322f",
+  "config_file": "evals/completion-gate/followup/config.json",
+  "config_sha256": "167eb3368a35fb7cf2093010668218f3b9f90e53dd7619bd0412964c5ab1dc00",
+  "fixture_files": [
+    {
+      "path": "evals/completion-gate/followup/cases.json",
+      "sha256": "40b9bae8bd757c2f8a7bb66cb3db4b3467444f346155acb1bbc5e1a35c1d5a87"
+    }
+  ],
+  "cases_sha256": "7b60d44ff0e651fea8f631cfb7bfcbc198c57a1c2e55c5d527a1f98595baa369",
+  "source_sha256": {
+    "Cargo.toml": "b19d57296c40f12d4cdb4e5d6a1a92df81a05e1f8ceff9b7abe385ff696b236d",
+    "Cargo.lock": "fa89d13394de950713a3b3e396e4228864be7db926f1b450643b91f8c8a54d6f",
+    "scripts/evaluate-planning-model.py": "7cf6e73af2f26fcd297df44c39067810fcd044289c8f5d3fcd0ae95cfaf09c8d",
+    "scripts/evaluate-projects.py": "2541f90c16d32b37409c2f132c2136e23d43bbe2b8f8de14b9775a2f3addf4c6",
+    "crates/xgen-adapter-filesystem/src/apply_patch.rs": "b2b3a5afd1d5af3495becf9d8b61e65ad04169832b94a21c0183a61f4720ee5a",
+    "crates/xgen-adapter-filesystem/src/atomic_commit.rs": "293b70014fb6072e3f34b3a90b39c72a3debea1396a9a0c25a3d26a110132ad8",
+    "crates/xgen-adapter-filesystem/src/lib.rs": "a345d984a3bb45a26010e8f0119aef3446289b1c47463882e77471fa353556eb",
+    "crates/xgen-adapter-filesystem/src/path.rs": "f63e8e48e3f354c49e907c6afacb52347b95992b94be4bb6fe997591b490fc98",
+    "crates/xgen-adapter-filesystem/src/query.rs": "55b956ad5b3bd193b0e4f4bcd505184ac975b2439c2d2690e49b9d85d4d9478d",
+    "crates/xgen-adapter-filesystem/src/read_text.rs": "5c7c34f86ddf3b26ed54362d1d8006cea6fc0e30f2b7fe2ca17ccf15c7d44b33",
+    "crates/xgen-adapter-filesystem/src/root_identity.rs": "e2f01f8cb505d66d8ca6a696d4e62e4f0d4b7cc60fd497ed2399e8e19a68ae4f",
+    "crates/xgen-adapter-filesystem/src/write_atomic.rs": "c56ec8278b8c3ddbbc488a400eba951451d4ac563e2a153ae1031d03db4de052",
+    "crates/xgen-adapter-process/examples/pty_backend_probe.rs": "a6bd53923338fa301ab34ce7245218545c93f62a39cfb9891f4b4bee58fd840b",
+    "crates/xgen-adapter-process/src/catalog.rs": "16a12217107693ee60c65ca2a99b163f37be846de7f1534f852dbdeeee67e31f",
+    "crates/xgen-adapter-process/src/execution.rs": "6a3f14840ca03e179820bf493da444fe7f03a18fef45cc38e38ce38c4a053bb2",
+    "crates/xgen-adapter-process/src/lib.rs": "3e443c75a0c9892d20ff634f28d4faecd60d98bfcab4b20fa4bcf1ebea4ac8a3",
+    "crates/xgen-adapter-process/src/path.rs": "05fd871964359e57e81e7bed4f5a498e8f850acf7adcc1386093d3d2bbe86c60",
+    "crates/xgen-adapter-process/src/terminal/mod.rs": "f1c136a7c7c69465d145049d843e65089fec028b5cff46445a65f05db44cb65d",
+    "crates/xgen-adapter-process/src/terminal/sessions.rs": "c1d716003dec7b6bb5486565320bbb495181e08244cce6406c9e0a4445230645",
+    "crates/xgen-adapter-process/src/verifier.rs": "a34f8489032cea46d6b378fde7544e7763c870fd0debb72118595a38c8635ece",
+    "crates/xgen-adapter-process/src/web_search.rs": "9594d4eef34e08daebefc7e96bb78a3b4b7fff4c32e3c11cf2d81539a7a5bf3a",
+    "crates/xgen-adapter-reference/src/lib.rs": "3c17de08889cc96566ae2edab677142a828bdb0d31948ccafa3558df3879d862",
+    "crates/xgen-adapter-reference/tests/public_contract.rs": "c22271bb52fe962c0c3fcb766e40829806d488a408d8cf389fde580a9d083278",
+    "crates/xgen-cli/build.rs": "36d2bd3aad98af4f26d5cd1e621358a563fcab96488887ac71ff2dcb67c738dd",
+    "crates/xgen-cli/examples/planning_boundary_probe/main.rs": "2c5825680924ecb26ebcb3012aeadb9fd3f543b4b689f54b1bc67bc906387c17",
+    "crates/xgen-cli/examples/planning_model_pilot.rs": "5426155c716ef5e5214d590d26e76f9b23f2c7fb454074ee20abb78d97f1dd2d",
+    "crates/xgen-cli/src/allow_file.rs": "e3f057a6e4305647d6232e5992379c813c3a7f6237cf63a5541d17230d36c271",
+    "crates/xgen-cli/src/allow_path.rs": "f8d9f218cb1ffde46c1322f7db722157743b498b7b78336f58f137518080b092",
+    "crates/xgen-cli/src/allow_process.rs": "b216237de5528b080cd34d46c7d3156f7b9b1c4233e0d4d6ddbb79f3f1706f48",
+    "crates/xgen-cli/src/composition.rs": "7653dc829df085eb5160ea9c5402a8c9771ec389015965294e92c3f822f29b31",
+    "crates/xgen-cli/src/driver.rs": "bf82648d6bc1fa5f9034396451668edc1a4671db158501a4db42803eaa84168f",
+    "crates/xgen-cli/src/environment.rs": "3d4891ecec3eeb009c8a3c8f252324a9ae5f47e3a62ed22b99618a393c1d3a4a",
+    "crates/xgen-cli/src/final_response.rs": "56f426f911653d6371d085cbf56dbd5988bc508c3580df20b3a6588601cd939a",
+    "crates/xgen-cli/src/lib.rs": "cf758cae713c250df804f4cbbbc158c6a2ac73f56bcf530b053bfd44006cc192",
+    "crates/xgen-cli/src/main.rs": "6db80da92289e6a658b6b11c56b00a38a7a93c3ddb6c4cddc486d11679ee84c3",
+    "crates/xgen-cli/src/manifest.rs": "4fe33ab74235e2fa52b59c64546dc16a39b60ca79a3aad1d3f3b3c24ec622b94",
+    "crates/xgen-cli/src/material_catalog.rs": "0ecc7e72000a1cabe0cfa5a4df3a87997c3c18e8c9869fd061d34756f1b621d2",
+    "crates/xgen-cli/src/model_profile.rs": "989f7d4d35d42ca4d3f38a873c41cb3258a73e433e44801ecb779b1f353ac13c",
+    "crates/xgen-cli/src/repl.rs": "caec7b8a26bbb86558308672b273ec48c2b783acbff02d18b3145baf8960c788",
+    "crates/xgen-cli/src/run_layout.rs": "f1f2e7dac9b0c7cac2c270090cdbfa8fb73b4cc05f94cc81504ff16593c78e3e",
+    "crates/xgen-cli/src/usage.rs": "f14390cec7b5d3f64d2edb4226343dafd9b6645089c2560dd8b4939cd640b9ae",
+    "crates/xgen-cli/tests/durable_driver.rs": "04cd46864eef955a707f5bc403154834498671c325b631cf7c6061b105a31cb2",
+    "crates/xgen-cli/tests/environment_onboarding.rs": "5261845833e280ed40839cd4f183bdfe01ccb19b371e40691435a619101518ad",
+    "crates/xgen-cli/tests/interactive_repl.rs": "9705625bdeec9b5c1271fe65ebfaac6b234301328f69104a6ca835cbd407b8de",
+    "crates/xgen-cli/tests/live_go50902_public.rs": "feffaa9957f91b214c467e8b0c3d73da2c0494a618349917977f8badb0ba4858",
+    "crates/xgen-cli/tests/model_profiles.rs": "58e2462451646efcb745443509d12d877ac6f642a6e8fea27b26863cc879219c",
+    "crates/xgen-cli/tests/protocol_check.rs": "2a6e9ecbeabe7112464a2dd64ada8b1c513277048d969879022f14942ac83473",
+    "crates/xgen-cli/tests/public_run_resume.rs": "0af34b0e087a48284a2ebf7d649b41e8a2dc2b3758a972f48599f4aaf0bf33d6",
+    "crates/xgen-cli/tests/workspace_discovery.rs": "aaf94450b65b52a6f219bd3827d54209b51b4c790d3514c4b6b511292a3b42e0",
+    "crates/xgen-domain/src/capability.rs": "c4fb1c1b4a3fae3eef9c5c4d8905ffa87731c8ce6af5d9b407068535f8d702f3",
+    "crates/xgen-domain/src/common.rs": "7374007be1d5d86346e6680bade5a00ddad75c481c0ed388bdefe77fe7c34c25",
+    "crates/xgen-domain/src/execution.rs": "a3ee19058d1c3f1d700075d8e97837d6211846ddda3b856c95c38d3efb2cab4b",
+    "crates/xgen-domain/src/journal.rs": "36eadca67839a01ba1e7f228b729bf5af7a6b334a81bf9ae9185ae3f53dd6aab",
+    "crates/xgen-domain/src/lib.rs": "f90da7b7208d5c5bcff65f55a863422540faa56a2a7ae1dfde05cbf3b4f0cca8",
+    "crates/xgen-domain/src/policy.rs": "484e57960fb79358871068e0092d7c87ff3ed439d3a83540c1c35ac6a70133c6",
+    "crates/xgen-domain/src/work_graph.rs": "90862a05c053f6444d2e6cd7b3c198c4dde3df2d09828c76019dd602fa3eeba4",
+    "crates/xgen-domain/tests/wire_contract.rs": "b1415263fdb07a4494339970e338dba28632d4779265a952faaed3fdb255cfb4",
+    "crates/xgen-local-store/src/lib.rs": "ef9b067da244f71c3f69c5f1cebaa0447adb70582d440dc0ff573d2c8911de64",
+    "crates/xgen-local-store/src/memory.rs": "a56e853073cca7a6411a8efa713223165e35ce8c4a85edd56baf2c5a38a16ee6",
+    "crates/xgen-local-store/src/sqlite.rs": "8d2e0442d7b33ea5fb44de87b9157e745ac0584bbf454b991aae4ee482f95aa2",
+    "crates/xgen-policy/src/broker.rs": "de2d0a2ceffce9b3bc836f8e9197c3f2eb80b6025237052f57c1f223f5b1c20e",
+    "crates/xgen-policy/src/lib.rs": "65dc582367b8410bebdb8ca68eee5f33022e3fc1c4a940fc666fd4fa29a1dc2e",
+    "crates/xgen-policy/src/resolution.rs": "9839004c8fa24b15f4355dc660f069cdfd0beb0147ccae63fb4f625d83da3d3f",
+    "crates/xgen-policy/tests/permission_broker.rs": "4f9657c8069463c8b0be251ce9047d9f297eb823cb51270ed6faba8ba4c2b1a1",
+    "crates/xgen-protocol/src/assets.rs": "b2dc3ff3148df56fd9a44283e987b9ce540ddf2d74c27e42514b82c3cea4b473",
+    "crates/xgen-protocol/src/lib.rs": "daad83f5a1b81758ef5a4e923385fc5e50cdef2088f7e6b801155bfc7e6ce53f",
+    "crates/xgen-provider-openai/src/completion.rs": "6d71dc1d8311cbce5b5022c5311314a1e28429c6b36587438ec8da7dc39c114f",
+    "crates/xgen-provider-openai/src/lib.rs": "38941c16044b94641e8385a58fcd6b783965479bebde224b296d526d11dd7fcc",
+    "crates/xgen-provider-openai/src/usage.rs": "14a90b040c8264ad3832b6c2c99430a2e3fd093b9db2c481707e720aa0bafc73",
+    "crates/xgen-provider-openai/tests/http_contract.rs": "87ffa89659d5eba6a67e493b0b15ee9bdf6f03e6da149aa6fdf9e5652f30e865",
+    "crates/xgen-runtime/src/admission.rs": "37821b927586dd83ff0d541e8c1b1a71d88cbe329b9a6ef6a944698e5c2175f4",
+    "crates/xgen-runtime/src/agent_loop.rs": "bc2cb047ddc123ddfd88ff016f351d8dbdad5a3787f2fa6f6e992a77e9380082",
+    "crates/xgen-runtime/src/executor.rs": "1fd3036aa808640e11c4a46c08c444e275d6d920f4a03bfbd7a40d72af37a13e",
+    "crates/xgen-runtime/src/frontier.rs": "c2224e62677956ccbf355e80b0696bd08a87e6e02dfd451852c0d4431327db4d",
+    "crates/xgen-runtime/src/invocation_diagnostic.rs": "4942b18c1560b9dac235270d8101b07b39a4b202e6d9abb2f6b5cc65eacf2612",
+    "crates/xgen-runtime/src/lease.rs": "a6c5eda4afbba6df4a43bcf35a959b510feb0b5047425ee4b21f9728aa3f8b5e",
+    "crates/xgen-runtime/src/lib.rs": "b184981fbfc843241a2f8463ee341c531dd163a0c8f9a00a79d5b98feb0b441e",
+    "crates/xgen-runtime/src/material.rs": "9251be3037bc9b595a0b7ccd10b142250cdd8c500ffb0a08b0c3136d0f683246",
+    "crates/xgen-runtime/src/registry.rs": "73c1e3d683b653e535d94c01ac572e8fe221af8c90f5d24eaab478386aa780ee",
+    "crates/xgen-runtime/src/router.rs": "28cdc24d8ed6fdb0711e146be80bfe6e2ef574837bb2ae38e9dc9c5bfb484cae",
+    "crates/xgen-runtime/src/runtime.rs": "9167d7bf2a8a0ed71cd7b43b094697fcf35aeb0b3641c0e31ce93102cb3469dd",
+    "crates/xgen-runtime/src/runtime_tests.rs": "8952aab76893e2f6354c0e33ebfcca26d74b8ce9900e8e59c641468c85a72db5",
+    "crates/xgen-runtime/src/verification.rs": "0fcb3754b97deb9b939877245ddbf77d6496987f2291f11f7186334d9461869c",
+    "crates/xgen-runtime/tests/capability_registry.rs": "24629b799ae38030a92fb8effcb8bf64e0341403857a366bb1da329bb7d68e13",
+    "crates/xgen-runtime/tests/deterministic_router.rs": "31c04b616637bea0b340b1df3dc96f95e27127aa177774bbd57e42106b0a740c",
+    "crates/xgen-runtime/tests/direct_executor.rs": "d8d2f3f8b7e1691e8ecdc4bb58e40a3c9613dfb6d7997cbb31183d617c8c1cf8",
+    "crates/xgen-runtime/tests/durable_agent_loop.rs": "408e2dee53d5d6a4c30ce39466d2086fe1c3a3697062665d497d3891ccd26a97",
+    "crates/xgen-runtime/tests/invocation_admission.rs": "aba2fb7ff9cd9169d3d806cf36d75f11b6a77d18fd7b0b7e74a70198d7243d2f",
+    "crates/xgen-runtime/tests/persistent_workgraph.rs": "c0796d8647377b81519ec4bbcc293f76f7aad6d6a84f63c8f944021fc803c8fe",
+    "crates/xgen-runtime/tests/verification_artifacts.rs": "e4dbbbe97ab05b1d21c8ac5e1ff86582c9596fa14563e06e4e6713e679744d29",
+    "crates/xgen-workgraph/src/lib.rs": "8317027f10b6994945578955860d9a6392e8c0d63d2c79ba92e91135e6e793e3",
+    "crates/xgen-workgraph/tests/durable_model_call.rs": "173f2fcce66ea4275da7983574a755487e9cb0396c07e9c0cdafc99454645ebf",
+    "crates/xgen-workgraph/tests/durable_plan.rs": "a3d326fffae516d0b148e9de3d5a5ae439408b17ccb5ed2e9552002fa72069d7",
+    "crates/xgen-workgraph/tests/persistent_frontier.rs": "212c78ecfd3e3eb205337e06bf5a226c6add422b4b00b38043c0fe8dc2aad264",
+    "crates/xgen-adapter-filesystem/Cargo.toml": "494b06553f654c3f3c0a16cf1100c6524c8dab53aacc0c61a15796432cf38750",
+    "crates/xgen-adapter-process/Cargo.toml": "f1fe9f00f880c1e8ba91072d84b701c33574be7e30d52678c72b05fc4e1293eb",
+    "crates/xgen-adapter-reference/Cargo.toml": "7645baf3c7d794127c463462097ed5631c78f79671087cf4dbfabc7012f81d96",
+    "crates/xgen-cli/Cargo.toml": "cb0a0e3c2da21cd0ce5295030dfc679404da3e236dd47dbdbb89df9929f8d8a5",
+    "crates/xgen-domain/Cargo.toml": "d5a153bff289072a8e523d8922e8d830cbd2935f431a0a11d0830cbae92c02fd",
+    "crates/xgen-local-store/Cargo.toml": "bb1abd7bbb91673091e7e8766a38453824340edb4e51d15417831dfbe721dd6e",
+    "crates/xgen-policy/Cargo.toml": "ff3d8fa545b2d9dc1aa829e93f9f0610a20ec63660151e57d048a780a197451e",
+    "crates/xgen-protocol/Cargo.toml": "9a9c66b1959762a1da4b90f17d1863e50dbde9b8327c2e2fcde8848661ec127a",
+    "crates/xgen-provider-openai/Cargo.toml": "6fdfe3dd4f2fbee2cdb77655c94ff94381228cd9cf0cbdc092b01a4c72892bbb",
+    "crates/xgen-runtime/Cargo.toml": "f5a450500e19676c2362cd5f002ee2c9d6e43613489b26d85fbb10de29a8cbe0",
+    "crates/xgen-workgraph/Cargo.toml": "098a30e8194c7ba0197598a9a267e615e566bf92515b1d085aea580b093b2400"
+  },
+  "binary_sha256": "75cd3933f916a4e3d1eb29e94fafa73f3b8112cdc90c91766b930c4dc1c7ee69",
+  "executables": {
+    "python3": {
+      "path": "/usr/bin/python3.12",
+      "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+    }
+  },
+  "process_path": "/usr/bin:/bin",
+  "upstream": "https://api.deepseek.com/v1",
+  "schedule": [
+    {
+      "case": "design-utf8-prefix-offsets",
+      "repeat": 1,
+      "condition": "C1"
+    },
+    {
+      "case": "design-utf8-prefix-offsets",
+      "repeat": 1,
+      "condition": "C0"
+    },
+    {
+      "case": "validation-ascii-edge-trim",
+      "repeat": 1,
+      "condition": "C0"
+    },
+    {
+      "case": "validation-ascii-edge-trim",
+      "repeat": 1,
+      "condition": "C1"
+    },
+    {
+      "case": "validation-bounded-clamp",
+      "repeat": 0,
+      "condition": "C1"
+    },
+    {
+      "case": "validation-bounded-clamp",
+      "repeat": 0,
+      "condition": "C0"
+    },
+    {
+      "case": "design-parity-partition",
+      "repeat": 1,
+      "condition": "C0"
+    },
+    {
+      "case": "design-parity-partition",
+      "repeat": 1,
+      "condition": "C1"
+    },
+    {
+      "case": "design-utf8-prefix-offsets",
+      "repeat": 0,
+      "condition": "C1"
+    },
+    {
+      "case": "design-utf8-prefix-offsets",
+      "repeat": 0,
+      "condition": "C0"
+    },
+    {
+      "case": "validation-ascii-edge-trim",
+      "repeat": 0,
+      "condition": "C0"
+    },
+    {
+      "case": "validation-ascii-edge-trim",
+      "repeat": 0,
+      "condition": "C1"
+    },
+    {
+      "case": "validation-bounded-clamp",
+      "repeat": 1,
+      "condition": "C1"
+    },
+    {
+      "case": "validation-bounded-clamp",
+      "repeat": 1,
+      "condition": "C0"
+    },
+    {
+      "case": "design-parity-partition",
+      "repeat": 0,
+      "condition": "C0"
+    },
+    {
+      "case": "design-parity-partition",
+      "repeat": 0,
+      "condition": "C1"
+    }
+  ],
+  "trials": 16,
+  "design_instances": 2,
+  "independent_validation_instances": 2,
+  "conditions": {
+    "C0": "Schema and Receipt projection; same task instructions and verifier executable; completion checks not enforced",
+    "C1": "Same task instructions/tools/budgets; host completion checks required, including additional provider contract prompt"
+  },
+  "metrics": [
+    "task_success independent oracle and preserved scope",
+    "reported_completion",
+    "false_completion",
+    "accepted",
+    "failed_check_then_passed with task oracle correct",
+    "gate_rejections",
+    "model_calls",
+    "quoted_model_cost all trials"
+  ],
+  "safety_gates": {
+    "complete_unchanged_schedule": true,
+    "unknown_requests": 0,
+    "duplicate_effect_starts": 0,
+    "stable_response_identity": true,
+    "journal_binding_audit": true
+  },
+  "decision": "Descriptive pilot only. No significance/noninferiority claim. Zero C1 false completion is necessary but not sufficient for default adoption. Distinguish admission filtering from task repair; prompt+enforcement bundle cannot identify pure prompt-independent planning effect. No hidden retry; reject candidate terminates this invocation.",
+  "pricing_snapshot": {
+    "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "sha256": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2"
+  },
+  "followup_reason": "Initial registered 24 trials retained unchanged: 22 stopped before gate, chiefly existing-output expectedDigest=null. New task instances and explicit output lifecycle, identical in both arms; absent initial output. Descriptive new phase, not reruns or pooled improvement evidence.",
+  "combined_cost_cap_nano_usd": 500000000,
+  "initial_cost_nano_usd": 17320320
+}

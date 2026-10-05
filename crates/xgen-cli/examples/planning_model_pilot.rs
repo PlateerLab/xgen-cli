@@ -37,13 +37,15 @@ struct TrialConfig {
     allow_executables: Vec<String>,
     #[serde(default)]
     final_response_schema: Option<serde_json::Value>,
+    #[serde(default)]
+    completion_checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let config: TrialConfig = serde_json::from_slice(&std::fs::read(&args.config)?)?;
     let limit = match args.condition.as_str() {
-        "X0" => None,
+        "X0" | "C0" | "C1" => None,
         "X1" => Some(EvaluationProposalStepLimit::One),
         "XN" => Some(EvaluationProposalStepLimit::Four),
         _ => return Err("unknown condition".into()),
@@ -72,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     request.allow_execute = !request.allow_executables.is_empty();
     request.max_model_turns = Some(config.max_model_turns);
     request.final_response_schema = config.final_response_schema;
+    request.completion_checks = config.completion_checks;
     request.max_ticks = config.max_ticks;
     let result = run_local_with_evaluation_profile(
         request,

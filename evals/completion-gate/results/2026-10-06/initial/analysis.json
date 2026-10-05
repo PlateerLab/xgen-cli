@@ -1,0 +1,393 @@
+{
+  "paired_blocks": [
+    {
+      "case": "design-prefix-balances",
+      "repeat": 0,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 11718
+    },
+    {
+      "case": "design-prefix-balances",
+      "repeat": 1,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": -5448
+    },
+    {
+      "case": "design-prefix-balances",
+      "repeat": 2,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 9918
+    },
+    {
+      "case": "design-utf8-token-lengths",
+      "repeat": 0,
+      "C0_accepted": true,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": -3,
+      "cost_C1_minus_C0_nano_usd": -924036
+    },
+    {
+      "case": "design-utf8-token-lengths",
+      "repeat": 1,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 10668
+    },
+    {
+      "case": "design-utf8-token-lengths",
+      "repeat": 2,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 805590
+    },
+    {
+      "case": "validation-adjacent-deltas",
+      "repeat": 0,
+      "C0_accepted": true,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": -3,
+      "cost_C1_minus_C0_nano_usd": -937152
+    },
+    {
+      "case": "validation-adjacent-deltas",
+      "repeat": 1,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 15468
+    },
+    {
+      "case": "validation-adjacent-deltas",
+      "repeat": 2,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": 29118
+    },
+    {
+      "case": "validation-codepoint-segments",
+      "repeat": 0,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": -4248
+    },
+    {
+      "case": "validation-codepoint-segments",
+      "repeat": 1,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": -12798
+    },
+    {
+      "case": "validation-codepoint-segments",
+      "repeat": 2,
+      "C0_accepted": false,
+      "C1_accepted": false,
+      "calls_C1_minus_C0": 0,
+      "cost_C1_minus_C0_nano_usd": -798
+    }
+  ],
+  "checks": {
+    "registered_sources_match": true,
+    "registered_inputs_match": true,
+    "schedule_matches_registration": true,
+    "source_unchanged": true,
+    "binary_matches_registration": true,
+    "independent_cost_audit": true,
+    "no_duplicate_effect_starts": true,
+    "relational_authorization_and_receipts": true,
+    "no_evidence_errors": true
+  },
+  "audit_passed": true,
+  "groups": {
+    "all/C0": {
+      "trials": 12,
+      "task_success": 2,
+      "accepted": 2,
+      "reported_completion": 2,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 2,
+      "gate_rejections": {},
+      "model_calls": 42,
+      "cost_nano_usd": 9161160,
+      "median_elapsed_seconds": 4.091346442990471
+    },
+    "design/C0": {
+      "trials": 6,
+      "task_success": 1,
+      "accepted": 1,
+      "reported_completion": 1,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 1,
+      "gate_rejections": {},
+      "model_calls": 21,
+      "cost_nano_usd": 4619514,
+      "median_elapsed_seconds": 4.144397903000936
+    },
+    "validation/C0": {
+      "trials": 6,
+      "task_success": 1,
+      "accepted": 1,
+      "reported_completion": 1,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 1,
+      "gate_rejections": {},
+      "model_calls": 21,
+      "cost_nano_usd": 4541646,
+      "median_elapsed_seconds": 3.9429503754363395
+    },
+    "all/C1": {
+      "trials": 12,
+      "task_success": 0,
+      "accepted": 0,
+      "reported_completion": 0,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 0,
+      "gate_rejections": {},
+      "model_calls": 36,
+      "cost_nano_usd": 8159160,
+      "median_elapsed_seconds": 4.127025828522164
+    },
+    "design/C1": {
+      "trials": 6,
+      "task_success": 0,
+      "accepted": 0,
+      "reported_completion": 0,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 0,
+      "gate_rejections": {},
+      "model_calls": 18,
+      "cost_nano_usd": 4527924,
+      "median_elapsed_seconds": 4.221484516514465
+    },
+    "validation/C1": {
+      "trials": 6,
+      "task_success": 0,
+      "accepted": 0,
+      "reported_completion": 0,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 0,
+      "gate_rejections": {},
+      "model_calls": 18,
+      "cost_nano_usd": 3631236,
+      "median_elapsed_seconds": 4.076197658025194
+    }
+  },
+  "cost_audit": {
+    "passed": true,
+    "errors": [],
+    "upstream_attempts": 78,
+    "settlements": 78,
+    "known_cost_nano_usd": 17320320,
+    "all_miss_nano_usd": 89856000,
+    "http_statuses": {
+      "200": 78
+    },
+    "scope": "recomputed registered quote from retained usage; no provider invoice reconciliation"
+  },
+  "journal_audits": [
+    {
+      "trial": "0000-design-utf8-token-lengths-2-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0001-design-utf8-token-lengths-2-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0002-design-utf8-token-lengths-1-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0003-design-utf8-token-lengths-1-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0004-design-prefix-balances-1-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0005-design-prefix-balances-1-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0006-design-prefix-balances-0-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0007-design-prefix-balances-0-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0008-validation-codepoint-segments-1-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0009-validation-codepoint-segments-1-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0010-design-utf8-token-lengths-0-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0011-design-utf8-token-lengths-0-C0",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0012-design-prefix-balances-2-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0013-design-prefix-balances-2-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0014-validation-adjacent-deltas-0-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0015-validation-adjacent-deltas-0-C0",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0016-validation-codepoint-segments-0-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0017-validation-codepoint-segments-0-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0018-validation-adjacent-deltas-1-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0019-validation-adjacent-deltas-1-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0020-validation-adjacent-deltas-2-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0021-validation-adjacent-deltas-2-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0022-validation-codepoint-segments-2-C1",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0023-validation-codepoint-segments-2-C0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    }
+  ],
+  "interpretation": "Descriptive paired prompt+gate bundle pilot. Failed effects require prior authorization and retained material, durable failure with matching step, and absence of successful output/Receipt. Failure evidence digest contents and journal hashes are not independently recomputed. No default-adoption or statistical-significance claim."
+}

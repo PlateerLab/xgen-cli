@@ -1,0 +1,30 @@
+[
+  {
+    "case": "design-prefix-balances",
+    "initial_checker_failed": true,
+    "initial_oracle_failed": true,
+    "reference_checker_passed": true,
+    "reference_independent_oracle_passed": true
+  },
+  {
+    "case": "validation-adjacent-deltas",
+    "initial_checker_failed": true,
+    "initial_oracle_failed": true,
+    "reference_checker_passed": true,
+    "reference_independent_oracle_passed": true
+  },
+  {
+    "case": "design-utf8-token-lengths",
+    "initial_checker_failed": true,
+    "initial_oracle_failed": true,
+    "reference_checker_passed": true,
+    "reference_independent_oracle_passed": true
+  },
+  {
+    "case": "validation-codepoint-segments",
+    "initial_checker_failed": true,
+    "initial_oracle_failed": true,
+    "reference_checker_passed": true,
+    "reference_independent_oracle_passed": true
+  }
+]

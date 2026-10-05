@@ -1,0 +1,47 @@
+{
+  "model": "deepseek-flash",
+  "tokenizer": "DeepSeek-V4.1-Flash/provider-reported",
+  "response_format": "json_object",
+  "thinking": "disabled",
+  "max_output_tokens": 4096,
+  "request_timeout_seconds": 60,
+  "max_model_turns": 24,
+  "max_ticks": 512,
+  "max_input_tokens": 1048576,
+  "trial_timeout_seconds": 300,
+  "spend_cap_nano_usd": 500000000,
+  "seed": 202610061,
+  "repeats": 3,
+  "quote": {
+    "kind": "fixed_tier",
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/ (UTC 10:00-24:00 off-peak; 2026-10-05 snapshot)",
+    "valid_from_utc": "2026-10-05T10:00:00Z",
+    "valid_until_utc": "2026-10-06T00:00:00Z",
+    "cached_micro_usd_per_million": 3000,
+    "input_micro_usd_per_million": 150000,
+    "output_micro_usd_per_million": 600000
+  },
+  "expected_response_identity": [
+    "deepseek-flash",
+    "aeb56401ca74e127821c4f9126dcb669"
+  ],
+  "final_response_schema": {
+    "type": "object",
+    "properties": {
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "completed"
+        ]
+      }
+    },
+    "required": [
+      "outcome"
+    ],
+    "additionalProperties": false
+  },
+  "conditions": [
+    "C0",
+    "C1"
+  ]
+}
