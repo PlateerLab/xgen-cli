@@ -150,7 +150,7 @@ class HttpCliTests(unittest.TestCase):
 
     @staticmethod
     def plan(key,capability,args):
-        return {"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Read connected API","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"1.0.0"},"arguments":args}]}
+        return {"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Read connected API","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"2.0.0" if capability=="xgen.tools/describe" else "1.0.0"},"arguments":args}]}
 
     @staticmethod
     def context(payload):

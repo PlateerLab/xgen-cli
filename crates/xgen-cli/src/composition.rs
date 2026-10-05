@@ -2904,7 +2904,7 @@ fn discovery_specs(
             let (definition, mut instance) = filesystem_spec(
                 fixture,
                 operation,
-                graph_discovery::VERSION,
+                graph_discovery::version(operation),
                 &format!(
                     "local.tools.{}.builtin.v1",
                     operation
@@ -3237,7 +3237,8 @@ impl ExplicitLocalApproval {
                 graph_discovery::SCOPE
             };
             let exact = request.run_id() == self.run_id
-                && request.capability().contract_version == graph_discovery::VERSION
+                && request.capability().contract_version
+                    == graph_discovery::version(&request.capability().capability_id)
                 && request.effect_class() == EffectClass::ReadOnly
                 && request.requested_lifetime() == GrantLifetime::Once
                 && request.requested_scopes() == [scope]

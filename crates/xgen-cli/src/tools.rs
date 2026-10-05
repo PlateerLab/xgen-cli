@@ -64,6 +64,11 @@ pub enum ToolsCommand {
         #[arg(long)]
         name: String,
         tool: String,
+        /// Emit the bounded agent view instead of the complete normalized contract.
+        #[arg(long)]
+        model_view: bool,
+        #[arg(long, requires = "model_view", default_value_t = 0)]
+        parameter_offset: u32,
     },
 }
 
@@ -151,11 +156,16 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
             }
             json!({"operation": "search", "name": name, "query": query, "top_k": top_k})
         }
-        ToolsCommand::Describe { name, tool } => {
+        ToolsCommand::Describe {
+            name,
+            tool,
+            model_view,
+            parameter_offset,
+        } => {
             if tool.is_empty() || tool.len() > 1024 {
                 return Err("invalid_tool");
             }
-            json!({"operation": "describe", "name": name, "tool": tool})
+            json!({"operation": if model_view {"describe_view"} else {"describe"}, "name": name, "tool": tool, "parameter_offset":parameter_offset})
         }
     };
     if let Some(name) = value.get("name").and_then(Value::as_str)

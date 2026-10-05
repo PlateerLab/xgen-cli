@@ -1141,7 +1141,7 @@ fn plan_response(key: &str, objective: &str, capability_id: &str, arguments: &Va
             "dependsOn": [],
             "capability": {
                 "capabilityId": capability_id,
-                "contractVersion": "1.0.0"
+                "contractVersion": if capability_id == "xgen.tools/describe" { "2.0.0" } else { "1.0.0" }
             },
             "arguments": arguments
         }],
@@ -1351,7 +1351,7 @@ else:
   if r['operation']=='search': out.update(candidates=[dict(tool=row['tool'],description='Read one record',score=1.0)],possible_producers=[],omitted_producers=0,relations_verified_by_execution=False)
   else:
    assert r['tool']==row['tool']
-   out.update(tool=dict(name=row['tool'],parameters=[dict(name=row['parameter'],type='string',required=True)],metadata=dict(api_contract=dict(method='get',path='/records/{id}'))),contract_kind='discovery_candidate',effect_class='unclassified')
+   out.update(tool=dict(name=row['tool'],parameters=[dict(index=0,name=dict(text=row['parameter'],omitted=False),schema=dict(type='string'),schema_digest='b'*64,complete=True,required=True)],metadata=dict(api_contract=dict(method='get',path='/records/{id}'))),contract_kind='discovery_view',effect_class='unclassified',view_version=2,complete=False,full_tool_digest='c'*64,parameter_page=dict(offset=0,total=1,next_offset=None),http_read=dict(supported=False,error='http_original_source_unavailable'))
 print(json.dumps(out))
 ").unwrap();
     fs::set_permissions(worker, fs::Permissions::from_mode(0o700)).unwrap();
@@ -1455,7 +1455,10 @@ fn tool_discovery_is_approved_receipted_and_frozen_across_resume() {
         let final_context = planning_context(&requests[2]);
         let described = tool_output(&final_context, "xgen.tools/describe");
         assert_eq!(described["tool"]["name"], target);
-        assert_eq!(described["tool"]["parameters"][0]["name"], parameter);
+        assert_eq!(
+            described["tool"]["parameters"][0]["name"]["text"],
+            parameter
+        );
         assert_eq!(described["execution_enabled"], false);
         assert_eq!(described["artifact_digest"], "a".repeat(64));
         assert!(!capability_ids(&final_context).contains(&target));
@@ -1468,7 +1471,7 @@ fn tool_discovery_is_approved_receipted_and_frozen_across_resume() {
         assert_eq!(store.load_execution_receipts().unwrap().len(), 2);
         assert_eq!(
             fs::read_to_string(state.join("tool-collections/invocations")).unwrap(),
-            "search\ndescribe\n"
+            "search\ndescribe_view\n"
         );
         let manifest: Value = serde_json::from_slice(
             &fs::read(state.join("runs").join(run_id).join("manifest.json")).unwrap(),

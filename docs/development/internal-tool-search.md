@@ -31,7 +31,7 @@ Run과 같은 OS별·legacy 호환 state root 아래 `tool-collections`에 저�
 
 실행을 연결할 때는 기존 `CapabilityDefinition`에 정확한 입력·출력·효과·검증 계약을 등록하고, `CapabilityInstance`에 adapter·target·auth reference를 연결한다. 스키마·효과·검증 의미가 같을 때만 같은 Capability ID를 공유한다. 외부 annotation으로 읽기 전용이나 승인을 추정하지 않는다. 발견 결과의 digest를 Run의 계약과 묶고 실행 직전에 재검증한다. 이 admission·실행 매핑은 아직 구현하지 않았다.
 
-`search`는 상위 후보 1–20개와 최대 한 hop의 가능한 producer 도구를 반환한다. producer 표시는 최대 40개이고 나머지 개수를 명시한다. producer 관계는 실행으로 검증된 순서가 아니며 후보 포함이 실제 사용 가능성·권한을 증명하지 않는다. 후보 전체 스키마는 `describe`로 별도 조회한다.
+`search`는 상위 후보 1–20개와 최대 한 hop의 가능한 producer 도구를 반환한다. producer 표시는 최대 40개이고 나머지 개수를 명시한다. producer 관계는 실행으로 검증된 순서가 아니며 후보 포함이 실제 사용 가능성·권한을 증명하지 않는다. CLI 기본 `describe`는 후보 전체 스키마를 반환하고 agent describe는 제한된 view를 반환한다.
 
 ## 화면 관찰 계약: 설계
 
@@ -97,7 +97,7 @@ Python 검사는 별도 pinned 환경이 없으면 library 검사를 skip하며,
 workspace discovery Run(`--allow-dir`, 대화형 기본 경로)은 저장된 collection을 자동으로 찾는다. collection이 없으면 기존 로컬 도구 경로를 그대로 사용한다. 시작 시 최대 16개 collection 이름과 artifact digest를 Run manifest에 고정한다. 전체 외부 도구 목록을 컨텍스트에 넣지 않고 다음 두 built-in CapabilityDefinition/Instance를 등록한다.
 
 - `xgen.tools/search`: `{collection, query, topK}` → 상위 후보와 가능한 producer.
-- `xgen.tools/describe`: `{collection, tool}` → 정확한 후보의 parameters·원본 API 계약.
+- `xgen.tools/describe@2.0.0`: `{collection, tool, parameterOffset?}` → 제한된 선택 view·입력 페이지·전체 후보/HTTP 계약 digest. CLI 기본 describe는 전체 계약을 유지한다. [생략 표시·실행 분리·버전 이행](bounded-tool-describe.md)을 따른다.
 
 예시:
 

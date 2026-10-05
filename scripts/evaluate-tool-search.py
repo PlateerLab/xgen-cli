@@ -64,8 +64,8 @@ def cli(binary,state,*args,check=True):
 
 def freeze(binary,output):
     output.mkdir(mode=0o700,parents=True,exist_ok=False)
-    config={'format_version':1,'backend':'graph-tool-call','backend_version':'0.46.0','top_k':5,'repeats':3,
-        'source_files':{str(p.relative_to(ROOT)):sha(p) for p in [Path(__file__),FIXTURES/'cases.json',FIXTURES/'sources.json',ROOT/'docs/development/tool-search-evaluation-plan.md',ROOT/'crates/xgen-cli/src/tool_graph_worker.py',ROOT/'scripts/evaluate-planning-model.py']},
+    config={'format_version':2,'describe_condition':'bounded_view_v2_vs_cli_model_view','case_role':'previously_observed_design_regression','backend':'graph-tool-call','backend_version':'0.46.0','top_k':5,'repeats':3,
+        'source_files':{str(p.relative_to(ROOT)):sha(p) for p in [Path(__file__),FIXTURES/'cases.json',FIXTURES/'sources.json',ROOT/'docs/development/tool-search-evaluation-plan.md',ROOT/'docs/development/bounded-tool-describe-plan.md',ROOT/'crates/xgen-cli/src/tool_graph_worker.py',ROOT/'scripts/tests/test_bounded_tool_describe.py',ROOT/'scripts/evaluate-planning-model.py']},
         'binary_sha256':sha(binary),'live':{'model':'deepseek-flash','response_format':'json_object','thinking':'disabled','temperature':0,'max_calls':96,'max_request_bytes':7168,'max_input_tokens':8192,'max_output_tokens':512,'request_timeout_seconds':60,'spend_cap_nano_usd':200_000_000,
             'quote':{'kind':'upper_bound','source':'https://api-docs.deepseek.com/quick_start/pricing/','valid_from_utc':datetime.now(timezone.utc).isoformat(),'valid_until_utc':(datetime.now(timezone.utc)+timedelta(days=1)).isoformat(),'cached_micro_usd_per_million':300_000,'input_micro_usd_per_million':300_000,'output_micro_usd_per_million':1_200_000}}}
     write(output/'registration.json',config)
@@ -96,7 +96,7 @@ def agent_observation(binary,state,workspace,case):
     requests=[]
     query=case['query'];collection=case['system']
     def plan(key,capability,arguments):
-        return {'formatVersion':1,'kind':'plan','summary':'','steps':[{'key':key,'objective':'Inspect available tool candidates','dependsOn':[],'capability':{'capabilityId':capability,'contractVersion':'1.0.0'},'arguments':arguments}]}
+        return {'formatVersion':1,'kind':'plan','summary':'','steps':[{'key':key,'objective':'Inspect available tool candidates','dependsOn':[],'capability':{'capabilityId':capability,'contractVersion':'2.0.0' if capability=='xgen.tools/describe' else '1.0.0'},'arguments':arguments}]}
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self,*args): pass
         def do_POST(self):
@@ -156,6 +156,7 @@ def evaluate(binary,output):
         first=observed[0];candidate=first['direct']['candidates'][0]['tool'] if first['direct']['candidates'] else None
         description=json.loads(cli(binary,state,'tools','describe','--name',name,candidate).stdout) if candidate else None
         agent=agent_observation(binary,state,workspace,case)
+        model_view=json.loads(cli(binary,state,'tools','describe','--model-view','--name',name,candidate).stdout) if candidate else None
         delivered=agent['observations'].get('xgen.tools/search');described=agent['observations'].get('xgen.tools/describe')
         direct_tool=graphs[name].tools[case['expected_tool']].to_dict()
         source=docs[name][1];operation=source['paths'][case['expected_path']][case['expected_method']]
@@ -167,8 +168,8 @@ def evaluate(binary,output):
             'direct':first['direct'],'direct_cli_equal':all(r['equal'] for r in observed),'stable':all(r['direct']==first['direct'] and r['wrapped']==first['wrapped'] for r in observed),
             'describe_equal':candidate is None or description['tool']==graphs[name].tools[candidate].to_dict(),
             'agent_search_equal':delivered is not None and all(delivered[k]==v for k,v in first['direct'].items()) and delivered['request']=={'collection':name,'query':case['query'],'topK':5},
-            'agent_describe_equal':candidate is None or (described is not None and described['tool']==description['tool'] and described['request']=={'collection':name,'tool':candidate}),
-            'agent_returncode':agent['returncode'],'fixture_model_requests':agent['fixture_model_requests'],
+            'agent_describe_equal':candidate is None or (described is not None and {k:v for k,v in described.items() if k!='request'}==model_view and described['request']=={'collection':name,'tool':candidate}),
+            'model_view_bytes':len(canonical(model_view)) if model_view else 0,'full_describe_bytes':len(canonical(description)) if description else 0,'full_tool_digest_matches':candidate is None or model_view['full_tool_digest']==hashlib.sha256(json.dumps(description['tool'],ensure_ascii=True,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest(),'http_contract_digest_matches':candidate is None or model_view['http_read'].get('contract_digest')==description['http_read'].get('contract_digest'),'agent_returncode':agent['returncode'],'fixture_model_requests':agent['fixture_model_requests'],
             'source_description_present':all(text.strip() in direct_tool['description'] for text in raw_text if text.strip()),'source_required_preserved':set(required)<=set(actual_required),
             'direct_timings':direct_samples,'cli_seconds':cli_samples,'agent_seconds':agent['elapsed_seconds']}
         rows.append(row);write(output/'rows.json',rows)
@@ -178,7 +179,7 @@ def evaluate(binary,output):
         for language in ('en','ko'):
             selected=[r for r in rows if r['system']==name and r['language']==language]
             groups[name+'-'+language]={'n':len(selected),'top1':sum(r['top1'] for r in selected),'top5':sum(r['top5'] for r in selected),'mrr5':statistics.mean(r['rr5'] for r in selected)}
-    summary={'backend_version':__version__,'registration_sha256':sha(output/'registration.json'),'cases':len(rows),'systems':systems,'groups':groups,
+    summary={'describe_condition':config['describe_condition'],'case_role':config['case_role'],'max_model_view_bytes':max(r['model_view_bytes'] for r in rows),'full_tool_digest_mismatches':sum(not r['full_tool_digest_matches'] for r in rows),'http_contract_digest_mismatches':sum(not r['http_contract_digest_matches'] for r in rows),'backend_version':__version__,'registration_sha256':sha(output/'registration.json'),'cases':len(rows),'systems':systems,'groups':groups,
         'direct_cli_mismatches':sum(not r['direct_cli_equal'] for r in rows),'describe_mismatches':sum(not r['describe_equal'] for r in rows),'agent_search_mismatches':sum(not r['agent_search_equal'] for r in rows),'agent_describe_mismatches':sum(not r['agent_describe_equal'] for r in rows),'agent_failures':sum(r['agent_returncode']!=0 for r in rows),'unstable_cases':sum(not r['stable'] for r in rows),'source_description_missing':sum(not r['source_description_present'] for r in rows),'source_required_missing':sum(not r['source_required_preserved'] for r in rows),
         'median_direct_search_seconds':statistics.median(t['search_seconds'] for r in rows for t in r['direct_timings']),'median_direct_load_search_seconds':statistics.median(t['load_and_search_seconds'] for r in rows for t in r['direct_timings']),'median_cli_seconds':statistics.median(t for r in rows for t in r['cli_seconds']),'live_model_calls':0,'business_api_calls':0}
     validate_registration(binary,output);write(output/'summary.json',summary)

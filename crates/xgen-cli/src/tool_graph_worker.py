@@ -162,11 +162,16 @@ def dispatch(request):
     if request.get("expected_digest") is not None and request["expected_digest"] != envelope["artifact_digest"]:
         raise WorkerError("collection_snapshot_changed")
     graph = graph_from_artifact(envelope["artifact"])
-    if operation == "describe":
+    if operation in ("describe", "describe_view", "execution_contract"):
         tool = graph.tools.get(request["tool"])
         if tool is None:
             raise WorkerError("tool_not_found")
         contract = http_read_contract(envelope["artifact"], tool.to_dict())
+        if operation == "execution_contract":
+            return {"ok": True, **summarize(envelope), "tool_name": tool.name,
+                    "http_read": contract, "contract_kind": "host_http_contract"}
+        if operation == "describe_view":
+            return describe_view(envelope, tool.to_dict(), contract, request.get("parameter_offset", 0))
         return {"ok": True, **summarize(envelope), "tool": tool.to_dict(), "http_read": contract,
                 "contract_kind": "discovery_candidate", "effect_class": "unclassified"}
     if operation == "search":
@@ -228,6 +233,84 @@ def check_http_schema(value):
         check_http_schema(value.get(key))
 
 
+# Presentation is a projection, never an executable contract. All digests refer to
+# full values under this worker's canonical JSON encoding, including omitted data.
+def preview(value, limit=512):
+    if not isinstance(value, str):
+        return {"text": "", "omitted": False}
+    raw = value.encode("utf-8")
+    return {"text": raw[:limit].decode("utf-8", errors="ignore"), "omitted": len(raw) > limit}
+
+
+def schema_view(schema):
+    # Small schemas are complete. Large schemas are explicitly opaque references;
+    # the host validates the entire original schema even when this view omits it.
+    encoded = canonical(schema)
+    if len(encoded) <= 512:
+        return {"schema": schema, "schema_digest": digest(schema), "complete": True}
+    result = {"schema_digest": digest(schema), "complete": False, "schema_bytes": len(encoded)}
+    if isinstance(schema, dict):
+        for key in ("type", "minimum", "maximum", "minLength", "maxLength", "format"):
+            if key in schema and len(canonical(schema[key])) <= 128:
+                result[key] = schema[key]
+        if isinstance(schema.get("enum"), list):
+            result["enum_count"] = len(schema["enum"])
+    return result
+
+
+def describe_view(envelope, tool, http, offset):
+    if type(offset) is not int or offset < 0:
+        raise WorkerError("invalid_parameter_offset")
+    # Prefer executable original parameters when supported, else discovery inputs.
+    parameters = http["contract"]["parameters"] if http["supported"] else tool.get("parameters", [])
+    if offset > len(parameters):
+        raise WorkerError("invalid_parameter_offset")
+    schema_origin = "http_original" if http["supported"] else "discovery_normalized"
+    rows = []
+    end = offset
+    # Bound both count and bytes, including hostile parameter names/descriptions.
+    for parameter in parameters[offset:offset + 32]:
+        schema = parameter.get("schema")
+        if schema_origin == "discovery_normalized":
+            schema = {key: parameter[key] for key in ("type", "enum") if parameter.get(key) is not None}
+        row = {"index": end, "name": preview(parameter.get("name"), 1024),
+               "required": bool(parameter.get("required")),
+               "description": preview(parameter.get("description")),
+               "schema_origin": schema_origin, **schema_view(schema)}
+        if parameter.get("location") in ("path", "query"):
+            row["location"] = parameter["location"]
+        if len(canonical(rows + [row])) > 40 * 1024:
+            break
+        rows.append(row)
+        end += 1
+    metadata = tool.get("metadata", {})
+    http_view = {key: value for key, value in http.items() if key != "contract"}
+    if http["supported"]:
+        contract = http["contract"]
+        http_view.update({"method": contract["method"], "path": preview(contract["path"], 1024),
+                          "bearer_required": contract["bearer_required"],
+                          "response_schema_digests": {status: digest(schema) for status, schema in list(contract["responses"].items())[:32] if len(status) <= 3},
+                          "response_schema_count": len(contract["responses"]), "response_schemas_complete": False})
+    result = {"ok": True, **summarize(envelope), "view_version": 2,
+            "contract_kind": "discovery_view", "effect_class": "unclassified",
+            "full_tool_digest": digest(tool), "complete": False,
+            "tool": {"name": tool["name"], "description": preview(tool.get("description"), 1024),
+                     "parameters": rows, "metadata": {"api_contract": {
+                         "method": preview(metadata.get("method"), 16),
+                         "path": preview(metadata.get("path"), 1024)}}},
+            "parameter_page": {"offset": offset, "total": len(parameters),
+                               "next_offset": end if end < len(parameters) else None},
+            "http_read": http_view}
+    # Reserve space for the request material added by the Rust receipt adapter.
+    while len(canonical(result)) > 48 * 1024 and rows:
+        rows.pop()
+        end -= 1
+        result["parameter_page"]["next_offset"] = end if end < len(parameters) else None
+    if len(canonical(result)) > 48 * 1024 or (end < len(parameters) and not rows):
+        raise WorkerError("tool_discovery_output_limit")
+    return result
+
+
 def http_read_contract(artifact, tool):
     # The normalized graph is discovery data. Invoke only against retained source schemas.
     metadata = tool.get("metadata", {})
@@ -286,7 +369,7 @@ def http_read_contract(artifact, tool):
         for schema in responses.values():
             check_http_schema(schema)
         contract = {"format_version":1,"method":"GET","path":path,"base_path":source.get("basePath", ""),"parameters":list(merged.values()),"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
-        if len(canonical(contract)) > 49152:
+        if len(canonical(contract)) > 8 * 1024 * 1024:
             raise WorkerError("http_contract_size_limit")
         return {"supported":True,"contract_digest":digest(contract),"contract":contract}
     except WorkerError as error:

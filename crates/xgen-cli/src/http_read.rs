@@ -264,7 +264,7 @@ pub(crate) fn accepts(catalog: &DiscoveryCatalog, input: &Value) -> bool {
 }
 
 fn descriptor(catalog: &DiscoveryCatalog, input: &Value) -> Result<Value, &'static str> {
-    let output = catalog.describe(
+    let output = catalog.execution_contract(
         input["collection"].as_str().ok_or("http_input_invalid")?,
         input["tool"].as_str().ok_or("http_input_invalid")?,
     )?;

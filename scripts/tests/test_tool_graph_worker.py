@@ -196,7 +196,7 @@ class CliTests(unittest.TestCase):
                     ("find", "xgen.tools/search", {"collection":collection,"query":query,"topK":1}),
                     ("inspect", "xgen.tools/describe", {"collection":collection,"tool":target}),
                 ]:
-                    proposals.append({"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Inspect discovery candidates","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"1.0.0"},"arguments":arguments}]})
+                    proposals.append({"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Inspect discovery candidates","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"2.0.0" if capability=="xgen.tools/describe" else "1.0.0"},"arguments":arguments}]})
                 proposals.append({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":"Tool schema inspected; no API executed."})
                 class Handler(http.server.BaseHTTPRequestHandler):
                     def log_message(self, *_args):

@@ -3,14 +3,14 @@
   "kind": "CapabilityDefinition",
   "metadata": {
     "id": "xgen.tools/describe",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "displayName": "Inspect saved tool contract",
     "labels": {
       "xgeny.io/pack": "core-os"
     }
   },
   "spec": {
-    "summary": "Retrieve the exact schema and retained API contract of one candidate in an immutable collection. Discovery only; not executable.",
+    "summary": "Retrieve a bounded discovery view with full-tool and HTTP contract digests. Omitted schemas remain host-validated; parameterOffset retrieves further input pages. This view is not a complete or executable contract.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -29,6 +29,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024
+        },
+        "parameterOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
         }
       },
       "additionalProperties": false
@@ -79,6 +84,11 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 1024
+            },
+            "parameterOffset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
             }
           },
           "additionalProperties": false

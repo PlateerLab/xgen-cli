@@ -18,6 +18,13 @@ use xgen_workgraph::EffectClass;
 pub(crate) const SEARCH: &str = "xgen.tools/search";
 pub(crate) const DESCRIBE: &str = "xgen.tools/describe";
 pub(crate) const VERSION: &str = "1.0.0";
+pub(crate) fn version(operation: &str) -> &'static str {
+    if operation == DESCRIBE {
+        "2.0.0"
+    } else {
+        VERSION
+    }
+}
 pub(crate) const SCOPE: &str = "tools.discover";
 pub(crate) const PROVIDER: &str = "xgen.cli.tool-discovery-material.v1";
 pub(crate) const MAX_OUTPUT: usize = 64 * 1024;
@@ -125,17 +132,22 @@ impl DiscoveryCatalog {
     pub(crate) fn snapshot(&self, name: &str) -> &str {
         &self.snapshots[name]
     }
-    pub(crate) fn describe(&self, name: &str, tool: &str) -> Result<Value, &'static str> {
+    pub(crate) fn execution_contract(&self, name: &str, tool: &str) -> Result<Value, &'static str> {
         let output = crate::tools::invoke_offline(
-            &json!({"operation":"describe","root":self.root.to_str().ok_or("invalid_state_home")?,"name":name,"tool":tool,"expected_digest":self.snapshots.get(name).ok_or("collection_not_found")?}),
+            &json!({"operation":"execution_contract","root":self.root.to_str().ok_or("invalid_state_home")?,"name":name,"tool":tool,"expected_digest":self.snapshots.get(name).ok_or("collection_not_found")?}),
         )?;
-        inspect(
-            self,
-            DESCRIBE,
-            &json!({"collection":name,"tool":tool}),
-            &output,
-        )
-        .map_err(|()| "http_discovery_contract_invalid")?;
+        // Full execution contracts stay on the host; the model's 64 KiB limit
+        // applies only to discovery observations, never to schema validation.
+        if output["ok"] != true
+            || output["collection"] != name
+            || output["artifact_digest"].as_str() != self.snapshots.get(name).map(String::as_str)
+            || output["backend_version"] != "0.46.0"
+            || output["execution_enabled"] != false
+            || output["tool_name"] != tool
+            || output["contract_kind"] != "host_http_contract"
+        {
+            return Err("http_discovery_contract_invalid");
+        }
         Ok(output)
     }
     pub(crate) fn is_empty(&self) -> bool {
@@ -155,7 +167,7 @@ impl DiscoveryCatalog {
         self.snapshots.contains_key(name)
     }
     pub(crate) fn accepts(&self, capability: &CapabilityRef, input: &Value) -> bool {
-        if capability.contract_version != VERSION {
+        if capability.contract_version != version(&capability.capability_id) {
             return false;
         }
         let Some(object) = input.as_object() else {
@@ -178,7 +190,10 @@ impl DiscoveryCatalog {
                         .is_some_and(|v| (1..=20).contains(&v))
             }
             DESCRIBE => {
-                object.len() == 2
+                (object.len() == 2 || (object.len() == 3 && object.contains_key("parameterOffset")))
+                    && input
+                        .get("parameterOffset")
+                        .is_none_or(|v| v.as_u64().is_some_and(|v| v <= 1_000_000))
                     && input["tool"].as_str().is_some_and(|s| {
                         !s.is_empty() && s.len() <= 1024 && !s.chars().any(char::is_control)
                     })
@@ -214,8 +229,9 @@ impl DiscoveryAdapter {
                 digest(&encoded).trim_start_matches("sha256:")
             ),
             operation_ref: Some(format!(
-                "{}@{VERSION};graph-tool-call=0.46.0;offline",
-                self.operation
+                "{}@{};graph-tool-call=0.46.0;offline",
+                self.operation,
+                version(self.operation)
             )),
         }
     }
@@ -228,7 +244,7 @@ impl DiscoveryAdapter {
         if !self.catalog.accepts(
             &CapabilityRef {
                 capability_id: self.operation.into(),
-                contract_version: VERSION.into(),
+                contract_version: version(self.operation).into(),
             },
             input,
         ) {
@@ -237,12 +253,13 @@ impl DiscoveryAdapter {
         let name = input["collection"]
             .as_str()
             .ok_or(AdapterPrepareFailure::InvalidMaterial)?;
-        let mut request = json!({"operation":if self.operation == SEARCH {"search"} else {"describe"}, "root":self.catalog.root.to_str().ok_or(AdapterPrepareFailure::ResourceUnavailable)?, "name":name,"expected_digest":self.catalog.snapshots[name]});
+        let mut request = json!({"operation":if self.operation == SEARCH {"search"} else {"describe_view"}, "root":self.catalog.root.to_str().ok_or(AdapterPrepareFailure::ResourceUnavailable)?, "name":name,"expected_digest":self.catalog.snapshots[name]});
         if self.operation == SEARCH {
             request["query"] = input["query"].clone();
             request["top_k"] = input["topK"].clone();
         } else {
             request["tool"] = input["tool"].clone();
+            request["parameter_offset"] = input.get("parameterOffset").cloned().unwrap_or(json!(0));
         }
         Ok(request)
     }
@@ -256,9 +273,9 @@ impl EffectAdapter for DiscoveryAdapter {
         let intent = request.intent();
         let instance = request.instance();
         if intent.invocation.capability_id != self.operation
-            || intent.invocation.contract_version != VERSION
+            || intent.invocation.contract_version != version(self.operation)
             || instance.definition.capability_id != self.operation
-            || instance.definition.contract_version != VERSION
+            || instance.definition.contract_version != version(self.operation)
             || intent.invocation.instance_id != instance.instance_id
             || instance.binding != self.binding()
             || intent.effect_class != EffectClass::ReadOnly
@@ -303,6 +320,13 @@ impl PreparedAdapterInvocation for PreparedDiscovery {
                         .unwrap_or("tool_discovery_backend_failed")
                         .to_owned());
                 }
+                if serde_jcs::to_vec(&output)
+                    .map_err(|_| "tool_discovery_response_invalid".to_owned())?
+                    .len()
+                    > MAX_OUTPUT
+                {
+                    return Err("tool_discovery_output_limit".to_owned());
+                }
                 inspect(
                     &self.adapter.catalog,
                     self.adapter.operation,
@@ -332,6 +356,14 @@ impl PreparedAdapterInvocation for PreparedDiscovery {
             output: AdapterToolOutput::new(output),
         }
     }
+}
+
+fn hex_digest(value: &Value) -> bool {
+    value.as_str().is_some_and(|s| {
+        s.len() == 64
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
 }
 
 fn valid_error(code: &str) -> bool {
@@ -392,12 +424,35 @@ fn inspect(
             return Err(());
         }
     } else if operation == DESCRIBE {
-        if output["contract_kind"] != "discovery_candidate"
+        let page = &output["parameter_page"];
+        let offset = input
+            .get("parameterOffset")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let total = page["total"].as_u64().ok_or(())?;
+        let rows = output["tool"]["parameters"].as_array().ok_or(())?;
+        let end = offset.checked_add(rows.len() as u64).ok_or(())?;
+        if output["contract_kind"] != "discovery_view"
+            || output["view_version"] != 2
+            || output["complete"] != false
             || output["effect_class"] != "unclassified"
             || output["tool"]["name"] != input["tool"]
-            || !output["tool"].is_object()
-            || !output["tool"]["parameters"].is_array()
             || !output["tool"]["metadata"]["api_contract"].is_object()
+            || !hex_digest(&output["full_tool_digest"])
+            || page["offset"] != offset
+            || rows.len() > 32
+            || end > total
+            || (end < total && (rows.is_empty() || page["next_offset"] != end))
+            || (end == total && !page["next_offset"].is_null())
+            || rows.iter().enumerate().any(|(i, row)| {
+                row["index"] != offset + i as u64
+                    || !row["complete"].is_boolean()
+                    || !hex_digest(&row["schema_digest"])
+            })
+            || !output["http_read"]["supported"].is_boolean()
+            || (output["http_read"]["supported"] == true
+                && (!hex_digest(&output["http_read"]["contract_digest"])
+                    || output["http_read"].get("contract").is_some()))
         {
             return Err(());
         }
@@ -437,7 +492,7 @@ impl EffectVerifier for DiscoveryVerifier {
         let rules = &request.definition().spec.verification;
         if instance.binding != self.adapter.binding()
             || intent.invocation.capability_id != self.adapter.operation
-            || intent.invocation.contract_version != VERSION
+            || intent.invocation.contract_version != version(self.adapter.operation)
             || intent.invocation.instance_id != instance.instance_id
             || intent.effect_class != EffectClass::ReadOnly
             || intent.idempotency_key.is_some()
@@ -562,7 +617,7 @@ mod tests {
         let catalog = catalog();
         for name in ["assets", "calendar"] {
             let input = json!({"collection":name,"tool":"getRecord"});
-            let good = json!({"ok":true,"collection":name,"artifact_digest":catalog.snapshots[name],"backend_version":"0.46.0","execution_enabled":false,"tool":{"name":"getRecord","parameters":[],"metadata":{"api_contract":{}}},"contract_kind":"discovery_candidate","effect_class":"unclassified"});
+            let good = json!({"ok":true,"collection":name,"artifact_digest":catalog.snapshots[name],"backend_version":"0.46.0","execution_enabled":false,"tool":{"name":"getRecord","parameters":[],"metadata":{"api_contract":{}}},"contract_kind":"discovery_view","effect_class":"unclassified","view_version":2,"complete":false,"full_tool_digest":"a".repeat(64),"parameter_page":{"offset":0,"total":0,"next_offset":null},"http_read":{"supported":false,"error":"http_original_source_unavailable"}});
             assert!(inspect(&catalog, DESCRIBE, &input, &good).is_ok());
             for (key, value) in [
                 ("artifact_digest", json!("c".repeat(64))),
@@ -581,6 +636,41 @@ mod tests {
         }
     }
     #[test]
+    fn describe_requires_version_two_and_binds_parameter_pages() {
+        let catalog = catalog();
+        let current = CapabilityRef {
+            capability_id: DESCRIBE.into(),
+            contract_version: version(DESCRIBE).into(),
+        };
+        let old = CapabilityRef {
+            contract_version: VERSION.into(),
+            ..current.clone()
+        };
+        let page = json!({"collection":"assets","tool":"getRecord","parameterOffset":32});
+        assert!(catalog.accepts(&current, &page));
+        assert!(!catalog.accepts(&old, &page));
+        for offset in [json!(-1), json!(true), json!(1_000_001), json!("32")] {
+            let mut invalid = page.clone();
+            invalid["parameterOffset"] = offset;
+            assert!(!catalog.accepts(&current, &invalid));
+        }
+        let material = xgen_workgraph::invocation_material_digest(&page).unwrap();
+        let mut altered = page.clone();
+        altered["parameterOffset"] = json!(64);
+        assert!(
+            verified_request(&catalog, &current, &json!({"request":altered}), &material).is_err()
+        );
+        assert!(
+            catalog
+                .adapter(DESCRIBE)
+                .binding()
+                .operation_ref
+                .unwrap()
+                .contains("@2.0.0;")
+        );
+    }
+
+    #[test]
     fn verification_uses_original_arguments_instead_of_self_reported_targets() {
         let catalog = catalog();
         for (id, original, altered) in [
@@ -597,7 +687,7 @@ mod tests {
         ] {
             let capability = CapabilityRef {
                 capability_id: id.into(),
-                contract_version: VERSION.into(),
+                contract_version: version(id).into(),
             };
             let digest = xgen_workgraph::invocation_material_digest(&original).unwrap();
             assert!(

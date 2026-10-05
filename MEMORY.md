@@ -94,6 +94,8 @@
 
 - [검색 책임 분리 평가](docs/development/tool-search-evaluation-2026-10-06.md): Gitea/WireMock 원본 고정, 두 시스템 16 intent의 영어·한국어 요청 32개에서 목표 endpoint top-5 18/32. 직접→CLI 후보/명세·CLI→agent search 차이 0건, describe 14건은 64 KiB 초과·실패 Receipt로 확인했다. 원본에 없는 cluster-wide 설명도 양쪽에서 재현했다. 실제 LLM 단계는 전달 gate 실패로 미실행이며 기본값/엔진/업스트림 코드는 변경하지 않았다. 평가 실행기 검사 5개 통과, 기존 모델 평가 실행기 검사 11개 통과·built example 검사 1개 skipped, 공개 문서 검사를 통과했다.
 
+- [제한된 모델용 describe](docs/development/bounded-tool-describe.md): describe만 2.0.0으로 변경하고, 48 KiB view·입력 페이지·생략 표시·전체 후보/HTTP 계약 digest를 제공한다. 별도 호스트 경로는 전체 원본 계약(최대 8 MiB)으로 입력·응답을 검증한다. CLI 기본 describe는 전체 후보를 유지한다. 큰 enum·중첩 schema의 세부 모델 조회는 아직 없고 검색 품질 개선은 별도다. 이전 진행 중 discovery Run은 새 Run이 필요하며, 완료 Run 재생은 확인했다. [별도 결과](docs/development/bounded-tool-describe-2026-10-06.md): 이전 32개 설계 회귀의 전달 실패 14→0, view 최대 6,641 bytes·64개 Receipt 검증 통과, 검색 top-5 18/32는 동일하다. 추가 검증 두 fixture에서 생략된 원본 입력/응답 제약·정상 재생을 확인했다. CLI 179개·protocol 13개·Python 도구 34개·평가 실행기 5개 통과. 실제 LLM 선택 품질은 아직 미평가다.
+
 ## 다음 과제
 
 작업 목록과 완료 기준의 정본은 [도구·모델 통합 TODO](docs/development/tool-integration-todo.md)다. 이 메모에 체크리스트를 중복 관리하지 않는다.
@@ -118,8 +120,8 @@
 
 현재 도구별 개선 후보:
 
-- graph-tool-call: 고정 검색어에서도 목표 endpoint 누락이 두 시스템에서 재현됐다. 범용 검색/색인·언어 처리와 원본에 없는 scope 설명 주입을 해당 저장소에서 개선·평가한다. 큰 metadata의 선택용 compact view도 별도 계약 과제다. ranking의 세부 원인과 개선 방식은 ablation 전이라 미확정이다.
+- graph-tool-call: 고정 검색어에서도 목표 endpoint 누락이 두 시스템에서 재현됐다. 범용 검색/색인·언어 처리와 원본에 없는 scope 설명 주입을 해당 저장소에서 개선·평가한다. xgen의 제한된 view와 별개로 업스트림의 색인 표현 계약도 검토 대상이다. ranking의 세부 원인과 개선 방식은 ablation 전이라 미확정이다.
 - browser-use / 변환 어댑터: 화면 수집 결과의 공통 계약과 갱신 조건 설계. 아직 구현·검증하지 않았다.
 - SEV: 기존 API/UI 판단을 통합 호출 계약으로 연결하고, 없는 대상의 오실행·후보 품질·비용을 별도 평가. 같은 프로토콜만으로 API/UI 체크포인트를 통합하지 않는다.
-- xgen CLI: 검색·describe와 연결된 GET 실행·인증 참조·Receipt·완료 재생을 구현했다. 두 독립 loopback API에서 검증했다. 분리 평가에서 실제 공개 명세의 큰 describe 전달 실패가 14/32건 확인돼 모델용 view·단계적 조회·실행 계약 분리·한도 오류 표시를 우선 개선한다. 원격 명세 실행·연결 점검/수정 UX·실제 OS secret store backend·즉시 취소도 남았다.
+- xgen CLI: 검색·describe와 연결된 GET 실행·인증 참조·Receipt·완료 재생을 구현했다. 두 독립 loopback API에서 검증했다. 큰 describe 전달 실패 14/32건은 모델용 view·입력 페이지·별도 실행 계약으로 수정하고 같은 설계 회귀에서 0/32건을 확인했다. 다음은 새 검증 요청에서 실제 LLM 검색어 생성/선택 평가다. 큰 schema 세부 조회는 필요성과 선택 영향을 확인한 뒤 추가한다. 원격 명세 실행·연결 점검/수정 UX·실제 OS secret store backend·즉시 취소도 남았다.
 - graph-tool-call 연계: 정규화된 api_contract만으로 원본 HTTP 스키마를 복원할 수 없었다. xgen worker가 로컬 JSON 원본을 추가 보존하도록 했으며 remote URL/Swagger UI 원본 보존은 후속이다. 업스트림 코드는 변경하지 않았다.

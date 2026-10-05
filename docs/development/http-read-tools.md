@@ -32,7 +32,7 @@ agent loop에는 연결이 있을 때 `xgen.http/read@1.0.0`이 추가된다. �
 
 입력은 `collection`, `tool`, describe의 `http_read.contract_digest`를 복사한 `contractDigest`, `parameters: {path: {...}, query: {...}}`다. 모델은 URL·인증·헤더·HTTP method를 지정하지 못한다. collection snapshot과 연결 설정은 manifest와 execution profile에 고정된다. 새 연결은 이전 Run에 추가하지 않고, 기존 연결이 바뀌면 재개를 거절한다. 인증 값 자체는 manifest에 넣지 않으며 만료된 토큰의 교체는 같은 호스트 인증 참조를 통해 가능하다.
 
-원본 OpenAPI JSON을 압축 artifact에 함께 보존한다. graph-tool-call의 정규화된 `api_contract`만으로는 원래의 HTTP 응답 스키마와 보안 요구를 완전히 복원할 수 없으므로 이를 실행 계약으로 사용하지 않는다. offline worker가 원본 계약을 선택·해제하고 호스트가 입력과 성공 응답을 검증한다. describe는 실행 가능 여부와 거절 코드를 `http_read`에 따로 제공한다.
+원본 OpenAPI JSON을 압축 artifact에 함께 보존한다. graph-tool-call의 정규화된 `api_contract`만으로는 원래의 HTTP 응답 스키마와 보안 요구를 완전히 복원할 수 없으므로 이를 실행 계약으로 사용하지 않는다. offline worker가 원본 계약을 선택·해제하고 호스트가 입력과 성공 응답을 검증한다. describe는 실행 가능 여부와 거절 코드를 `http_read`에 따로 제공한다. 모델용 describe 2.0.0은 전체 계약 digest만 전달하고 호스트는 별도 원본 계약 경로로 검증한다. 전체 계약 한도는 8 MiB이고 [view·페이지·버전 이행](bounded-tool-describe.md)을 따른다.
 
 호출 결과의 URL·status·body·exact request를 관찰 artifact로 저장한다. Receipt에는 검증 결과와 artifact/output digest를 연결하고, 최종 모델 요청에는 검증을 통과한 tool output을 제공한다. HTTP 성공과 스키마 일치가 데이터의 업무상 진실까지 보증하는 것은 아니다.
 
