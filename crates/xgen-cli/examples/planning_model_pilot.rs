@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let config: TrialConfig = serde_json::from_slice(&std::fs::read(&args.config)?)?;
     let limit = match args.condition.as_str() {
-        "X0" | "C0" | "C1" => None,
+        "X0" | "C0" | "C1" | "F0" | "F1" => None,
         "X1" => Some(EvaluationProposalStepLimit::One),
         "XN" => Some(EvaluationProposalStepLimit::Four),
         _ => return Err("unknown condition".into()),

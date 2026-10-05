@@ -1,0 +1,26 @@
+[
+  {
+    "case": "design-suffix-totals",
+    "both_initially_fail": true,
+    "feedback_contains_checker_expected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-stable-integer-counts",
+    "both_initially_fail": true,
+    "feedback_contains_checker_expected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "design-utf8-hex",
+    "both_initially_fail": true,
+    "feedback_contains_checker_expected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-codepoint-reverse",
+    "both_initially_fail": true,
+    "feedback_contains_checker_expected": true,
+    "reference_checker_and_oracle_passed": true
+  }
+]

@@ -1,0 +1,404 @@
+[
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-0b4b8b58617c90e890a8d84d3537a443604944f99f0e364ccbe1b627a170eafe",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-18e420691db8bcc5e84bbc4c801643a0113b751010cd301bc703e80b10783e6f",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-8bb55af6c3a9e2b1993fc53098b0b80c7f1503d9d5e1ea5b72643738b9b94216",
+    "output_digest": "sha256:9adbad3152951887b57613bfea6db166ba6aa2ac9a3695f1b3a197fac867fa25",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-57f46c6f7475149367b2fab774e34155ca93027f24842d1c05a34150e5e16e7e",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-d81c29a2feda56e5ba35477a0de438f31a87b263195771a350f286f5acc74e82",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-acb7f53e92af9dfa85e9ac338b2d8d69c49499cbfc4edc0b412c5c63a1a12831",
+    "output_digest": "sha256:9adbad3152951887b57613bfea6db166ba6aa2ac9a3695f1b3a197fac867fa25",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-18ea8129e4e3d650909f7e1afc82a2ea1a24a19d9bea5ea710dc6d17cbbdf6db",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0000-design-utf8-hex-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-89da264d57087a8b036896f8e1ccffe1ddcd71697d5c864f0d6cdcc496f2152b",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0001-design-utf8-hex-1-F1",
+    "condition": "F1",
+    "effect_id": "effect-953fcd9687e23c35daf9a8de17f475eb9db9c4027c90a4a5b05b6ec354df0d80",
+    "output_digest": "sha256:904722ed0a3aaebb649ad09b767e3b0fb47a846204df52b86e0f5a6df9247069",
+    "stderr_bytes": 162,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "bytes": [
+          2,
+          3,
+          0,
+          4
+        ],
+        "hex": [
+          "c385",
+          "e78cab",
+          "",
+          "f09f9982"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0002-validation-codepoint-reverse-1-F1",
+    "condition": "F1",
+    "effect_id": "effect-b5d2b3a0b2c9cc292277798fe03d4433c9a05efafd8e2b972fbbd671db746c4f",
+    "output_digest": "sha256:a2eb489d9bad1d8a12e16d561188419ca7f8a284893acc28d474e62c0e4b2fec",
+    "stderr_bytes": 169,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "reversed": [
+          "́e",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0002-validation-codepoint-reverse-1-F1",
+    "condition": "F1",
+    "effect_id": "effect-6f0f94fbc9064f3c743ff0281674cd97777a54555adaecd5e7aac4de6daae954",
+    "output_digest": "sha256:e41b681fcab225edef43e862c7599104b22225270aa9cd5623561b858572f74d",
+    "stderr_bytes": 215,
+    "diagnostic": {
+      "actual": {
+        "reversed": [
+          "é",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "expected": {
+        "reversed": [
+          "́e",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0003-validation-codepoint-reverse-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-e54b9795dbfa0d92259296d0c357261481edf71a296f213e1bc67ef1544a2365",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0004-validation-stable-integer-counts-0-F0",
+    "condition": "F0",
+    "effect_id": "effect-222962b14c6085ad20d275c2852569ebef520854d23f487711e2c9ac34b82ea0",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0005-validation-stable-integer-counts-0-F1",
+    "condition": "F1",
+    "effect_id": "effect-2bf7e405f2b4aaccf42baed4c8da70c4f9a3ccb1c21a832222626fdb1c71fe72",
+    "output_digest": "sha256:e860643e91588313f3a5266eb683b5efab660cc3a858905a79a9efd22a0ab99d",
+    "stderr_bytes": 145,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "counts": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "values": [
+          3,
+          -1,
+          0,
+          7
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0006-design-utf8-hex-0-F1",
+    "condition": "F1",
+    "effect_id": "effect-4a030daade76136653539c41a11107043a24803e11cc4bef57fdc0789812c3be",
+    "output_digest": "sha256:904722ed0a3aaebb649ad09b767e3b0fb47a846204df52b86e0f5a6df9247069",
+    "stderr_bytes": 162,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "bytes": [
+          2,
+          3,
+          0,
+          4
+        ],
+        "hex": [
+          "c385",
+          "e78cab",
+          "",
+          "f09f9982"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0007-design-utf8-hex-0-F0",
+    "condition": "F0",
+    "effect_id": "effect-12e6f3ee88e22b6e21cc9e96c0ec39152c1f2f2efe5fa4abc594e9b85fb05b29",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0007-design-utf8-hex-0-F0",
+    "condition": "F0",
+    "effect_id": "effect-24cbf9ac6e128c3530b63e42e42b7c17cfcaafec230cc08a90c201998026897f",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0008-design-suffix-totals-0-F0",
+    "condition": "F0",
+    "effect_id": "effect-8c2deba3a97e1e2746f4175e357f6db0cda4ec274874b639b0ff49a91a0e3ad2",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0009-design-suffix-totals-0-F1",
+    "condition": "F1",
+    "effect_id": "effect-ea58f94d9ec752d4d3a77882e070974919834a99c99bf1833871235baef342a0",
+    "output_digest": "sha256:bd0f2a7c54a824309ab3797bd93b603dfc98e7b903e2b5f4c62aa5b73a313993",
+    "stderr_bytes": 140,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "suffix": [
+          10,
+          6,
+          12,
+          9,
+          9
+        ],
+        "total": 10
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0010-validation-codepoint-reverse-0-F1",
+    "condition": "F1",
+    "effect_id": "effect-3494d2c1863562cbf4a0a09145963d3711f3c983288a0619632e896c3026e966",
+    "output_digest": "sha256:a2eb489d9bad1d8a12e16d561188419ca7f8a284893acc28d474e62c0e4b2fec",
+    "stderr_bytes": 169,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "reversed": [
+          "́e",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0010-validation-codepoint-reverse-0-F1",
+    "condition": "F1",
+    "effect_id": "effect-36ffc90766edcebadeb8ad6a76c00e2cdbd13eea4702697b658102edb3fed976",
+    "output_digest": "sha256:ad691818a99bb51e22a2f79db5633e5264c099f362bff0507dc818a67bbfc7a8",
+    "stderr_bytes": 214,
+    "diagnostic": {
+      "actual": {
+        "reversed": [
+          "é",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "expected": {
+        "reversed": [
+          "́e",
+          "나가",
+          "b a",
+          "",
+          "x𠮷"
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0011-validation-codepoint-reverse-0-F0",
+    "condition": "F0",
+    "effect_id": "effect-43a19e565cb1df93b482e0172239f04e15322d06c53e89ad4d797afa2ed3593d",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0012-design-suffix-totals-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-fd8e3b66a7fcaa7faf998aec7307add84c02eae7e24f61bfc391af0602079669",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  },
+  {
+    "trial": "0013-design-suffix-totals-1-F1",
+    "condition": "F1",
+    "effect_id": "effect-2ec485e0b11414f6b3e24977cef099072b314468bf8398334624483cf0dda2e5",
+    "output_digest": "sha256:bd0f2a7c54a824309ab3797bd93b603dfc98e7b903e2b5f4c62aa5b73a313993",
+    "stderr_bytes": 140,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "suffix": [
+          10,
+          6,
+          12,
+          9,
+          9
+        ],
+        "total": 10
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0014-validation-stable-integer-counts-1-F1",
+    "condition": "F1",
+    "effect_id": "effect-cc3ad477d472f3498a155934badb7452ae6fca4afa834acf6386ecc1f3462d6f",
+    "output_digest": "sha256:e860643e91588313f3a5266eb683b5efab660cc3a858905a79a9efd22a0ab99d",
+    "stderr_bytes": 145,
+    "diagnostic": {
+      "actual": {
+        "incorrect": true
+      },
+      "expected": {
+        "counts": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "values": [
+          3,
+          -1,
+          0,
+          7
+        ]
+      },
+      "format_version": 1,
+      "reason": "value_mismatch",
+      "status": "failed"
+    }
+  },
+  {
+    "trial": "0015-validation-stable-integer-counts-1-F0",
+    "condition": "F0",
+    "effect_id": "effect-9d4e79ef89eb787bb3961c336d62ff5e6f0e2486df93e1a751b69acac6a917d7",
+    "output_digest": "sha256:5b89a6df1d7e33db37889747ae59a87bf068c96039caefa24bfba08c3b2bd836",
+    "stderr_bytes": 0,
+    "diagnostic": null
+  }
+]
