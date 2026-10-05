@@ -63,3 +63,7 @@ Credential은 로컬 `XGEN_PILOT_API_KEY` 환경에서 읽어. 사전 등록을 
 미승인 실행 0이라는 기존 gate도 유지해. 채택 판단 전에 validation journal의 authorization·invocation·material binding audit가 필요하며 단순히 trial을 완료했다는 사실로 대체하지 않아.
 
 검증: Python 전체 61 passed. 실제 driver를 쓰는 로컬 success/rejection/wrong-claim 18회 계약 검사 포함. Model/fingerprint drift·missing identity, preregistration input/source/tool/binary/schedule 변경, ambient PATH와 등록 PATH의 분리도 검사했어. Rust source는 이전 workspace 659 passed 기준과 같고 이번 작업에서 변경하지 않았어. 최종 120회·외부 엔진 비교는 NOT_RUN이야.
+
+## 후속 본실험 결과
+
+2026-10-05 [등록한 120회 pilot](planning-model-pilot-results-2026-10-05.md)을 완료했어. 작업 oracle 120/120, 응답 계약 포함 94/120이야. Validation XN 비용 median은 X1 대비 24.5% 낮았지만 응답 형식 위반 1회가 남아 gate는 FAIL이고 production 기본값을 유지해. 위 미실행 표시는 각 구현·등록 시점의 기록이야.

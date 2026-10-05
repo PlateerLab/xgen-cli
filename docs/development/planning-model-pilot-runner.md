@@ -70,3 +70,7 @@ python3 scripts/evaluate-planning-model.py \
 키는 로컬 환경에서만 설정해. Config·fixture·source·manifest에 저장하지 않아. Raw driver/oracle logs와 journal은 private results 디렉터리에 보존하고 공개 보고에는 비민감 집계만 사용해.
 
 후속 [DeepSeek smoke와 사전 등록](deepseek-planning-pilot-smoke-2026-10-05.md)에서 개발용 live 18 trial과 usage/cache를 확인하고 120회 입력·config·quote를 고정했어. `--preregistration`으로 실행하면 등록한 binary/source/tool/input/schedule을 모델 I/O 전에 검사하고 등록 PATH를 사용해. Model/fingerprint 변경이나 확인 불가 응답은 비용/unknown reservation을 보존한 뒤 중단해. 최종 120회·validation 모델 비교는 아직 실행하지 않았어.
+
+## 후속 본실험 결과
+
+2026-10-05 [등록한 120회 pilot](planning-model-pilot-results-2026-10-05.md)을 완료했어. 작업 oracle 120/120, 응답 계약 포함 94/120이야. Validation XN 비용 median은 X1 대비 24.5% 낮았지만 응답 형식 위반 1회가 남아 gate는 FAIL이고 production 기본값을 유지해. 위 미실행 표시는 각 구현·등록 시점의 기록이야.

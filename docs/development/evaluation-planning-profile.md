@@ -55,3 +55,7 @@ Loopback HTTP/Core 계약 테스트는 다음을 확인해.
 3. 범용: Validation fixture와 manifest를 잠근 뒤 사전 정의한 120 trial을 실행하고 X1/XN 비용·완료·false claim을 비교해.
 
 실제 모델 호출 수, 비용 절감, 정확도 개선은 모두 NOT_MEASURED야. 평가 profile이 구현됐다는 사실만으로 production 기본값을 변경하지 않아.
+
+## 후속 본실험 결과
+
+2026-10-05 [등록한 120회 pilot](planning-model-pilot-results-2026-10-05.md)을 완료했어. 작업 oracle 120/120, 응답 계약 포함 94/120이야. Validation XN 비용 median은 X1 대비 24.5% 낮았지만 응답 형식 위반 1회가 남아 gate는 FAIL이고 production 기본값을 유지해. 위 미실행 표시는 각 구현·등록 시점의 기록이야.

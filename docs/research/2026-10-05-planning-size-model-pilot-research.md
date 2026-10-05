@@ -114,3 +114,7 @@ Design은 명시된 여러 입력의 읽기·artifact 생성 2개와 작은 Rust
 4. **범용:** 결과로 planner 기본값 변경을 판단해. Auto reconciliation·typed dataflow·parallel 실행·memory는 별도 작업이야.
 
 전체 비용 guard는 단순히 끝난 요청의 비용 합계만 검사해서는 hard cap이 아니야. 다음 요청의 보수적인 최대 요금을 먼저 reserve하고, unknown usage의 reserve는 환급하지 않는 계약이 필요해. 비용 bound와 model-call/tool-call 공통 budget이 동시에 120 trial을 수용하는지는 smoke 이후 확인할 항목이야. 수용하지 못하면 조건별 budget을 다르게 낮추지 말고 사전에 pilot 규모를 다시 등록해.
+
+## 후속 본실험 결과
+
+2026-10-05 [등록한 120회 pilot](../development/planning-model-pilot-results-2026-10-05.md)을 완료했어. 작업 oracle 120/120, 응답 계약 포함 94/120이야. Validation XN 비용 median은 X1 대비 24.5% 낮았지만 응답 형식 위반 1회가 남아 gate는 FAIL이고 production 기본값을 유지해. 위 미실행 표시는 각 구현·등록 시점의 기록이야.

@@ -161,7 +161,8 @@ class RunnerContractTests(unittest.TestCase):
             pid=int(pid_path.read_text())
             status=Path(f'/proc/{pid}/stat')
             try:
-                self.assertEqual(status.read_text().rsplit(')',1)[1].split()[0],'Z')
+                # Linux may briefly expose X (dead) before the process disappears.
+                self.assertIn(status.read_text().rsplit(')',1)[1].split()[0],('Z','X','x'))
             except FileNotFoundError:
                 pass
 
