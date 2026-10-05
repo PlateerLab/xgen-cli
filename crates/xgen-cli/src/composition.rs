@@ -37,9 +37,9 @@ use xgen_policy::{
     ResourceResolutionFailure, ResourceResolver,
 };
 use xgen_provider_openai::{
-    BearerCredential, OpenAiCompatibilityCheckFailure, OpenAiCompatibilityChecker,
-    OpenAiModelCheckFailure, OpenAiModelChecker, OpenAiPlanner, OpenAiPlannerConfig,
-    OpenAiPlannerConfigError,
+    BearerCredential, EvaluationProposalStepLimit, OpenAiCompatibilityCheckFailure,
+    OpenAiCompatibilityChecker, OpenAiModelCheckFailure, OpenAiModelChecker, OpenAiPlanner,
+    OpenAiPlannerConfig, OpenAiPlannerConfigError,
 };
 use xgen_runtime::{
     AgentLoop, AgentLoopQuiescence, AgentLoopTick, CapabilityRegistry, DirectExecutor,
@@ -880,7 +880,25 @@ where
     F: FnOnce(&str),
     O: FnMut(DriverProgress) -> DriverProgressControl,
 {
-    run_local_composed(request, None, false, on_started, on_progress)
+    run_local_composed(request, None, false, None, on_started, on_progress)
+}
+
+/// Start an isolated evaluation Run using the ordinary local tools and driver.
+/// `None` selects the production reference; explicit limits select the shared evaluation profile.
+/// This is not a CLI setting. Incomplete evaluation Runs require an evaluation-aware continuation.
+/// # Errors
+/// Returns the same fixed public failures as [`run_local_with_progress`].
+pub fn run_local_with_evaluation_profile<F, O>(
+    request: LocalRunRequest,
+    step_limit: Option<EvaluationProposalStepLimit>,
+    on_started: F,
+    on_progress: O,
+) -> Result<LocalCommandResult, PublicRunError>
+where
+    F: FnOnce(&str),
+    O: FnMut(DriverProgress) -> DriverProgressControl,
+{
+    run_local_composed(request, None, false, step_limit, on_started, on_progress)
 }
 
 /// Create and drive a new Run with a reusable process snapshot and redacted durable progress.
@@ -906,6 +924,7 @@ where
         request,
         Some(process_session),
         false,
+        None,
         on_started,
         on_progress,
     )
@@ -928,15 +947,18 @@ where
         request,
         Some(process_session),
         true,
+        None,
         on_started,
         on_progress,
     )
 }
 
+#[allow(clippy::too_many_lines)] // Keep profile commitment, manifest creation, and driver setup together.
 fn run_local_composed<F, O>(
     request: LocalRunRequest,
     process_session: Option<&LocalProcessSession>,
     conversation_responses: bool,
+    evaluation_step_limit: Option<EvaluationProposalStepLimit>,
     on_started: F,
     mut on_progress: O,
 ) -> Result<LocalCommandResult, PublicRunError>
@@ -991,6 +1013,13 @@ where
         planning_constraints_required,
     )?;
     let config = response_contract(config, conversation_responses)?;
+    let config = if let Some(limit) = evaluation_step_limit {
+        config
+            .with_evaluation_proposal_step_limit(limit)
+            .map_err(map_provider_config)?
+    } else {
+        config
+    };
     let local_execution_profile_digest =
         local_execution_profile_digest(&workspace, &catalog, process.as_ref())?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;

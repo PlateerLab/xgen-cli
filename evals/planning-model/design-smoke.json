@@ -1,0 +1,38 @@
+[
+  {
+    "id": "literal-artifact",
+    "split": "design",
+    "family": "artifact",
+    "goal": "input.txt를 읽고 ready와 줄바꿈을 담은 result.txt를 만들어줘.",
+    "files": {
+      "input.txt": "ready\n"
+    },
+    "writable": [
+      "result.txt"
+    ],
+    "generated_dirs": [],
+    "executables": [],
+    "oracle": {
+      "python": "from pathlib import Path\nimport sys\np=Path(sys.argv[1])\nassert (p/'result.txt').read_text() == 'ready\\n'\nassert (p/'input.txt').read_text() == 'ready\\n'\n"
+    }
+  },
+  {
+    "id": "process-artifact",
+    "split": "design",
+    "family": "process",
+    "goal": "input.txt를 읽고 ready와 줄바꿈을 담은 result.txt를 만들어줘. python3 -c \"print('ready')\"도 실행해줘.",
+    "files": {
+      "input.txt": "ready\n"
+    },
+    "writable": [
+      "result.txt"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport sys\np=Path(sys.argv[1])\nassert (p/'result.txt').read_text() == 'ready\\n'\nassert (p/'input.txt').read_text() == 'ready\\n'\n"
+    }
+  }
+]

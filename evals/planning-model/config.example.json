@@ -1,0 +1,24 @@
+{
+  "model": "fixture-model",
+  "tokenizer": "fixture-tokenizer",
+  "response_format": "json_object",
+  "thinking": "disabled",
+  "max_output_tokens": 1024,
+  "request_timeout_seconds": 5,
+  "max_model_turns": 8,
+  "max_ticks": 256,
+  "max_input_tokens": 100000,
+  "trial_timeout_seconds": 20,
+  "spend_cap_nano_usd": 1000000000,
+  "seed": 17,
+  "repeats": 1,
+  "quote": {
+    "kind": "upper_bound",
+    "source": "EXAMPLE ONLY: replace with a verified provider quote and token ceiling before live use",
+    "valid_from_utc": "2000-01-01T00:00:00Z",
+    "valid_until_utc": "2000-01-02T00:00:00Z",
+    "cached_micro_usd_per_million": 10000,
+    "input_micro_usd_per_million": 1000000,
+    "output_micro_usd_per_million": 2000000
+  }
+}

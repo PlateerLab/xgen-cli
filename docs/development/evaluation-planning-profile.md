@@ -48,6 +48,8 @@ Loopback HTTP/Core 계약 테스트는 다음을 확인해.
 
 ## 남은 작업
 
+2026-10-05 후속 구현: [실제 driver 기반 pilot runner](planning-model-pilot-runner.md)에 profile·usage·독립 oracle·전송 전 비용 예약을 연결했어. 아래 1번 구현의 계약 검사를 제공하며 실제 API smoke와 최종 120 trial은 아직이야.
+
 1. 범용: 실제 driver, usage observer, 독립 oracle를 묶은 model pilot runner. Binary/config/fixture 고정, decode/admission 분리, unknown-call reserve와 지출 상한이 필요해.
 2. 범용: Design fixture와 비용 조건을 고정한 작은 API smoke. Model alias/응답 ID, usage/cache, schema 호환성을 확인해.
 3. 범용: Validation fixture와 manifest를 잠근 뒤 사전 정의한 120 trial을 실행하고 X1/XN 비용·완료·false claim을 비교해.

@@ -104,6 +104,8 @@ Design은 명시된 여러 입력의 읽기·artifact 생성 2개와 작은 Rust
 
 2026-10-05 구현 상태: 1번의 opt-in shared profile·상한 local gate와 모델 없는 계약 검사를 추가했어. [구현 계약과 검증 범위](../development/evaluation-planning-profile.md)를 참고해. Runner·실제 API smoke·120 trial은 아직 실행하지 않았어.
 
+후속 구현 상태: 2번 [model pilot runner](../development/planning-model-pilot-runner.md)를 구현해 실제 driver·filesystem/process·독립 oracle·usage·비용 reservation을 연결했어. 로컬 고정 모델 응답으로 계약만 검사했고, live API smoke·실제 모델 비교·최종 120 trial은 아직 실행하지 않았어.
+
 1. **범용:** 평가용 shared planning prompt·maxProposalSteps 상한을 provider profile에 결합해. 기본 production profile/resume는 유지해. 상한 차이·초과 거부·관찰 뒤 계획·dependency·profile 불일치를 모델 없는 transport fixture로 검사해.
 2. **범용:** 실제 CLI/driver와 usage observer·독립 oracle를 연결하는 model pilot runner를 만들어. 고정 binary copy, 실패/timeout 기록, request/decode/admission 분리, tier/cache 비용과 지출 상한을 포함해. 재계획 효과를 보기 위해 기존 scripted sink가 아닌 실제 filesystem/process 경로를 써.
 3. **범용:** Design fixture를 먼저 고정하고 작은 실제 API smoke로 model 응답 ID·usage/cache·schema 호환성과 필요한 호출 bound를 확인해. Manifest에 전체 비용 한도와 unknown-call reserve를 고정한 다음 validation fixture/hash와 config를 잠그고 120 trial을 실행해. 현재는 이 모델 호출을 실행하지 않았어.
