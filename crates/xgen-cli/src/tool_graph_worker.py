@@ -157,6 +157,8 @@ def dispatch(request):
         envelope = store(root, name, artifact)
         return {"ok": True, **summarize(envelope)}
     envelope = load(root, name)
+    if request.get("expected_digest") is not None and request["expected_digest"] != envelope["artifact_digest"]:
+        raise WorkerError("collection_snapshot_changed")
     graph = graph_from_artifact(envelope["artifact"])
     if operation == "describe":
         tool = graph.tools.get(request["tool"])

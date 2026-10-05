@@ -30,9 +30,8 @@
 
 - [x] **xgen:** 포함된 Python worker·stdin/stdout JSON·uv 자동 준비 구현. 별도 서버는 없고 개발 버전의 uv 의존은 남았다. 완전한 포함 배포·OS 검증은 7번이다.
 - [x] **graph-tool-call + xgen:** `tools import/search/describe/list` 구현, 0.46.0 고정, 압축·불변 snapshot·digest 검증. 두 명세 fixture와 기존 실제 명세 snapshot으로 동작 확인.
-- [ ] **xgen:** 대규모 목록에서 검색 후보를 단계적으로 모델에 제공. 후보의 원본 계약을 검증하고 실행 가능한 Registry와 바인딩한다. 진행 중 Run의 계약은 갱신으로 바꾸지 않는다.
-
-  다음 구현 대상이다. 현재 명시적인 CLI 검색은 가능하지만 agent loop 자동 검색과 실행 Registry 등록은 없다.
+- [x] **xgen:** agent loop에 검색·조회 built-in Capability 두 개를 등록해 후보와 원본 계약을 단계적으로 제공. manifest의 collection digest·exact request를 검증하고 승인·material 복구·Receipt에 연결했다. 재개는 같은 snapshot 목록을 유지한다.
+- [ ] **xgen:** 발견한 외부 도구 자체의 실행용 Definition/Instance admission. 검색·조회 built-in의 등록과 구분하며 HTTP adapter·효과·인증 검증을 3번과 함께 구현한다.
 - [ ] **xgen:** 컨텍스트에 들어가는 소규모 목록의 직접 제공을 유지하고, 검색 경로 선택은 설정·평가 근거로 정한다.
 - [ ] **graph-tool-call:** 유사한 도구 혼동·빠진 선행 도구를 새 사례에서 평가. 임베딩 없는 검색과 임베딩 추가를 별도로 비교한 뒤 기본값 결정.
 - [x] **xgen:** 검색 결과·오류 코드를 구분하고, worker 실패·시간/출력 한도·Ctrl+C·자식 프로세스 정리를 검증. 빈 후보에서 업무 도구를 실행하는 경로는 없다.

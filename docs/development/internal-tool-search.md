@@ -1,6 +1,6 @@
 # 내부 도구 검색 계약과 첫 구현
 
-작성: 2026-10-06 (KST). 범위: 도구 발견·그래프 저장·검색·계약 조회. 업무 도구 실행과 agent loop 자동 검색은 후속 작업이다.
+작성: 2026-10-06 (KST). 범위: 도구 발견·그래프 저장·검색·계약 조회. agent loop의 검색·명세 조회까지 연결했다. 업무 도구 실행은 후속 작업이다.
 
 ## 사용
 
@@ -67,7 +67,7 @@ role binding에 backend/model/version, timeout, 호출·비용 예산을 연결�
 - 보류한 CLI 검증 요청: 자산 목록, 일정 목록. 상세 요청과 다른 기대 도구를 CLI에서 선택한다. 기대값·top_k=1을 첫 CLI 실행 전에 테스트 코드에 고정했다.
 - 실패 검사: 중복 import의 기존 bytes 보존, artifact 변경 후 거절, 이름 경로 탈출·없는 도구·없는 collection·빈 요청·후보 수 한도·중복 JSON key 거절.
 - 조회·검색에서 업무 API 실행과 모델 호출은 0회다. fixture 테스트를 실제 두 시스템 연결 검증이라고 보고하지 않는다.
-- agent loop 적용·기본값 변경 전에 기존 전체 목록 경로와 새 검색 경로를 비교한다. 새 시스템/요청으로 사례를 분리하고 후보 포함률·작업 완료율·잘못된 실행·시간·토큰·금액 및 사전 채택 기준을 고정한다. 이번 단계에서 기본 모델·기존 Run 동작을 변경하지 않는다.
+- 외부 도구 실행·검색 경로 기본값 결정 전에 기존 전체 목록 경로와 새 검색 경로를 비교한다. 새 시스템/요청으로 사례를 분리하고 후보 포함률·작업 완료율·잘못된 실행·시간·토큰·금액 및 사전 채택 기준을 고정한다. 기본 모델은 변경하지 않는다. collection이 있는 새 workspace Run에는 아래 검색 경로를 제공한다.
 
 검증 명령:
 
@@ -91,3 +91,38 @@ Python 검사는 별도 pinned 환경이 없으면 library 검사를 skip하며,
 - 기존 실제 OpenAPI snapshot을 새 CLI로 import/search했다. 도구 1,108개, gzip 저장 6,860,637 bytes, import 6.79초·search 3.44초. 최초 저장 제한 64 MiB에서 실패한 뒤 압축 전/후 한도를 분리했다.
 - 공개 Swagger UI 주소를 새 CLI에 직접 넣는 수집도 통과했다. 명세 15개·도구 1,108개, import 10.68초. 이 검증은 명세 GET과 그래프 생성이며 업무 API 실행은 아니다. 시스템별 주소·원본·상세 결과는 로컬 비공개 기록에 둔다.
 - 검색마다 그래프를 다시 로드하므로 이 측정은 검색 계산만의 시간이 아니다. 내부 캐시와 장기 유지 worker는 후속 성능 과제다. 기존 snapshot의 검색 첫 후보는 요청 의미를 충분히 구분하지 못했으며 품질 개선을 주장하지 않는다.
+
+## agent loop 연결 — 2026-10-06
+
+workspace discovery Run(`--allow-dir`, 대화형 기본 경로)은 저장된 collection을 자동으로 찾는다. collection이 없으면 기존 로컬 도구 경로를 그대로 사용한다. 시작 시 최대 16개 collection 이름과 artifact digest를 Run manifest에 고정한다. 전체 외부 도구 목록을 컨텍스트에 넣지 않고 다음 두 built-in CapabilityDefinition/Instance를 등록한다.
+
+- `xgen.tools/search`: `{collection, query, topK}` → 상위 후보와 가능한 producer.
+- `xgen.tools/describe`: `{collection, tool}` → 정확한 후보의 parameters·원본 API 계약.
+
+예시:
+
+```bash
+xgen tools import --name inventory --source ./openapi.json
+xgen run --workspace . --allow-dir . --allow-read \
+  --allow-remote-model-egress "inventory에서 자산 상세 조회 도구를 찾아 필수 입력을 설명해줘"
+```
+
+모델 연결은 기존 프로필을 사용한다. 대화형 `xgen`에서도 같은 검색 Capability를 제공한다. 시스템 로그인·인증 저장과 API 호출은 아직 없다.
+
+검색·조회는 `tools.discover` scope의 읽기 작업이며 기존 `--allow-read` 승인, material recipe 저장·복구, 실행, 검증, Receipt 경로를 사용한다. 모델 입력은 등록된 collection·정확한 입력 계약만 허용한다. `root`, runtime 옵션, digest override 등 추가 입력은 거절한다. 모델은 query를 정하고 후보가 나온 뒤 필요한 tool의 계약을 조회한다. 검색 의미 선택의 품질은 별도 평가 대상이다.
+
+worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker는 artifact 무결성뿐 아니라 이 digest를 검사한 뒤 그래프를 로드한다. binding에는 전체 collection snapshot map의 JCS digest, discovery 계약 1.0.0, graph-tool-call 0.46.0, offline 실행 프로필을 연결한다. Run execution profile digest도 실제 등록과 같은 Definition/Instance·backend·한도·material/policy 프로필에서 파생하며 재개 시 비교한다. 실행 단계의 `uv --offline`은 패키지·Python 다운로드를 허용하지 않는다. 최초 collection 확인은 호스트 준비 단계이며 필요 시 기존 uv 준비 경로를 사용한다. offline은 uv의 다운로드 제한으로, OS 네트워크 sandbox를 의미하지 않는다.
+
+결과에 호스트가 원래 `request`를 붙이고 verifier가 그 material digest를 EffectIntent의 승인 바인딩과 비교한다. 따라서 `topK=1`을 20으로 바꾸거나 조회 tool을 다른 이름으로 바꾼 결과는 통과하지 않는다. verifier는 출력 digest·snapshot·backend·발견 상태도 검사하고 canonical JSON artifact를 Receipt에 연결한다. worker 실패·snapshot 변경·응답 한도 초과는 `ok=false`, 오류 코드, `snapshot_verified=false`로 저장하며 postcondition이 실패한 Receipt를 만든다. 실패한 조회를 성공으로 취급하지 않는다.
+
+재개는 현재 전체 목록을 다시 선택하지 않고 manifest에 고정한 목록만 복구한다. 나중에 추가한 collection은 기존 Run에 들어오지 않는다. 저장 파일이 바뀌거나 사라지면 조회를 거절한다. 원본 명세 파일은 재개에 필요하지 않지만 저장된 collection 파일은 필요하다. 별도 Run별 그래프 복사본은 만들지 않는다.
+
+검색 결과의 외부 tool 이름은 executable Registry에 등록하지 않는다. 후보를 실행하려는 proposal은 거절한다. 이번 단계의 Registry admission은 검색·조회 built-in 두 개에 대한 것이며 외부 API Capability admission은 후속 3번 작업이다.
+
+제한: agent loop에 제공하는 한 observation은 64 KiB다. 큰 계약은 잘라서 승인하지 않고 실패로 기록한다. 동기식 호출이고 Capability의 cancellable은 false다. 대화형 중단에 대한 worker 즉시 취소 연결, 장기 worker/cache, OS별 포함 배포, 작은 외부 목록의 직접 제공은 남았다.
+
+검증은 실제 LLM 대신 순서가 고정된 loopback model endpoint를 사용했다. 실제 graph-tool-call 0.46.0과 CLI로 OpenAPI 3.1 자산 목록·Swagger 2.0 일정 목록의 검색 → 계약 조회 → 최종 응답을 확인했다. 상세 요청을 설계 사례로 쓰고 목록 요청을 별도 검증 대상으로 유지했다. 두 시나리오에서 실제 LLM·업무 API 호출은 없으며 유료 호출 비용은 0이다. 이 결과는 연결의 정확성을 보여주며 자연어 도구 선택 품질 향상을 증명하지 않는다.
+
+추가 Rust 검사는 승인 전 실행 차단, 재개 뒤 단 한 번 검색·조회와 Receipt 2개, 새 collection 제외, 잘못된 collection·후보 실행 거절, 변경된 snapshot의 실패 Receipt, 원래 입력 digest·snapshot 바인딩을 확인한다. 실제 worker Python 검사는 10개로 늘었다. 상태 폴더 생성도 Run의 private directory 절차를 재사용하도록 바꿔 `tools import`가 먼저 실행된 경우를 검증한다.
+
+최종 로컬 검증: `cargo test -p xgen-cli` 172개 통과·실패 0·live 검사 3개 ignored, Clippy warnings 0, fmt·public docs contract 통과. worker Python 10개를 실제 pinned 환경·compiled CLI로 실행했다. 독립 diff 리뷰의 원래 입력 검증 지적은 material digest 바인딩으로 수정하고 두 입력 변조 사례로 검증했다.

@@ -64,7 +64,9 @@ use crate::driver::{
     ApprovalDecision, ApprovalPort, ApprovalPortFailure, DriverOutcome, DriverProgress,
     DriverProgressControl, PlannedRouteFailure, PlannedRoutePort, RunDriver,
 };
+use crate::graph_discovery::{self, DiscoveryCatalog};
 use crate::manifest::{ManifestBudget, RunManifest};
+use crate::material_catalog::DiscoveryMaterial;
 use crate::material_catalog::{
     MAX_RECIPE_BYTES, PROCESS_MATERIAL_PROVIDER_ID, PROCESS_RECIPE_DOMAIN,
     PROCESS_RECIPE_FORMAT_VERSION, ProcessMaterialProvider, ProcessMaterializer,
@@ -1008,6 +1010,11 @@ where
     if request.allow_execute && process.is_none() {
         return Err(PublicRunError::Configuration);
     }
+    let discovery_snapshots = if catalog.workspace_discovery() {
+        DiscoveryCatalog::discover().map_err(|()| PublicRunError::Configuration)?
+    } else {
+        graph_discovery::Snapshots::new()
+    };
     let planning_constraints_required = catalog.workspace_discovery() || process.is_some();
     let config = planner_config(
         &request.base_url,
@@ -1032,8 +1039,12 @@ where
         request.final_response_schema.as_ref(),
         request.completion_checks.as_deref(),
     )?;
-    let local_execution_profile_digest =
-        local_execution_profile_digest(&workspace, &catalog, process.as_ref())?;
+    let local_execution_profile_digest = execution_profile_with_discovery(
+        &workspace,
+        &catalog,
+        process.as_ref(),
+        &discovery_snapshots,
+    )?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
     let manifest = RunManifest::new(
         &run_id,
@@ -1049,6 +1060,9 @@ where
         manifest_budget(planning_constraints_required, request.max_model_turns)?,
     )
     .map_err(|_| PublicRunError::Configuration)?;
+    let manifest = manifest
+        .with_tool_discovery_snapshots(discovery_snapshots)
+        .map_err(|_| PublicRunError::Configuration)?;
     let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?
         .with_final_response_schema(request.final_response_schema)
         .map_err(|_| PublicRunError::Configuration)?
@@ -1272,7 +1286,12 @@ where
         });
     }
     if manifest.local_execution_profile_digest()
-        != local_execution_profile_digest(&workspace, &catalog, process.as_ref())?
+        != execution_profile_with_discovery(
+            &workspace,
+            &catalog,
+            process.as_ref(),
+            manifest.tool_discovery_snapshots(),
+        )?
     {
         let current = process
             .as_ref()
@@ -1406,6 +1425,7 @@ impl PlanMaterializer for LocalReadMaterializer {
 }
 
 struct LocalMaterializer {
+    discovery: Option<DiscoveryMaterial>,
     filesystem: LocalReadMaterializer,
     process: Option<ProcessMaterializer>,
 }
@@ -1415,6 +1435,16 @@ impl PlanMaterializer for LocalMaterializer {
         &mut self,
         request: PlanMaterializationRequest<'_>,
     ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
+        if matches!(
+            request.capability().capability_id.as_str(),
+            graph_discovery::SEARCH | graph_discovery::DESCRIBE
+        ) {
+            return self
+                .discovery
+                .as_mut()
+                .ok_or(PlanMaterializerFailure::Rejected)?
+                .materialize(request);
+        }
         if (request.capability().capability_id == PROCESS_EXECUTE_CAPABILITY_ID
             && request.capability().contract_version == PROCESS_EXECUTE_CONTRACT_VERSION)
             || (request.capability().capability_id == WEB_SEARCH_CAPABILITY_ID
@@ -1485,11 +1515,20 @@ fn continue_incomplete(
         }
     };
     let LocalToolProduct {
-        capabilities,
+        mut capabilities,
         mut adapters,
         mut verifiers,
         mut route,
     } = local_tool_product(workspace, &catalog, process)?;
+    let discovery = DiscoveryCatalog::saved(manifest.tool_discovery_snapshots().clone())
+        .map_err(|()| PublicRunError::Integrity)?;
+    register_discovery(
+        &discovery,
+        &mut capabilities,
+        &mut adapters,
+        &mut verifiers,
+        &mut route,
+    )?;
     let mut planning_constraints = catalog
         .workspace_authorization()
         .map(|authorization| {
@@ -1499,6 +1538,12 @@ fn continue_incomplete(
         .map_err(|_| PublicRunError::Internal)?
         .into_iter()
         .collect::<Vec<_>>();
+    if !discovery.is_empty() {
+        planning_constraints.push(
+            PlanningConstraint::new("tools.discovery-snapshots", discovery.hint())
+                .map_err(|_| PublicRunError::Internal)?,
+        );
+    }
     if let Some(process) = process {
         planning_constraints.push(
             PlanningConstraint::new(
@@ -1509,6 +1554,7 @@ fn continue_incomplete(
         );
     }
     let resolver = LocalResourceResolver {
+        discovery: discovery.clone(),
         filesystem: workspace.resolver(),
         process: process.map(|process| process.workspace().resolver()),
         web_search_enabled: process
@@ -1563,7 +1609,30 @@ fn continue_incomplete(
     } else {
         None
     };
+    let discovery_materializer = if discovery.is_empty() {
+        None
+    } else {
+        providers
+            .register(
+                graph_discovery::PROVIDER,
+                DiscoveryMaterial {
+                    discovery: discovery.clone(),
+                    catalog: RunMaterialCatalog::open_existing(
+                        material_catalog_path,
+                        manifest.run_id(),
+                    )
+                    .map_err(|_| PublicRunError::Integrity)?,
+                },
+            )
+            .map_err(|_| PublicRunError::Internal)?;
+        Some(DiscoveryMaterial {
+            discovery: discovery.clone(),
+            catalog: RunMaterialCatalog::open_existing(material_catalog_path, manifest.run_id())
+                .map_err(|_| PublicRunError::Integrity)?,
+        })
+    };
     let mut materializer = LocalMaterializer {
+        discovery: discovery_materializer,
         filesystem: filesystem_materializer,
         process: process_materializer,
     };
@@ -1574,6 +1643,7 @@ fn continue_incomplete(
         run_id: manifest.run_id().to_owned(),
         catalog: approval_catalog,
         process: process.map(|process| process.authorization().clone()),
+        discovery: discovery.clone(),
     };
     let mut events = HostEventFactory;
     let mut loop_runtime = AgentLoop::with_model_call_budget(
@@ -2778,6 +2848,85 @@ fn local_tool_product(
     })
 }
 
+fn discovery_specs(
+    discovery: &DiscoveryCatalog,
+) -> Result<Vec<(CapabilityDefinitionBody, CapabilityInstanceBody)>, PublicRunError> {
+    if discovery.is_empty() {
+        return Ok(Vec::new());
+    }
+    [
+        (graph_discovery::SEARCH, include_str!("../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-search.json")),
+        (graph_discovery::DESCRIBE, include_str!("../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-describe.json")),
+    ].into_iter().map(|(operation, fixture)| {
+        let (definition, mut instance) = filesystem_spec(fixture, operation, graph_discovery::VERSION,
+            &format!("local.tools.{}.builtin.v1",operation.rsplit('/').next().ok_or(PublicRunError::Internal)?), discovery.adapter(operation).binding())?;
+        instance.hints = None;
+        Ok((definition, instance))
+    }).collect()
+}
+
+fn register_discovery(
+    discovery: &DiscoveryCatalog,
+    capabilities: &mut CapabilityRegistry,
+    adapters: &mut EffectAdapterRegistry,
+    verifiers: &mut EffectVerifierRegistry,
+    route: &mut ExactLocalRoute,
+) -> Result<(), PublicRunError> {
+    for (definition, instance) in discovery_specs(discovery)? {
+        let operation = match definition.metadata.id.as_str() {
+            graph_discovery::SEARCH => graph_discovery::SEARCH,
+            graph_discovery::DESCRIBE => graph_discovery::DESCRIBE,
+            _ => return Err(PublicRunError::Internal),
+        };
+        let adapter = discovery.adapter(operation);
+        let binding = adapter.binding();
+        let verifier = adapter.verifier();
+        route
+            .routes
+            .push((instance.definition.clone(), instance.instance_id.clone()));
+        capabilities
+            .register_schema_validated_definition(definition)
+            .map_err(|_| PublicRunError::Internal)?;
+        capabilities
+            .register_schema_validated_instance(instance)
+            .map_err(|_| PublicRunError::Internal)?;
+        adapters
+            .register(&binding, adapter)
+            .map_err(|_| PublicRunError::Internal)?;
+        verifiers
+            .register(&binding, verifier)
+            .map_err(|_| PublicRunError::Internal)?;
+    }
+    Ok(())
+}
+
+fn execution_profile_with_discovery(
+    workspace: &WorkspaceRoot,
+    catalog: &LocalReadCatalog,
+    process: Option<&ProcessTooling>,
+    snapshots: &graph_discovery::Snapshots,
+) -> Result<String, PublicRunError> {
+    let local_digest = local_execution_profile_digest(workspace, catalog, process)?;
+    if snapshots.is_empty() {
+        return Ok(local_digest);
+    }
+    let discovery =
+        DiscoveryCatalog::saved(snapshots.clone()).map_err(|()| PublicRunError::Configuration)?;
+    let profile = serde_json::json!({
+        "domain":"xgen.cli.local-and-tool-discovery-execution-profile/v1",
+        "local_profile_digest":local_digest,
+        "discovery_specs":discovery_specs(&discovery)?,
+        "backend":"graph-tool-call", "backend_version":"0.46.0", "offline":true,
+        "max_output_bytes":graph_discovery::MAX_OUTPUT,
+        "material_provider":graph_discovery::PROVIDER,
+        "material_recipe_domain":"xgen.cli.tool-discovery-recipe/v1",
+        "host_policy_profile":"xgen.cli.host-tool-discovery/v1",
+    });
+    Ok(sha256_digest(
+        &serde_jcs::to_vec(&profile).map_err(|_| PublicRunError::Internal)?,
+    ))
+}
+
 fn register_web_search(
     workspace: &xgen_adapter_process::ProcessWorkspace,
     adapters: &mut EffectAdapterRegistry,
@@ -2815,6 +2964,7 @@ fn register_terminals(
 }
 
 struct LocalResourceResolver {
+    discovery: DiscoveryCatalog,
     filesystem: WorkspaceResourceResolver,
     process: Option<ProcessResourceResolver>,
     web_search_enabled: bool,
@@ -2822,6 +2972,13 @@ struct LocalResourceResolver {
 
 impl ResourceResolver for LocalResourceResolver {
     fn resolve(&self, scope: &str, resource: &str) -> Result<String, ResourceResolutionFailure> {
+        if scope == graph_discovery::SCOPE {
+            return if self.discovery.contains(resource) {
+                graph_discovery::resolve(resource)
+            } else {
+                Err(ResourceResolutionFailure::InvalidResource)
+            };
+        }
         if scope == TERMINAL_SCOPE && self.process.is_some() && terminal_supported() {
             return resolve_terminal_session(resource);
         }
@@ -2935,6 +3092,7 @@ impl ApprovalCatalog {
 }
 
 struct ExplicitLocalApproval {
+    discovery: DiscoveryCatalog,
     allow_read: bool,
     allow_write: bool,
     allow_execute: bool,
@@ -2991,6 +3149,27 @@ impl ExplicitLocalApproval {
         &self,
         request: &ResolvedPermissionRequest,
     ) -> Option<(&'static str, &'static str, bool)> {
+        if matches!(
+            request.capability().capability_id.as_str(),
+            graph_discovery::SEARCH | graph_discovery::DESCRIBE
+        ) {
+            let exact = request.run_id() == self.run_id
+                && request.capability().contract_version == graph_discovery::VERSION
+                && request.effect_class() == EffectClass::ReadOnly
+                && request.requested_lifetime() == GrantLifetime::Once
+                && request.requested_scopes() == [graph_discovery::SCOPE]
+                && request.resources().len() == 1
+                && request.resources().first().is_some_and(|r| {
+                    r.scope() == graph_discovery::SCOPE
+                        && self.discovery.contains(r.canonical_resource())
+                })
+                && request.critical_actions().is_empty();
+            return exact.then_some((
+                "xgen.cli.host-tool-discovery/v1",
+                USER_READ_POLICY_PROFILE,
+                self.allow_read,
+            ));
+        }
         if request.effect_class() == EffectClass::NonIdempotent {
             if TerminalOperation::from_capability(&request.capability().capability_id).is_some() {
                 return self.authorized_terminal_profiles(request);
@@ -3202,6 +3381,36 @@ mod tests {
     use xgen_policy::PermissionRequestResolver;
 
     use super::*;
+
+    #[test]
+    fn discovery_execution_profile_binds_contracts_and_keeps_legacy_profile() {
+        let root = tempdir().unwrap();
+        let workspace =
+            WorkspaceRoot::open_ambient(root.path(), WorkspaceId::new(WORKSPACE_ID).unwrap())
+                .unwrap();
+        let catalog = LocalReadCatalog::build(&workspace, &[], &[".".into()]).unwrap();
+        assert_eq!(
+            execution_profile_with_discovery(
+                &workspace,
+                &catalog,
+                None,
+                &graph_discovery::Snapshots::new()
+            )
+            .unwrap(),
+            local_execution_profile_digest(&workspace, &catalog, None).unwrap()
+        );
+        let first = graph_discovery::Snapshots::from([("assets".into(), "a".repeat(64))]);
+        let second = graph_discovery::Snapshots::from([("calendar".into(), "b".repeat(64))]);
+        assert_ne!(
+            execution_profile_with_discovery(&workspace, &catalog, None, &first).unwrap(),
+            execution_profile_with_discovery(&workspace, &catalog, None, &second).unwrap()
+        );
+        let discovery = DiscoveryCatalog::saved(first).unwrap();
+        let specs = discovery_specs(&discovery).unwrap();
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].0.metadata.id, graph_discovery::SEARCH);
+        assert_eq!(specs[1].0.metadata.id, graph_discovery::DESCRIBE);
+    }
 
     #[test]
     fn manifest_budget_extends_only_the_agent_loop() {
@@ -3730,6 +3939,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn read_flag_approves_only_the_exact_catalog_request_shape() {
         let directory = tempdir().unwrap();
         fs::write(directory.path().join("README.md"), "fixture").unwrap();
@@ -3738,6 +3948,7 @@ mod tests {
                 .unwrap();
         let catalog = AllowFileCatalog::new(&workspace.resolver(), ["README.md"]).unwrap();
         let mut approval = ExplicitLocalApproval {
+            discovery: DiscoveryCatalog::saved(graph_discovery::Snapshots::new()).unwrap(),
             allow_read: true,
             allow_write: false,
             allow_execute: false,
@@ -3852,6 +4063,7 @@ mod tests {
         let filesystem_catalog =
             AllowFileCatalog::new(&filesystem_workspace.resolver(), ["README.md"]).unwrap();
         let mut approval = ExplicitLocalApproval {
+            discovery: DiscoveryCatalog::saved(graph_discovery::Snapshots::new()).unwrap(),
             allow_read: false,
             allow_write: false,
             allow_execute: false,
@@ -3928,6 +4140,7 @@ mod tests {
                 .unwrap();
         let catalog = AllowFileCatalog::new(&workspace.resolver(), ["README.md"]).unwrap();
         let mut approval = ExplicitLocalApproval {
+            discovery: DiscoveryCatalog::saved(graph_discovery::Snapshots::new()).unwrap(),
             allow_read: true,
             allow_write: false,
             allow_execute: false,
@@ -3996,6 +4209,7 @@ mod tests {
             WorkspaceRoot::open_ambient(directory.path(), WorkspaceId::new(WORKSPACE_ID).unwrap())
                 .unwrap();
         let mut approval = ExplicitLocalApproval {
+            discovery: DiscoveryCatalog::saved(graph_discovery::Snapshots::new()).unwrap(),
             allow_read: true,
             allow_write: true,
             allow_execute: false,

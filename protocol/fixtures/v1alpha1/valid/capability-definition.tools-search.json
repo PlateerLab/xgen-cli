@@ -1,0 +1,143 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgen.tools/search",
+    "contractVersion": "1.0.0",
+    "displayName": "Discover saved tools",
+    "labels": {
+      "xgeny.io/pack": "core-os"
+    }
+  },
+  "spec": {
+    "summary": "Search one immutable tool collection for bounded candidates. Candidates cannot execute APIs.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "collection",
+        "query",
+        "topK"
+      ],
+      "properties": {
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "topK": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "ok",
+        "collection",
+        "artifact_digest",
+        "backend_version",
+        "execution_enabled",
+        "request"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "backend_version": {
+          "const": "0.46.0"
+        },
+        "execution_enabled": {
+          "const": false
+        },
+        "request": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "required": [
+            "collection",
+            "query",
+            "topK"
+          ],
+          "properties": {
+            "collection": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "topK": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "effect": {
+      "class": "read_only",
+      "resourceSelectors": [
+        {
+          "scope": "tools.discover",
+          "argumentPointer": "/collection"
+        }
+      ],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": [
+        "sync"
+      ],
+      "cancellable": false,
+      "idempotencyKeySupported": false,
+      "defaultTimeoutMs": 120000,
+      "maxTimeoutMs": 120000
+    },
+    "verification": [
+      {
+        "strategy": "output_schema",
+        "required": true
+      },
+      {
+        "strategy": "postcondition",
+        "required": true,
+        "description": "Output digest and immutable collection snapshot match the host binding."
+      }
+    ],
+    "discovery": {
+      "keywords": [
+        "tools",
+        "discovery",
+        "search"
+      ],
+      "examples": [
+        "Find available candidate tools in a saved collection."
+      ]
+    }
+  }
+}

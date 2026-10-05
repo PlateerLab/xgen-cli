@@ -23,7 +23,7 @@ use xgen_provider_openai::{BearerCredential, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
 
 mod repl;
-mod tools;
+use xgen_cli::tools;
 
 const PROJECT_LICENSE: &str = include_str!("../../../LICENSE");
 const CARGO_DEPENDENCY_NOTICES: &str = include_str!("../../../THIRD_PARTY_LICENSES.txt");

@@ -7,10 +7,13 @@ mod composition;
 mod driver;
 mod environment;
 mod final_response;
+mod graph_discovery;
 mod manifest;
 mod material_catalog;
 mod model_profile;
 mod run_layout;
+#[doc(hidden)]
+pub mod tools;
 mod usage;
 
 pub use composition::*;

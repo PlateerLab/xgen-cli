@@ -34,6 +34,12 @@ pub(crate) const TERMINAL_RECIPE_DOMAIN: &str = "xgen.cli.terminal-recipe/v1";
 pub(crate) const TERMINAL_RECIPE_FORMAT_VERSION: u32 = 1;
 pub(crate) const MAX_RECIPE_BYTES: usize = 512 * 1024;
 
+const DISCOVERY_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
+    domain: "xgen.cli.tool-discovery-recipe/v1",
+    format_version: 1,
+    provider_id: crate::graph_discovery::PROVIDER,
+};
+
 const WORKSPACE_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
     domain: WORKSPACE_READ_RECIPE_DOMAIN,
     format_version: WORKSPACE_READ_RECIPE_FORMAT_VERSION,
@@ -389,6 +395,48 @@ impl InvocationMaterialProvider for WorkspaceReadMaterialProvider {
         if !self
             .authorization
             .authorizes_material(&record.capability, &record.arguments)
+        {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        Ok(record.arguments)
+    }
+}
+
+pub(crate) struct DiscoveryMaterial {
+    pub(crate) discovery: crate::graph_discovery::DiscoveryCatalog,
+    pub(crate) catalog: RunMaterialCatalog,
+}
+
+impl PlanMaterializer for DiscoveryMaterial {
+    fn materialize(
+        &mut self,
+        request: PlanMaterializationRequest<'_>,
+    ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
+        if !self
+            .discovery
+            .accepts(request.capability(), request.normalized_arguments())
+        {
+            return Err(PlanMaterializerFailure::Rejected);
+        }
+        self.catalog
+            .persist_request_with_profile(&request, DISCOVERY_RECIPE_PROFILE)
+    }
+}
+
+impl InvocationMaterialProvider for DiscoveryMaterial {
+    fn reconstruct(
+        &mut self,
+        reference_id: &str,
+        revision: &str,
+    ) -> Result<Value, MaterialProviderFailure> {
+        let record = self.catalog.reconstruct_record_with_profile(
+            reference_id,
+            revision,
+            DISCOVERY_RECIPE_PROFILE,
+        )?;
+        if !self
+            .discovery
+            .accepts(&record.capability, &record.arguments)
         {
             return Err(MaterialProviderFailure::RevisionChanged);
         }

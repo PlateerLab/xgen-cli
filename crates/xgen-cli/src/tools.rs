@@ -48,6 +48,7 @@ pub enum ToolsCommand {
     },
 }
 
+#[must_use]
 pub fn run(command: ToolsCommand) -> ExitCode {
     if ctrlc::set_handler(|| INTERRUPTED.store(true, Ordering::Relaxed)).is_err() {
         eprintln!(
@@ -129,13 +130,18 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
     {
         return Err("invalid_collection_name");
     }
-    let root = xgen_cli::tool_catalog_directory()?;
+    let state_root = crate::run_layout::discover_state_root().map_err(|_| "invalid_state_home")?;
+    crate::run_layout::ensure_private_state_root(&state_root).map_err(|_| "invalid_state_home")?;
+    let root = state_root.join("tool-collections");
     value["root"] = json!(root.to_str().ok_or("invalid_state_home")?);
     Ok(value)
 }
 
-fn runtime_command() -> Command {
+fn runtime_command(offline: bool) -> Command {
     let mut command = Command::new("uv");
+    if offline {
+        command.arg("--offline");
+    }
     command
         .args([
             "run",
@@ -174,8 +180,12 @@ fn runtime_command() -> Command {
     command
 }
 
-fn invoke(request: &Value) -> Result<Value, &'static str> {
-    invoke_worker(request, runtime_command(), TIMEOUT)
+pub(crate) fn invoke(request: &Value) -> Result<Value, &'static str> {
+    invoke_worker(request, runtime_command(false), TIMEOUT)
+}
+
+pub(crate) fn invoke_offline(request: &Value) -> Result<Value, &'static str> {
+    invoke_worker(request, runtime_command(true), TIMEOUT)
 }
 
 fn invoke_worker(

@@ -267,7 +267,7 @@ fn reject_symlink_or_non_file(path: &Path) -> Result<(), RunLayoutError> {
     Ok(())
 }
 
-fn ensure_private_state_root(path: &Path) -> Result<(), RunLayoutError> {
+pub(crate) fn ensure_private_state_root(path: &Path) -> Result<(), RunLayoutError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             if metadata.file_type().is_symlink() || !metadata.is_dir() {

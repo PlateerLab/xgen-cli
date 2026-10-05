@@ -1313,3 +1313,295 @@ fn test_sha256_digest(bytes: &[u8]) -> String {
     }
     format!("sha256:{encoded}")
 }
+
+#[cfg(unix)]
+fn discovery_runtime(state: &Path, runtime: &Path) {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::create_dir_all(runtime).unwrap();
+    let collections = state.join("tool-collections");
+    fs::create_dir_all(&collections).unwrap();
+    fs::set_permissions(state, fs::Permissions::from_mode(0o700)).unwrap();
+    for (name, tool, parameter) in [
+        ("assets", "readAsset", "asset_id"),
+        ("calendar", "readEvent", "eventId"),
+    ] {
+        fs::write(
+            collections.join(format!("{name}.json.gz")),
+            json!({"tool":tool,"parameter":parameter,"digest":"a".repeat(64)}).to_string(),
+        )
+        .unwrap();
+    }
+    let worker = runtime.join("uv");
+    fs::write(&worker, r"#!/usr/bin/python3
+import sys,json
+from pathlib import Path
+r=json.load(sys.stdin)
+root=Path(r['root'])
+def summary(name,row):
+ return dict(collection=name,artifact_digest=row['digest'],backend_version='0.46.0',execution_enabled=False,tool_count=1,source_count=1)
+if r['operation']=='list':
+ out=dict(ok=True,collections=[summary(p.name[:-8],json.loads(p.read_text())) for p in sorted(root.glob('*.json.gz'))])
+else:
+ assert '--offline' in sys.argv
+ row=json.loads((root/(r['name']+'.json.gz')).read_text())
+ with (root/'invocations').open('a') as log: log.write(r['operation']+'\n')
+ if r['expected_digest']!=row['digest']: out=dict(ok=False,error='collection_snapshot_changed')
+ else:
+  out=dict(ok=True,**summary(r['name'],row))
+  if r['operation']=='search': out.update(candidates=[dict(tool=row['tool'],description='Read one record',score=1.0)],possible_producers=[],omitted_producers=0,relations_verified_by_execution=False)
+  else:
+   assert r['tool']==row['tool']
+   out.update(tool=dict(name=row['tool'],parameters=[dict(name=row['parameter'],type='string',required=True)],metadata=dict(api_contract=dict(method='get',path='/records/{id}'))),contract_kind='discovery_candidate',effect_class='unclassified')
+print(json.dumps(out))
+").unwrap();
+    fs::set_permissions(worker, fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+#[allow(clippy::too_many_lines)]
+fn tool_discovery_is_approved_receipted_and_frozen_across_resume() {
+    for (collection, target, parameter) in [
+        ("assets", "readAsset", "asset_id"),
+        ("calendar", "readEvent", "eventId"),
+    ] {
+        let fixture = tempdir().unwrap();
+        let state = fixture.path().join("state");
+        let workspace = fixture.path().join("workspace");
+        let runtime = fixture.path().join("runtime");
+        fs::create_dir(&workspace).unwrap();
+        discovery_runtime(&state, &runtime);
+        let server = SequentialServer::spawn_responses(vec![
+            plan_response(
+                "search",
+                "Find candidate tools",
+                "xgen.tools/search",
+                &json!({"collection":collection,"query":"read record detail","topK":1}),
+            ),
+            plan_response(
+                "describe",
+                "Inspect exact contract",
+                "xgen.tools/describe",
+                &json!({"collection":collection,"tool":target}),
+            ),
+            completion_response(),
+        ]);
+        let first = bounded_output(xgen(&state).env("PATH", &runtime).args([
+            "run",
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &server.base_url,
+            "--model",
+            MODEL,
+            "--tokenizer",
+            TOKENIZER,
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "Find a tool and explain its required input.",
+        ]))
+        .unwrap();
+        assert_eq!(first.status.code(), Some(10), "{}", stderr(&first));
+        assert!(stderr(&first).contains("read_approval_required"));
+        let run_id = extract_run_id(&stderr(&first));
+        let database = state.join("runs").join(&run_id).join("run.sqlite3");
+        assert!(
+            SqliteRunStore::open_existing(&database)
+                .unwrap()
+                .load_execution_receipts()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!state.join("tool-collections/invocations").exists());
+        // A later collection is not silently added to an existing Run's scope.
+        fs::write(
+            state.join("tool-collections/later.json.gz"),
+            "not a valid catalog",
+        )
+        .unwrap();
+        let local = bounded_output(xgen(&state).env("PATH", &runtime).args([
+            "resume",
+            &run_id,
+            "--workspace",
+            path_text(&workspace),
+            "--allow-dir",
+            ".",
+            "--allow-read",
+        ]))
+        .unwrap();
+        assert_eq!(local.status.code(), Some(10), "{}", stderr(&local));
+        let result = bounded_output(xgen(&state).env("PATH", &runtime).args([
+            "resume",
+            &run_id,
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &server.base_url,
+            "--allow-dir",
+            ".",
+            "--allow-read",
+            "--allow-remote-model-egress",
+        ]))
+        .unwrap();
+        assert!(result.status.success(), "{}", stderr(&result));
+        let requests: Vec<_> = (0..3)
+            .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+            .collect();
+        server.handle.join().unwrap();
+        let initial = planning_context(&requests[0]);
+        assert!(capability_ids(&initial).contains(&"xgen.tools/search"));
+        assert!(capability_ids(&initial).contains(&"xgen.tools/describe"));
+        let final_context = planning_context(&requests[2]);
+        let described = tool_output(&final_context, "xgen.tools/describe");
+        assert_eq!(described["tool"]["name"], target);
+        assert_eq!(described["tool"]["parameters"][0]["name"], parameter);
+        assert_eq!(described["execution_enabled"], false);
+        assert_eq!(described["artifact_digest"], "a".repeat(64));
+        assert!(!capability_ids(&final_context).contains(&target));
+        assert!(
+            !final_context["planningConstraints"]
+                .to_string()
+                .contains("later")
+        );
+        let store = SqliteRunStore::open_existing(&database).unwrap();
+        assert_eq!(store.load_execution_receipts().unwrap().len(), 2);
+        assert_eq!(
+            fs::read_to_string(state.join("tool-collections/invocations")).unwrap(),
+            "search\ndescribe\n"
+        );
+        let manifest: Value = serde_json::from_slice(
+            &fs::read(state.join("runs").join(run_id).join("manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            manifest["record"]["toolDiscoverySnapshots"][collection],
+            "a".repeat(64)
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
+    for (capability_id, input) in [
+        (
+            "xgen.tools/search",
+            json!({"collection":"unknown","query":"record","topK":1}),
+        ),
+        ("readAsset", json!({"asset_id":"one"})),
+    ] {
+        let fixture = tempdir().unwrap();
+        let state = fixture.path().join("state");
+        let workspace = fixture.path().join("workspace");
+        let runtime = fixture.path().join("runtime");
+        fs::create_dir(&workspace).unwrap();
+        discovery_runtime(&state, &runtime);
+        let server = SequentialServer::spawn_responses(vec![plan_response(
+            "invalid",
+            "Attempt unavailable operation",
+            capability_id,
+            &input,
+        )]);
+        let result = bounded_output(xgen(&state).env("PATH", runtime).args([
+            "run",
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &server.base_url,
+            "--model",
+            MODEL,
+            "--tokenizer",
+            TOKENIZER,
+            "--allow-dir",
+            ".",
+            "--allow-read",
+            "--allow-remote-model-egress",
+            "Inspect the tool.",
+        ]))
+        .unwrap();
+        assert_eq!(result.status.code(), Some(20), "{}", stderr(&result));
+        let run_id = extract_run_id(&stderr(&result));
+        let store =
+            SqliteRunStore::open_existing(state.join("runs").join(run_id).join("run.sqlite3"))
+                .unwrap();
+        assert!(store.load_execution_receipts().unwrap().is_empty());
+        assert!(!state.join("tool-collections/invocations").exists());
+        server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        server.handle.join().unwrap();
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn tool_discovery_changed_snapshot_fails_before_verified_output() {
+    let fixture = tempdir().unwrap();
+    let state = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    let runtime = fixture.path().join("runtime");
+    fs::create_dir(&workspace).unwrap();
+    discovery_runtime(&state, &runtime);
+    let server = SequentialServer::spawn_responses(vec![plan_response(
+        "search",
+        "Find record",
+        "xgen.tools/search",
+        &json!({"collection":"assets","query":"detail","topK":1}),
+    )]);
+    let first = bounded_output(xgen(&state).env("PATH", &runtime).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "Inspect the tool.",
+    ]))
+    .unwrap();
+    assert_eq!(first.status.code(), Some(10));
+    let run_id = extract_run_id(&stderr(&first));
+    fs::write(
+        state.join("tool-collections/assets.json.gz"),
+        json!({"tool":"readAsset","parameter":"asset_id","digest":"b".repeat(64)}).to_string(),
+    )
+    .unwrap();
+    let resumed = bounded_output(xgen(&state).env("PATH", runtime).args([
+        "resume",
+        &run_id,
+        "--workspace",
+        path_text(&workspace),
+        "--allow-dir",
+        ".",
+        "--allow-read",
+    ]))
+    .unwrap();
+    assert!(!resumed.status.success(), "{}", stderr(&resumed));
+    let store =
+        SqliteRunStore::open_existing(state.join("runs").join(run_id).join("run.sqlite3")).unwrap();
+    let state = store.load_current().unwrap().unwrap();
+    for step in state.steps.values() {
+        if let Some(intent) = &step.intent {
+            assert_eq!(
+                store
+                    .load_tool_output(&intent.effect_id)
+                    .unwrap()
+                    .unwrap()
+                    .output()["ok"],
+                false
+            );
+        }
+    }
+    let receipts = store.load_execution_receipts().unwrap();
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(
+        serde_json::to_value(&receipts[0]).unwrap()["status"],
+        "failed"
+    );
+    server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+    server.handle.join().unwrap();
+}

@@ -33,6 +33,8 @@ struct RunManifestRecord {
     local_execution_profile_digest: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     process_fingerprints: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    tool_discovery_snapshots: crate::graph_discovery::Snapshots,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
@@ -158,6 +160,7 @@ impl RunManifest {
             allow_file_catalog_digest: allow_file_catalog_digest.to_owned(),
             local_execution_profile_digest: local_execution_profile_digest.to_owned(),
             process_fingerprints: None,
+            tool_discovery_snapshots: crate::graph_discovery::Snapshots::new(),
             budget,
             conversation_responses: false,
             final_response_schema: None,
@@ -169,6 +172,20 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_tool_discovery_snapshots(
+        mut self,
+        snapshots: crate::graph_discovery::Snapshots,
+    ) -> Result<Self, ManifestError> {
+        self.record.tool_discovery_snapshots = snapshots;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn tool_discovery_snapshots(&self) -> &crate::graph_discovery::Snapshots {
+        &self.record.tool_discovery_snapshots
     }
 
     pub(crate) fn with_final_response_schema(
@@ -347,7 +364,8 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     }) {
         return Err(ManifestError::Invalid);
     }
-    if record.format_version != MANIFEST_FORMAT_VERSION
+    if !crate::graph_discovery::valid_snapshots(&record.tool_discovery_snapshots)
+        || record.format_version != MANIFEST_FORMAT_VERSION
         || !valid_run_id(&record.run_id)
         || WorkspaceId::new(&record.workspace_id).is_err()
         || !valid_identifier(&record.workspace_root_identity_profile, 128)
@@ -456,6 +474,35 @@ mod tests {
             ManifestBudget::default(),
         )
         .expect("manifest should construct")
+    }
+
+    #[test]
+    fn discovery_snapshots_are_durable_and_manifest_bound() {
+        let legacy = fixture();
+        assert!(legacy.tool_discovery_snapshots().is_empty());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("toolDiscoverySnapshots")
+        );
+        let bound = legacy
+            .clone()
+            .with_tool_discovery_snapshots(crate::graph_discovery::Snapshots::from([
+                ("assets".into(), "a".repeat(64)),
+                ("calendar".into(), "b".repeat(64)),
+            ]))
+            .unwrap();
+        assert_ne!(legacy.authority(), bound.authority());
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap()).unwrap(),
+            bound
+        );
+        for collection in ["assets", "calendar"] {
+            let mut tampered: Value = serde_json::from_slice(&bound.to_bytes().unwrap()).unwrap();
+            tampered["record"]["toolDiscoverySnapshots"][collection] =
+                Value::String("c".repeat(64));
+            assert!(RunManifest::from_bytes(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        }
     }
 
     #[test]

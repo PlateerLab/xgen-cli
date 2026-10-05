@@ -1,5 +1,7 @@
 """Actual graph-tool-call integration and optional compiled CLI checks."""
 
+import http.server
+import threading
 import importlib.util
 import gzip
 import json
@@ -103,6 +105,19 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(WORKER.WorkerError, "integrity_failure"):
             self.call("search", name="assets", query="inventory", top_k=2)
 
+    def test_host_pinned_snapshot_rejects_valid_replacement(self):
+        for name, spec, target in [("assets", asset_spec(), "getAssetDetail"), ("calendar", calendar_spec(), "readEventDetails")]:
+            built = self.install(name, spec)
+            self.assertEqual(self.call("describe", name=name, tool=target, expected_digest=built["artifact_digest"])["tool"]["name"], target)
+            path = self.root / (name + ".json.gz")
+            saved = json.loads(gzip.decompress(path.read_bytes()))
+            saved["artifact"]["tools"][target]["description"] = "valid newer snapshot"
+            saved["artifact_digest"] = WORKER.digest(saved["artifact"])
+            path.write_bytes(gzip.compress(WORKER.canonical(saved)))
+            for operation, fields in [("search", {"query": "details", "top_k": 1}), ("describe", {"tool": target})]:
+                with self.assertRaisesRegex(WORKER.WorkerError, "collection_snapshot_changed"):
+                    self.call(operation, name=name, expected_digest=built["artifact_digest"], **fields)
+
     def test_invalid_names_and_missing_tools(self):
         for name in ["../escape", "", "x/y"]:
             with self.assertRaisesRegex(WORKER.WorkerError, "invalid_collection_name"):
@@ -157,6 +172,70 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(result["candidates"][0]["tool"], target)
                 self.assertEqual(call("describe", "--name", name, target)["tool"]["name"], target)
             self.assertEqual(len(call("list")["collections"]), 2)
+
+    def test_agent_loop_with_actual_worker_on_held_out_list_requests(self):
+        binary = os.environ["XGEN_TOOL_TEST_BINARY"]
+        for collection, spec, query, target in [
+            ("assets", asset_spec(), "list assets in inventory", "listAssets"),
+            ("calendar", calendar_spec(), "list calendar events", "listCalendarEvents"),
+        ]:
+            with self.subTest(collection=collection), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory) / "state"
+                workspace = Path(directory) / "workspace"
+                workspace.mkdir()
+                source = Path(directory) / "source.json"
+                source.write_text(json.dumps(spec))
+                env = dict(os.environ, XGEN_STATE_HOME=str(state))
+                env.pop("XGEN_OPENAI_API_KEY", None)
+                imported = subprocess.run([binary, "tools", "import", "--name", collection, "--source", str(source)], env=env, capture_output=True, timeout=150)
+                self.assertEqual(imported.returncode, 0, imported.stderr.decode())
+                snapshot = json.loads(imported.stdout)["artifact_digest"]
+                requests = []
+                proposals = []
+                for key, capability, arguments in [
+                    ("find", "xgen.tools/search", {"collection":collection,"query":query,"topK":1}),
+                    ("inspect", "xgen.tools/describe", {"collection":collection,"tool":target}),
+                ]:
+                    proposals.append({"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Inspect discovery candidates","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"1.0.0"},"arguments":arguments}]})
+                proposals.append({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":"Tool schema inspected; no API executed."})
+                class Handler(http.server.BaseHTTPRequestHandler):
+                    def log_message(self, *_args):
+                        pass
+                    def do_POST(self):
+                        payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                        requests.append(payload)
+                        index = len(requests)-1
+                        proposal = proposals[index] if index < len(proposals) else proposals[-1]
+                        body = json.dumps({"id":"fixture","model":"fixture-model","choices":[{"index":0,"message":{"role":"assistant","content":json.dumps(proposal)},"finish_reason":"stop"}]}).encode()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                server = http.server.ThreadingHTTPServer(("127.0.0.1",0), Handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    run = subprocess.run([binary,"run","--workspace",str(workspace),"--base-url",f"http://127.0.0.1:{server.server_port}/v1","--model","fixture-model","--tokenizer","fixture-tokenizer","--allow-dir",".","--allow-read","--allow-remote-model-egress",query], env=env,capture_output=True,timeout=150)
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+                self.assertEqual(run.returncode,0,run.stderr.decode())
+                self.assertEqual(len(requests),3)
+                def context(request):
+                    return json.loads(next(message["content"] for message in request["messages"] if message["role"] == "user"))["planningContext"]
+                initial = context(requests[0])
+                self.assertIn("xgen.tools/search",[row["capability"]["capabilityId"] for row in initial["capabilities"]])
+                final = context(requests[-1])
+                rows = {row["capability"]["capabilityId"]:row["output"] for row in final["toolOutputs"]}
+                self.assertEqual(rows["xgen.tools/search"]["candidates"][0]["tool"],target)
+                self.assertEqual(rows["xgen.tools/describe"]["tool"]["name"],target)
+                self.assertIn("api_contract",rows["xgen.tools/describe"]["tool"]["metadata"])
+                self.assertEqual(rows["xgen.tools/describe"]["artifact_digest"],snapshot)
+                self.assertFalse(rows["xgen.tools/describe"]["execution_enabled"])
+                manifest = json.loads(next((state/"runs").glob("*/manifest.json")).read_text())
+                self.assertEqual(manifest["record"]["toolDiscoverySnapshots"][collection],snapshot)
 
 
 if __name__ == "__main__":

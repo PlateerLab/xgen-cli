@@ -32,7 +32,7 @@
 - 일반: 저장한 그래프에는 원본 명세·관찰의 출처와 버전을 연결하고, 변경 시 갱신한다. 인증 정보는 모델 입력과 그래프에 저장하지 않는다.
 - 일반: 다른 언어의 도구를 내부에서 자동 실행할 수 있다. Rust 재구현이나 MCP 사용 자체가 목표는 아니다.
 - 초기 구현: 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 호출하고 uv가 Python 3.12·graph-tool-call 0.46.0을 자동 준비한다. 별도 서버는 없지만 현재 개발 버전은 uv가 필요하다. uv 포함 배포·OS별 검증은 남았다.
-- 미구현: agent loop 자동 도구 검색, 외부 API의 실제 실행·인증 연결, browser-use 연결, 화면 정보 변환 어댑터.
+- 구현: agent loop의 저장 collection 자동 연결·검색·정확한 명세 조회. 미구현: 외부 API의 실제 실행·인증 연결, browser-use 연결, 화면 정보 변환 어댑터.
 
 ## 역할별 모델 연결: 설계 후보
 
@@ -48,9 +48,11 @@
 
 ## 현재 확인한 결과
 
-- `xgen tools import/search/describe/list`로 graph-tool-call 기반 발견·검색을 구현했다. agent loop는 여전히 `CapabilityRegistry`에 등록한 도구를 ID·버전 순서로 컨텍스트 한도 안에서 제공한다. `CapabilityRouter`는 지정된 exact Capability의 실행 Instance를 선택하며 자연어 검색기가 아니다. 새 검색은 아직 agent loop 자동 호출이나 실행 admission에 연결하지 않았다.
+- `xgen tools import/search/describe/list`로 graph-tool-call 기반 발견·검색을 구현했다. agent loop는 여전히 `CapabilityRegistry`에 등록한 도구를 ID·버전 순서로 컨텍스트 한도 안에서 제공한다. `CapabilityRouter`는 지정된 exact Capability의 실행 Instance를 선택하며 자연어 검색기가 아니다. 새 workspace Run에는 검색·조회 built-in 두 개를 등록하고 collection snapshot을 manifest에 고정한다. 외부 후보 자체의 실행 admission은 아직 없다.
 - [내부 검색 계약·구현](docs/development/internal-tool-search.md): 원본 계약과 snapshot digest 보존, 덮어쓰기 없는 압축 저장, 변조 검증, 제한된 worker 통신. 검색 후보는 실행 권한이 없고 효과 미분류 상태다.
-- 서로 다른 OpenAPI 3.1/Swagger 2.0 fixture의 상세 요청과 별도로 보류한 목록 요청을 실제 worker·CLI로 검증했다. Python 검사 8개와 새 Rust transport/lifecycle 검사 7개를 추가했다. 모델 호출·업무 API 실행은 없다.
+- 이번 agent loop 연결의 CLI 패키지 회귀 검사 172개·실제 worker Python 검사 10개·Clippy를 통과했다(live Rust 검사 3개 ignored).
+- 실제 graph-tool-call 0.46.0과 CLI·loopback model endpoint로 두 명세의 목록 요청에서 검색 → schema 조회 → 최종 응답 연결을 검증했다. 실제 LLM·업무 API 호출은 없으며 품질 비교가 아니다. 승인 전 차단, 재개·입력 digest·snapshot 검증, 변경 snapshot의 실패 Receipt를 확인했다.
+- 서로 다른 OpenAPI 3.1/Swagger 2.0 fixture의 상세 요청과 별도로 보류한 목록 요청을 실제 worker·CLI로 검증했다. 현재 Python 검사 10개와 기존 Rust transport/lifecycle 검사 7개, 새 discovery·manifest·profile·driver 검사를 유지한다. 모델 호출·업무 API 실행은 없다.
 - 기존 실제 명세 snapshot도 CLI로 가져왔다. 도구 1,108개, 저장 6,860,637 bytes, 최초 import 6.79초·search 3.44초였다. 검색 첫 후보의 업무 혼동은 남아 있고, 성능 향상이나 실제 두 시스템 통합 성공을 주장하지 않는다.
 - 공개 Swagger UI 주소에서 명세 15개·도구 1,108개를 CLI로 직접 수집하는 것도 통과했다(import 10.68초). 실제 업무 API는 호출하지 않았다.
 - graph-tool-call main의 `f8bec76` / 0.46.0을 별도 체크아웃해서 확인했다.
@@ -58,7 +60,7 @@
 - 실제 한 시스템의 Swagger에서 명세 15개, 작업 2,221개를 수집하고 도구 1,108개의 그래프를 생성했다.
 - 서로 다른 조회 요청 3개로 검색을 실행했다. 상품 상세에 주문상품 상세, 주문 상세에 정기주문 상세가 상위에 나오는 등 의미 선택이 부족했다.
 - 임베딩 없는 대규모 검색의 의미·언어 간 검색 품질 저하 경고가 있었다. 임베딩 추가 효과는 아직 검증하지 않았다.
-- 이 테스트는 명세 수집·그래프 생성·검색까지다. 업무 API 호출이나 xgen CLI 통합 검증은 수행하지 않았다.
+- 초기 별도 테스트는 명세 수집·그래프 생성·검색까지였다. 이후 CLI·agent loop의 fixture 통합 검증은 위와 같이 수행했으며 실제 업무 API 호출은 아직 없다.
 - 두 번째 시스템은 화면의 API 게이트웨이 주소만 확인했다. OpenAPI 명세 위치는 미확인이다. 화면 수집 경로는 제안 단계다.
 - 따라서 두 시스템에 걸친 통합 성공이나 검색 품질 개선을 주장하지 않는다.
 - SEV 문서·프로토콜·UI 데이터/평가 코드·기존 graph-tool-call 평가 연결을 검토했다. 문서상 브라우저 실행기는 browser-use가 아니라 agent-browser다. 최신 음성 실험 브랜치와 모델 서버 상태는 이 환경에서 확인하지 못했다.
@@ -71,7 +73,7 @@
 
 순서: 공통 계약·검증 계획 → 내부 도구 검색 → API 조회 실행·연결 UX → 브라우저·SEV → API·화면 그래프 통합 → 역할별 모델·STT → 배포·기본값 결정.
 
-공통 계약·검증 계획 문서와 명시적인 CLI 검색 연결은 구현했다. 다음은 검색 후보의 Capability admission·agent loop 연결이다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
+공통 계약·검증 계획 문서와 명시적인 CLI 검색 연결은 구현했다. agent loop 검색·조회 연결까지 구현했고, 다음은 외부 API 후보의 실행용 Capability admission·HTTP 조회 adapter·연결 UX다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
 
 ## 도구별 개선과 비용 추적 방식
 
@@ -92,4 +94,4 @@
 - graph-tool-call: 유사한 업무의 도구를 구별하는 검색 품질과 선행 도구 선택을 추가 평가. 현재는 문제 관찰 단계이며 해결 방법은 미정.
 - browser-use / 변환 어댑터: 화면 수집 결과의 공통 계약과 갱신 조건 설계. 아직 구현·검증하지 않았다.
 - SEV: 기존 API/UI 판단을 통합 호출 계약으로 연결하고, 없는 대상의 오실행·후보 품질·비용을 별도 평가. 같은 프로토콜만으로 API/UI 체크포인트를 통합하지 않는다.
-- xgen CLI: 연계 도구의 내부 호출 계약과 실행·Receipt 연결 구현. 아직 구현하지 않았다.
+- xgen CLI: 검색·조회 내부 호출 계약과 승인·실행·Receipt 연결은 구현했다. 외부 API 실행·인증과 사용자 연결 UX, 동기 worker의 대화형 즉시 취소 연결은 남았다.

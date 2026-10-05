@@ -1,0 +1,585 @@
+//! Read-only discovery capabilities pinned by the host; candidates are never executable.
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use xgen_domain::{CapabilityRef, InstanceBinding, VerificationResult, VerificationStrategy};
+use xgen_policy::ResourceResolutionFailure;
+use xgen_runtime::{
+    AdapterEvidenceDigest, AdapterExecutionObservation, AdapterPrepareFailure,
+    AdapterPrepareRequest, AdapterReconcileRequest, AdapterReconciliationInconclusiveReason,
+    AdapterReconciliationObservation, AdapterToolOutput, EffectAdapter, EffectVerifier,
+    PreparedAdapterInvocation, RuleVerificationObservation, VerificationPortFailure,
+    VerificationReport, VerificationRequest, VerifiedArtifactDescriptor, VerifierOutputDigest,
+};
+use xgen_workgraph::EffectClass;
+
+pub(crate) const SEARCH: &str = "xgen.tools/search";
+pub(crate) const DESCRIBE: &str = "xgen.tools/describe";
+pub(crate) const VERSION: &str = "1.0.0";
+pub(crate) const SCOPE: &str = "tools.discover";
+pub(crate) const PROVIDER: &str = "xgen.cli.tool-discovery-material.v1";
+pub(crate) const MAX_OUTPUT: usize = 64 * 1024;
+pub(crate) type Snapshots = BTreeMap<String, String>;
+
+pub(crate) fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+}
+
+pub(crate) fn valid_snapshots(items: &Snapshots) -> bool {
+    items.len() <= 16
+        && items.iter().all(|(name, digest)| {
+            valid_name(name)
+                && digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+        })
+}
+
+pub(crate) fn resolve(resource: &str) -> Result<String, ResourceResolutionFailure> {
+    valid_name(resource)
+        .then(|| resource.to_owned())
+        .ok_or(ResourceResolutionFailure::InvalidResource)
+}
+
+#[derive(Clone)]
+pub(crate) struct DiscoveryCatalog {
+    root: PathBuf,
+    snapshots: Snapshots,
+}
+
+impl DiscoveryCatalog {
+    /// Setup is host-side. Per-step retrieval uses offline mode and cannot install packages.
+    pub(crate) fn discover() -> Result<Snapshots, ()> {
+        let root = crate::tool_catalog_directory().map_err(|_| ())?;
+        if !root.exists() {
+            return Ok(Snapshots::new());
+        }
+        let count = std::fs::read_dir(&root)
+            .map_err(|_| ())?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".json.gz"))
+            .count();
+        if count == 0 {
+            return Ok(Snapshots::new());
+        }
+        if count > 16 {
+            return Err(());
+        }
+        let response =
+            crate::tools::invoke(&json!({"operation":"list", "root":root.to_str().ok_or(())?}))
+                .map_err(|_| ())?;
+        if response["ok"] != true {
+            return Err(());
+        }
+        let mut snapshots = Snapshots::new();
+        for item in response["collections"].as_array().ok_or(())? {
+            if item["backend_version"] != "0.46.0" || item["execution_enabled"] != false {
+                return Err(());
+            }
+            let name = item["collection"].as_str().ok_or(())?.to_owned();
+            let digest = item["artifact_digest"].as_str().ok_or(())?.to_owned();
+            if snapshots.insert(name, digest).is_some() {
+                return Err(());
+            }
+        }
+        valid_snapshots(&snapshots).then_some(snapshots).ok_or(())
+    }
+
+    pub(crate) fn saved(snapshots: Snapshots) -> Result<Self, ()> {
+        if !valid_snapshots(&snapshots) {
+            return Err(());
+        }
+        Ok(Self {
+            root: crate::tool_catalog_directory().map_err(|_| ())?,
+            snapshots,
+        })
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.snapshots.is_empty()
+    }
+    pub(crate) fn hint(&self) -> String {
+        format!(
+            "Saved tool collections (immutable snapshots): {}. Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Do not claim API execution.",
+            self.snapshots
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+    pub(crate) fn contains(&self, name: &str) -> bool {
+        self.snapshots.contains_key(name)
+    }
+    pub(crate) fn accepts(&self, capability: &CapabilityRef, input: &Value) -> bool {
+        if capability.contract_version != VERSION {
+            return false;
+        }
+        let Some(object) = input.as_object() else {
+            return false;
+        };
+        let Some(name) = input["collection"].as_str() else {
+            return false;
+        };
+        if !self.contains(name) {
+            return false;
+        }
+        match capability.capability_id.as_str() {
+            SEARCH => {
+                object.len() == 3
+                    && input["query"].as_str().is_some_and(|s| {
+                        !s.trim().is_empty() && s.len() <= 4096 && !s.chars().any(char::is_control)
+                    })
+                    && input["topK"]
+                        .as_u64()
+                        .is_some_and(|v| (1..=20).contains(&v))
+            }
+            DESCRIBE => {
+                object.len() == 2
+                    && input["tool"].as_str().is_some_and(|s| {
+                        !s.is_empty() && s.len() <= 1024 && !s.chars().any(char::is_control)
+                    })
+            }
+            _ => false,
+        }
+    }
+    pub(crate) fn adapter(&self, operation: &'static str) -> DiscoveryAdapter {
+        DiscoveryAdapter {
+            catalog: self.clone(),
+            operation,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DiscoveryAdapter {
+    catalog: DiscoveryCatalog,
+    operation: &'static str,
+}
+impl DiscoveryAdapter {
+    pub(crate) fn binding(&self) -> InstanceBinding {
+        let encoded = serde_jcs::to_vec(&self.catalog.snapshots).expect("finite snapshot map");
+        InstanceBinding {
+            protocol_version: None,
+            binding_ref: format!(
+                "builtin://tool-discovery/{}",
+                digest(&encoded).trim_start_matches("sha256:")
+            ),
+            operation_ref: Some(format!(
+                "{}@{VERSION};graph-tool-call=0.46.0;offline",
+                self.operation
+            )),
+        }
+    }
+    pub(crate) fn verifier(&self) -> DiscoveryVerifier {
+        DiscoveryVerifier {
+            adapter: self.clone(),
+        }
+    }
+    fn request(&self, input: &Value) -> Result<Value, AdapterPrepareFailure> {
+        if !self.catalog.accepts(
+            &CapabilityRef {
+                capability_id: self.operation.into(),
+                contract_version: VERSION.into(),
+            },
+            input,
+        ) {
+            return Err(AdapterPrepareFailure::InvalidMaterial);
+        }
+        let name = input["collection"]
+            .as_str()
+            .ok_or(AdapterPrepareFailure::InvalidMaterial)?;
+        let mut request = json!({"operation":if self.operation == SEARCH {"search"} else {"describe"}, "root":self.catalog.root.to_str().ok_or(AdapterPrepareFailure::ResourceUnavailable)?, "name":name,"expected_digest":self.catalog.snapshots[name]});
+        if self.operation == SEARCH {
+            request["query"] = input["query"].clone();
+            request["top_k"] = input["topK"].clone();
+        } else {
+            request["tool"] = input["tool"].clone();
+        }
+        Ok(request)
+    }
+}
+
+impl EffectAdapter for DiscoveryAdapter {
+    fn prepare(
+        &mut self,
+        request: AdapterPrepareRequest<'_>,
+    ) -> Result<Box<dyn PreparedAdapterInvocation>, AdapterPrepareFailure> {
+        let intent = request.intent();
+        let instance = request.instance();
+        if intent.invocation.capability_id != self.operation
+            || intent.invocation.contract_version != VERSION
+            || instance.definition.capability_id != self.operation
+            || instance.definition.contract_version != VERSION
+            || intent.invocation.instance_id != instance.instance_id
+            || instance.binding != self.binding()
+            || intent.effect_class != EffectClass::ReadOnly
+            || intent.idempotency_key.is_some()
+            || !instance.features.sync
+            || instance.features.task
+            || instance.features.cancellable
+            || instance.features.idempotency_query
+        {
+            return Err(AdapterPrepareFailure::UnsupportedProtocol);
+        }
+        Ok(Box::new(PreparedDiscovery {
+            adapter: self.clone(),
+            input: request.normalized_arguments().clone(),
+            request: self.request(request.normalized_arguments())?,
+        }))
+    }
+    fn reconcile(&mut self, _: AdapterReconcileRequest<'_>) -> AdapterReconciliationObservation {
+        AdapterReconciliationObservation::Inconclusive {
+            reason: AdapterReconciliationInconclusiveReason::StableKeyUnsupported,
+        }
+    }
+}
+
+struct PreparedDiscovery {
+    adapter: DiscoveryAdapter,
+    input: Value,
+    request: Value,
+}
+impl PreparedAdapterInvocation for PreparedDiscovery {
+    fn execute(self: Box<Self>) -> AdapterExecutionObservation {
+        let result = crate::tools::invoke_offline(&self.request)
+            .map_err(str::to_owned)
+            .and_then(|output| {
+                if output["ok"] == false {
+                    return Err(output["error"]
+                        .as_str()
+                        .filter(|s| valid_error(s))
+                        .unwrap_or("tool_discovery_backend_failed")
+                        .to_owned());
+                }
+                inspect(
+                    &self.adapter.catalog,
+                    self.adapter.operation,
+                    &self.input,
+                    &output,
+                )
+                .map_err(|()| "tool_discovery_response_invalid".to_owned())?;
+                Ok(output)
+            });
+        let mut output = result.unwrap_or_else(|code| {
+            json!({
+                "ok":false, "error":code, "collection":self.input["collection"],
+                "artifact_digest":self.request["expected_digest"], "backend_version":"0.46.0",
+                "execution_enabled":false, "snapshot_verified":false,
+            })
+        });
+        output["request"] = self.input.clone();
+        if serde_jcs::to_vec(&output)
+            .ok()
+            .is_none_or(|bytes| bytes.len() > MAX_OUTPUT)
+        {
+            output = json!({"ok":false,"error":"tool_discovery_output_limit","collection":self.input["collection"],"artifact_digest":self.request["expected_digest"],"backend_version":"0.46.0","execution_enabled":false,"snapshot_verified":false,"request":self.input});
+        }
+        let bytes = serde_jcs::to_vec(&output).expect("bounded finite discovery output");
+        AdapterExecutionObservation::SucceededWithOutput {
+            evidence_digest: AdapterEvidenceDigest::new(digest(&bytes)).expect("canonical digest"),
+            output: AdapterToolOutput::new(output),
+        }
+    }
+}
+
+fn valid_error(code: &str) -> bool {
+    !code.is_empty()
+        && code.len() <= 80
+        && code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+}
+
+fn inspect(
+    catalog: &DiscoveryCatalog,
+    operation: &str,
+    input: &Value,
+    output: &Value,
+) -> Result<(), ()> {
+    let bytes = serde_jcs::to_vec(output).map_err(|_| ())?;
+    let name = input["collection"].as_str().ok_or(())?;
+    if bytes.len() > MAX_OUTPUT
+        || !output["ok"].is_boolean()
+        || output["collection"] != name
+        || output["artifact_digest"].as_str() != catalog.snapshots.get(name).map(String::as_str)
+        || output["backend_version"] != "0.46.0"
+        || output["execution_enabled"] != false
+    {
+        return Err(());
+    }
+    if output["ok"] == false {
+        return if output["snapshot_verified"] == false
+            && output["error"].as_str().is_some_and(|s| {
+                !s.is_empty()
+                    && s.len() <= 80
+                    && s.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+            })
+            && output
+                .as_object()
+                .is_some_and(|v| v.len() == 8 || (v.len() == 7 && !v.contains_key("request")))
+        {
+            Ok(())
+        } else {
+            Err(())
+        };
+    }
+    if operation == SEARCH {
+        let rows = output["candidates"].as_array().ok_or(())?;
+        if rows.len() > usize::try_from(input["topK"].as_u64().ok_or(())?).map_err(|_| ())?
+            || output["relations_verified_by_execution"] != false
+            || output["possible_producers"]
+                .as_array()
+                .is_none_or(|v| v.len() > 40 || v.iter().any(|item| item.as_str().is_none()))
+            || rows.iter().any(|row| {
+                row["tool"].as_str().is_none_or(str::is_empty)
+                    || row["description"].as_str().is_none()
+                    || row["score"].as_f64().is_none()
+            })
+        {
+            return Err(());
+        }
+    } else if operation == DESCRIBE {
+        if output["contract_kind"] != "discovery_candidate"
+            || output["effect_class"] != "unclassified"
+            || output["tool"]["name"] != input["tool"]
+            || !output["tool"].is_object()
+            || !output["tool"]["parameters"].is_array()
+            || !output["tool"]["metadata"]["api_contract"].is_object()
+        {
+            return Err(());
+        }
+    } else {
+        return Err(());
+    }
+    Ok(())
+}
+
+fn verified_request<'a>(
+    catalog: &DiscoveryCatalog,
+    capability: &CapabilityRef,
+    output: &'a Value,
+    material_digest: &str,
+) -> Result<&'a Value, VerificationPortFailure> {
+    let input = &output["request"];
+    if !catalog.accepts(capability, input)
+        || xgen_workgraph::invocation_material_digest(input)
+            .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?
+            != material_digest
+    {
+        return Err(VerificationPortFailure::ResponseUnverifiable);
+    }
+    Ok(input)
+}
+
+pub(crate) struct DiscoveryVerifier {
+    adapter: DiscoveryAdapter,
+}
+impl EffectVerifier for DiscoveryVerifier {
+    fn verify(
+        &mut self,
+        request: VerificationRequest<'_>,
+    ) -> Result<VerificationReport, VerificationPortFailure> {
+        let instance = request.instance();
+        let intent = request.intent();
+        let rules = &request.definition().spec.verification;
+        if instance.binding != self.adapter.binding()
+            || intent.invocation.capability_id != self.adapter.operation
+            || intent.invocation.contract_version != VERSION
+            || intent.invocation.instance_id != instance.instance_id
+            || intent.effect_class != EffectClass::ReadOnly
+            || intent.idempotency_key.is_some()
+            || rules.len() != 2
+            || rules.iter().any(|r| {
+                !r.required
+                    || !matches!(
+                        r.strategy,
+                        VerificationStrategy::OutputSchema | VerificationStrategy::Postcondition
+                    )
+            })
+            || rules
+                .iter()
+                .filter(|r| r.strategy == VerificationStrategy::OutputSchema)
+                .count()
+                != 1
+        {
+            return Err(VerificationPortFailure::UnsupportedStrategy);
+        }
+        let output = request
+            .tool_output()
+            .ok_or(VerificationPortFailure::EvidenceUnavailable)?;
+        let input = verified_request(
+            &self.adapter.catalog,
+            &instance.definition,
+            output.output(),
+            &intent.authorization.binding.material_digest,
+        )?;
+        inspect(
+            &self.adapter.catalog,
+            self.adapter.operation,
+            input,
+            output.output(),
+        )
+        .map_err(|()| VerificationPortFailure::ResponseUnverifiable)?;
+        let bytes = serde_jcs::to_vec(output.output())
+            .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?;
+        let evidence = digest(&bytes);
+        if evidence != request.outcome_evidence_digest().as_str() {
+            return Err(VerificationPortFailure::ResponseUnverifiable);
+        }
+        let rules = rules
+            .iter()
+            .map(|r| {
+                RuleVerificationObservation::new(
+                    r.strategy,
+                    if output.output()["ok"] == false
+                        && r.strategy == VerificationStrategy::Postcondition
+                    {
+                        VerificationResult::Failed
+                    } else {
+                        VerificationResult::Passed
+                    },
+                    Some(AdapterEvidenceDigest::new(evidence.clone()).expect("canonical digest")),
+                )
+            })
+            .collect();
+        VerificationReport::new(
+            VerifierOutputDigest::new(output.output_digest().to_owned())
+                .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?,
+            rules,
+        )
+        .with_artifacts(vec![
+            VerifiedArtifactDescriptor::new(
+                "tool-discovery-observation",
+                Option::<String>::None,
+                "application/json",
+                u64::try_from(bytes.len())
+                    .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?,
+                evidence,
+            )
+            .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?,
+        ])
+        .map_err(|_| VerificationPortFailure::ResponseUnverifiable)
+    }
+}
+
+fn digest(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut text = String::from("sha256:");
+    for byte in Sha256::digest(bytes) {
+        write!(&mut text, "{byte:02x}").expect("String write");
+    }
+    text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn catalog() -> DiscoveryCatalog {
+        DiscoveryCatalog::saved(Snapshots::from([
+            ("assets".into(), "a".repeat(64)),
+            ("calendar".into(), "b".repeat(64)),
+        ]))
+        .unwrap()
+    }
+    #[test]
+    fn query_contracts_bind_exact_collections_and_reject_injected_fields() {
+        let catalog = catalog();
+        let capability = CapabilityRef {
+            capability_id: SEARCH.into(),
+            contract_version: VERSION.into(),
+        };
+        for name in ["assets", "calendar"] {
+            assert!(catalog.accepts(
+                &capability,
+                &json!({"collection":name,"query":"detail","topK":1})
+            ));
+        }
+        for input in [
+            json!({"collection":"unknown","query":"detail","topK":1}),
+            json!({"collection":"assets","query":"detail","topK":1,"root":"/other"}),
+            json!({"collection":"assets","query":"detail","topK":1,"expected_digest":"override"}),
+            json!({"collection":"calendar","query":"x\u{1b}","topK":1}),
+            json!({"collection":"calendar","query":"detail","topK":21}),
+        ] {
+            assert!(!catalog.accepts(&capability, &input));
+        }
+    }
+    #[test]
+    fn observations_cannot_claim_a_different_snapshot_backend_or_execution() {
+        let catalog = catalog();
+        for name in ["assets", "calendar"] {
+            let input = json!({"collection":name,"tool":"getRecord"});
+            let good = json!({"ok":true,"collection":name,"artifact_digest":catalog.snapshots[name],"backend_version":"0.46.0","execution_enabled":false,"tool":{"name":"getRecord","parameters":[],"metadata":{"api_contract":{}}},"contract_kind":"discovery_candidate","effect_class":"unclassified"});
+            assert!(inspect(&catalog, DESCRIBE, &input, &good).is_ok());
+            for (key, value) in [
+                ("artifact_digest", json!("c".repeat(64))),
+                ("collection", json!("other")),
+                ("backend_version", json!("latest")),
+                ("execution_enabled", json!(true)),
+                ("effect_class", json!("read_only")),
+            ] {
+                let mut bad = good.clone();
+                bad[key] = value;
+                assert!(inspect(&catalog, DESCRIBE, &input, &bad).is_err());
+            }
+            let mut bad = good;
+            bad["tool"]["name"] = json!("other");
+            assert!(inspect(&catalog, DESCRIBE, &input, &bad).is_err());
+        }
+    }
+    #[test]
+    fn verification_uses_original_arguments_instead_of_self_reported_targets() {
+        let catalog = catalog();
+        for (id, original, altered) in [
+            (
+                SEARCH,
+                json!({"collection":"assets","query":"details","topK":1}),
+                json!({"collection":"assets","query":"details","topK":20}),
+            ),
+            (
+                DESCRIBE,
+                json!({"collection":"calendar","tool":"getRecord"}),
+                json!({"collection":"calendar","tool":"otherRecord"}),
+            ),
+        ] {
+            let capability = CapabilityRef {
+                capability_id: id.into(),
+                contract_version: VERSION.into(),
+            };
+            let digest = xgen_workgraph::invocation_material_digest(&original).unwrap();
+            assert!(
+                verified_request(&catalog, &capability, &json!({"request":original}), &digest)
+                    .is_ok()
+            );
+            assert!(
+                verified_request(&catalog, &capability, &json!({"request":altered}), &digest)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_changes_alter_the_executable_binding() {
+        let first = catalog();
+        let mut second = first.clone();
+        second.snapshots.insert("assets".into(), "c".repeat(64));
+        assert_ne!(
+            first.adapter(SEARCH).binding(),
+            second.adapter(SEARCH).binding()
+        );
+        assert_ne!(
+            first.adapter(SEARCH).binding(),
+            first.adapter(DESCRIBE).binding()
+        );
+        assert!(!valid_snapshots(&Snapshots::from([(
+            "../escape".into(),
+            "a".repeat(64)
+        )])));
+    }
+}
