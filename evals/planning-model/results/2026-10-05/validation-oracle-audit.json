@@ -1,0 +1,26 @@
+[
+  {
+    "case": "validation-tsv-manifest",
+    "initial_oracle_failed": true,
+    "correct_reference_oracle_passed": true,
+    "validation_model_calls": 0
+  },
+  {
+    "case": "validation-routed-manifest",
+    "initial_oracle_failed": true,
+    "correct_reference_oracle_passed": true,
+    "validation_model_calls": 0
+  },
+  {
+    "case": "validation-numeric-cli",
+    "initial_oracle_failed": true,
+    "correct_reference_oracle_passed": true,
+    "validation_model_calls": 0
+  },
+  {
+    "case": "validation-log-cli",
+    "initial_oracle_failed": true,
+    "correct_reference_oracle_passed": true,
+    "validation_model_calls": 0
+  }
+]

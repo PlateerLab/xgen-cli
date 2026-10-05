@@ -3,7 +3,7 @@
 - 조사일: 2026-10-05, Asia/Seoul
 - 구현 기준: `f6576aa` ([모델 없는 probe](../development/planning-boundary-probe-2026-10-05.md) 완료)
 - 변경 분류: 범용 조사·평가 설계. 사례별 engine 규칙 없음.
-- 상태: 문헌·공개 구현·현재 provider 경로 조사 완료. 실제 모델 추론·외부 엔진 실행은 NOT_RUN.
+- 상태: 문헌·공개 구현·현재 provider 경로 조사 완료. 후속 [개발용 DeepSeek smoke](../development/deepseek-planning-pilot-smoke-2026-10-05.md) 18 trial 완료. 최종 120회·validation·외부 엔진 비교는 NOT_RUN.
 - 기존 계획: [planning boundary 평가](2026-10-05-planning-boundary-evaluation.md)
 - 근거 inventory: [PDF·code·pricing snapshot hash](2026-10-05-planning-size-model-pilot-sources.json)
 
@@ -105,6 +105,8 @@ Design은 명시된 여러 입력의 읽기·artifact 생성 2개와 작은 Rust
 2026-10-05 구현 상태: 1번의 opt-in shared profile·상한 local gate와 모델 없는 계약 검사를 추가했어. [구현 계약과 검증 범위](../development/evaluation-planning-profile.md)를 참고해. Runner·실제 API smoke·120 trial은 아직 실행하지 않았어.
 
 후속 구현 상태: 2번 [model pilot runner](../development/planning-model-pilot-runner.md)를 구현해 실제 driver·filesystem/process·독립 oracle·usage·비용 reservation을 연결했어. 로컬 고정 모델 응답으로 계약만 검사했고, live API smoke·실제 모델 비교·최종 120 trial은 아직 실행하지 않았어.
+
+후속 live 상태: [개발 smoke·사전 등록](../development/deepseek-planning-pilot-smoke-2026-10-05.md)에 연결 6회와 design 12회를 기록했어. 작업 oracle 18/18, 최종 claim 포함 17/18이며 XN 명령 chronology 불일치 1회는 보존했어. Validation 모델 실행은 0회이고 최종 120회 조건은 고정했어. 성능 개선이나 기본값 변경은 채택하지 않았어.
 
 1. **범용:** 평가용 shared planning prompt·maxProposalSteps 상한을 provider profile에 결합해. 기본 production profile/resume는 유지해. 상한 차이·초과 거부·관찰 뒤 계획·dependency·profile 불일치를 모델 없는 transport fixture로 검사해.
 2. **범용:** 실제 CLI/driver와 usage observer·독립 oracle를 연결하는 model pilot runner를 만들어. 고정 binary copy, 실패/timeout 기록, request/decode/admission 분리, tier/cache 비용과 지출 상한을 포함해. 재계획 효과를 보기 위해 기존 scripted sink가 아닌 실제 filesystem/process 경로를 써.

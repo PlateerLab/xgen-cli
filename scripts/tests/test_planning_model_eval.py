@@ -41,6 +41,69 @@ def cases():
 
 
 class RunnerContractTests(unittest.TestCase):
+    def test_preregistration_checks_binary_config_fixtures_sources_and_schedule(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            cfg=config()
+            inputs={'config.json':M.canonical(cfg),'fixtures.json':M.canonical(cases()),
+                    'source.rs':b'fixture source','binary':b'fixture executable'}
+            for name,raw in inputs.items():(root/name).write_bytes(raw)
+            executable=Path(M.shutil.which('python3')).resolve()
+            doc={'format_version':1,'config_file':'config.json','config_sha256':M.digest(root/'config.json'),
+                 'fixture_files':[{'path':'fixtures.json','sha256':M.digest(root/'fixtures.json')}],
+                 'cases_sha256':M.hashlib.sha256(M.canonical(cases())).hexdigest(),
+                 'source_sha256':{'source.rs':M.digest(root/'source.rs')},'binary_sha256':M.digest(root/'binary'),
+                 'executables':{'python3':{'path':str(executable),'sha256':M.digest(executable)}},
+                 'process_path':os.environ['PATH'],'upstream':'https://example.invalid/v1',
+                 'schedule':[{'case':c['id'],'repeat':r,'condition':x} for c,r,x in M.schedule(cases(),cfg['repeats'],cfg['seed'])]}
+            registration=root/'prereg.json';registration.write_bytes(M.canonical(doc))
+            loaded=M.load_preregistration(registration,root/'binary',root)
+            self.assertEqual(loaded[1],cases())
+            ambient_path=os.environ['PATH']
+            try:
+                os.environ['PATH']=''
+                self.assertEqual(M.load_preregistration(registration,root/'binary',root)[1],cases())
+            finally:
+                os.environ['PATH']=ambient_path
+            for name in inputs:
+                (root/name).write_bytes(b'changed')
+                with self.assertRaises(ValueError):M.load_preregistration(registration,root/'binary',root)
+                (root/name).write_bytes(inputs[name])
+            doc['schedule'].reverse();registration.write_bytes(M.canonical(doc))
+            with self.assertRaises(ValueError):M.load_preregistration(registration,root/'binary',root)
+
+    def test_response_model_and_fingerprint_drift_stop_batch(self):
+        for drift in [{'model':'different-model'}, {'system_fingerprint':'fp_changed'}]:
+            with tempfile.TemporaryDirectory() as temp:
+                cfg=config()
+                ledger=M.Ledger(cfg,Path(temp)/'ledger.jsonl')
+                first={'model':cfg['model'],'system_fingerprint':'fp_initial',
+                       'usage':{'prompt_tokens':10,'completion_tokens':2,'total_tokens':12,'prompt_cache_hit_tokens':0,'prompt_cache_miss_tokens':10}}
+                ledger.reserve('first','t')
+                ledger.settle('first','t',json.dumps(first).encode(),200)
+                second=dict(first,**drift)
+                ledger.reserve('second','t')
+                ledger.settle('second','t',json.dumps(second).encode(),200)
+                self.assertTrue(ledger.aborted)
+                self.assertEqual(ledger.abort_reason,'response_identity_changed')
+                self.assertFalse(ledger.reserve('third','t'))
+        with tempfile.TemporaryDirectory() as temp:
+            cfg=config()
+            cfg['expected_response_identity']=[cfg['model'],'fp_frozen']
+            ledger=M.Ledger(cfg,Path(temp)/'ledger.jsonl')
+            ledger.reserve('first','t')
+            ledger.settle('first','t',json.dumps({'model':cfg['model'],'system_fingerprint':'fp_other'}).encode(),200)
+            self.assertTrue(ledger.aborted)
+        with tempfile.TemporaryDirectory() as temp:
+            cfg=config()
+            cfg['expected_response_identity']=[cfg['model'],'fp_frozen']
+            ledger=M.Ledger(cfg,Path(temp)/'ledger.jsonl')
+            ledger.reserve('missing-identity','t')
+            ledger.settle('missing-identity','t',b'{"error":"unavailable"}',502)
+            self.assertTrue(ledger.aborted)
+            self.assertEqual(ledger.abort_reason,'response_identity_unavailable')
+            self.assertIn('missing-identity',ledger.reservations)
+
     def test_proxy_blocks_upstream_after_unknown_reserved_cost(self):
         class Unknown(http.server.BaseHTTPRequestHandler):
             def log_message(self,*_):

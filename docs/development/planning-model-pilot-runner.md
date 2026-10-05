@@ -69,4 +69,4 @@ python3 scripts/evaluate-planning-model.py \
 
 키는 로컬 환경에서만 설정해. Config·fixture·source·manifest에 저장하지 않아. Raw driver/oracle logs와 journal은 private results 디렉터리에 보존하고 공개 보고에는 비민감 집계만 사용해.
 
-다음 단위는 공식 token ceiling·현재 model ID·usage/cache·schema·quote/tier를 확인하는 작은 DeepSeek smoke야. 그 뒤 Design fixture와 전체 비용 조건을 고정하고, 별도 Validation fixture와 manifest를 잠가 120 trial을 실행해. 현재 live inference·실제 비용·정확도 비교는 NOT_RUN/NOT_MEASURED야.
+후속 [DeepSeek smoke와 사전 등록](deepseek-planning-pilot-smoke-2026-10-05.md)에서 개발용 live 18 trial과 usage/cache를 확인하고 120회 입력·config·quote를 고정했어. `--preregistration`으로 실행하면 등록한 binary/source/tool/input/schedule을 모델 I/O 전에 검사하고 등록 PATH를 사용해. Model/fingerprint 변경이나 확인 불가 응답은 비용/unknown reservation을 보존한 뒤 중단해. 최종 120회·validation 모델 비교는 아직 실행하지 않았어.

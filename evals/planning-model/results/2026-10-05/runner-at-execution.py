@@ -66,16 +66,12 @@ def relative(name):
     return path
 
 
-def validate(config, cases, process_path=None):
+def validate(config, cases):
     required = {'model', 'tokenizer', 'response_format', 'thinking', 'max_output_tokens',
                 'request_timeout_seconds', 'max_model_turns', 'max_ticks', 'max_input_tokens',
                 'trial_timeout_seconds', 'spend_cap_nano_usd', 'quote', 'seed', 'repeats'}
-    if not required <= set(config) or set(config) - required - {'expected_response_identity'}:
+    if set(config) != required:
         raise ValueError('explicit complete non-secret pilot config required')
-    identity = config.get('expected_response_identity')
-    if identity is not None and (not isinstance(identity, list) or len(identity) != 2
-            or identity[0] != config['model'] or not isinstance(identity[1], str) or not identity[1]):
-        raise ValueError('frozen response model and fingerprint required')
     if config['response_format'] not in {'json_schema', 'json_object'} or config['thinking'] not in {'default', 'disabled', 'enabled', 'chat_template_disabled'}:
         raise ValueError('unsupported wire options')
     for key in ['max_output_tokens', 'request_timeout_seconds', 'max_model_turns', 'max_ticks',
@@ -115,7 +111,7 @@ def validate(config, cases, process_path=None):
             raise ValueError('UTF-8 fixture content required')
         if set(case['oracle']) != {'python'} or not isinstance(case['oracle']['python'], str):
             raise ValueError('independent Python oracle required')
-        if any(not name.isidentifier() or shutil.which(name, path=process_path) is None for name in case['executables']):
+        if any(not name.isidentifier() or shutil.which(name) is None for name in case['executables']):
             raise ValueError('declared executable must resolve')
 
 
@@ -176,8 +172,7 @@ class Ledger:
         self.attempts = []
         self.aborted = False
         self.abort_reason = None
-        identity = config.get('expected_response_identity')
-        self.response_identity = tuple(identity) if identity is not None else None
+        self.response_identity = None
         self.lock = threading.Lock()
 
     def append(self, event):
@@ -217,8 +212,6 @@ class Ledger:
                     self.aborted, self.abort_reason = True, 'response_identity_changed'
                 elif self.response_identity is None:
                     self.response_identity = identity
-            elif self.response_identity is not None:
-                self.aborted, self.abort_reason = True, 'response_identity_unavailable'
             tokens = usage(raw, self.config['model'])
             cost = price_nano(tokens, self.config['quote']) if tokens else None
             bound = self.reservations[call_id]
@@ -593,62 +586,17 @@ def execute(binary, cases, config, output, upstream, key=None, input_paths=()):
     return summary
 
 
-def load_preregistration(path, binary, repository=ROOT):
-    """Fail before model I/O when any registered input, source, or executable differs."""
-    doc = strict_json(path.read_bytes())
-    if doc['format_version'] != 1 or digest(binary) != doc['binary_sha256']:
-        raise ValueError('registered binary differs')
-    config_path = repository / relative(doc['config_file'])
-    if digest(config_path) != doc['config_sha256']:
-        raise ValueError('registered config differs')
-    config = strict_json(config_path.read_bytes())
-    cases, paths = [], [path, config_path]
-    for item in doc['fixture_files']:
-        fixture = repository / relative(item['path'])
-        if digest(fixture) != item['sha256']:
-            raise ValueError('registered fixture differs')
-        cases.extend(strict_json(fixture.read_bytes()))
-        paths.append(fixture)
-    if hashlib.sha256(canonical(cases)).hexdigest() != doc['cases_sha256']:
-        raise ValueError('derived fixture set differs')
-    if not doc['source_sha256'] or set(doc['executables']) != {name for case in cases for name in case['executables']}:
-        raise ValueError('complete source and executable registration required')
-    for name, checksum in doc['source_sha256'].items():
-        if digest(repository / relative(name)) != checksum:
-            raise ValueError('registered source differs')
-    for name, item in doc['executables'].items():
-        resolved = shutil.which(name, path=doc['process_path'])
-        if resolved is None or Path(resolved).resolve() != Path(item['path']).resolve() or digest(item['path']) != item['sha256']:
-            raise ValueError('registered executable differs')
-    validate(config, cases, process_path=doc['process_path'])
-    actual_schedule = [{'case':c['id'], 'repeat':r, 'condition':x} for c,r,x in schedule(cases, config['repeats'], config['seed'])]
-    if actual_schedule != doc['schedule']:
-        raise ValueError('registered schedule differs')
-    return config, cases, paths, doc['upstream'], doc['process_path']
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, required=True)
-    parser.add_argument('--config', type=Path)
-    parser.add_argument('--fixtures', type=Path)
-    parser.add_argument('--preregistration', type=Path)
+    parser.add_argument('--config', type=Path, required=True)
+    parser.add_argument('--fixtures', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--upstream')
+    parser.add_argument('--upstream', required=True)
     args = parser.parse_args()
-    if args.preregistration:
-        if args.config or args.fixtures or args.upstream:
-            parser.error('registered inputs cannot be overridden')
-        config, cases, paths, upstream, process_path = load_preregistration(args.preregistration.resolve(), args.binary.resolve())
-        os.environ['PATH'] = process_path
-    else:
-        if not args.config or not args.fixtures or not args.upstream:
-            parser.error('config, fixtures and upstream are required without preregistration')
-        paths = [args.config.resolve(), args.fixtures.resolve()]
-        config, cases = [strict_json(path.read_bytes()) for path in paths]
-        upstream = args.upstream
-    summary = execute(args.binary.resolve(), cases, config, args.output.resolve(), upstream,
-                      os.environ.get('XGEN_PILOT_API_KEY'), paths)
+    config, cases = [strict_json(path.read_bytes()) for path in [args.config, args.fixtures]]
+    summary = execute(args.binary.resolve(), cases, config, args.output.resolve(), args.upstream,
+                      os.environ.get('XGEN_PILOT_API_KEY'), [args.config.resolve(), args.fixtures.resolve()])
     print(json.dumps(summary, ensure_ascii=False))
 
 

@@ -1,0 +1,62 @@
+[
+  {
+    "case": "process-artifact",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 1772448
+  },
+  {
+    "case": "process-artifact",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 2,
+    "cost_nano_usd": 1412916
+  },
+  {
+    "case": "process-artifact",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 879162
+  },
+  {
+    "case": "literal-artifact",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 3,
+    "cost_nano_usd": 530814
+  },
+  {
+    "case": "literal-artifact",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 3,
+    "cost_nano_usd": 911934
+  },
+  {
+    "case": "literal-artifact",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 3,
+    "cost_nano_usd": 880284
+  }
+]
