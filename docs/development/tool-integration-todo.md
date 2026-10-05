@@ -4,11 +4,13 @@
 
 이 파일은 공동 개발 작업 목록의 정본이다. 방향과 확인된 사실은 [MEMORY.md](../../MEMORY.md), SEV·브라우저 검토 근거는 [통합 검토](browser-tool-graph-sev-2026-10-06.md)를 참조한다. 모든 개발 항목은 일반 기능이다. 시스템별 명세·업무 규칙·인증 설정은 별도 입력으로 관리한다.
 
+문제의 책임 판정은 [MEMORY의 실패 원인·저장소 구분](../../MEMORY.md#실패-원인과-수정할-저장소의-구분)을 따른다. 통합 실패를 모두 xgen 수정 항목으로 넣지 않는다.
+
 목표: 사용자는 `xgen`에서 시스템을 한 번 연결하고 자연어로 요청한다. 내부에서는 API·화면 도구를 찾고, 필요한 모델을 호출하고, 실제 결과를 검증해 최종 응답을 제공한다.
 
 ## 0. 검토한 기반
 
-- [x] 현재 Registry·Router와 의미 기반 tool search의 차이 확인. xgen에 검색 계층은 아직 없다.
+- [x] Registry·Router와 의미 기반 tool search의 차이 확인. 검토 당시 없던 검색 계층은 현재 2번에서 내장 연결했다.
 - [x] graph-tool-call로 실제 명세 수집·그래프 생성·조회 요청 검색을 별도로 실행. 검색 품질 문제도 기록.
 - [x] SEV의 API 후보 선택·UI 판단 계약과 기존 agent-browser 경로 검토.
 - [x] 공동 개발 메모와 작업 시작 시 읽을 안내 작성.
@@ -33,7 +35,10 @@
 - [x] **xgen:** agent loop에 검색·조회 built-in Capability 두 개를 등록해 후보와 원본 계약을 단계적으로 제공. manifest의 collection digest·exact request를 검증하고 승인·material 복구·Receipt에 연결했다. 재개는 같은 snapshot 목록을 유지한다.
 - [ ] **xgen:** 발견한 외부 도구 자체의 실행용 Definition/Instance admission. 검색·조회 built-in의 등록과 구분하며 HTTP adapter·효과·인증 검증을 3번과 함께 구현한다.
 - [ ] **xgen:** 컨텍스트에 들어가는 소규모 목록의 직접 제공을 유지하고, 검색 경로 선택은 설정·평가 근거로 정한다.
-- [ ] **graph-tool-call:** 유사한 도구 혼동·빠진 선행 도구를 새 사례에서 평가. 임베딩 없는 검색과 임베딩 추가를 별도로 비교한 뒤 기본값 결정.
+- [ ] **분리 평가:** 같은 명세·snapshot·고정 검색어·backend 설정·top-k로 graph-tool-call 직접 호출과 xgen 경유 결과를 비교. 원본 정보 누락·변환 손실·검색 후보 누락·컨텍스트 손실·모델 선택 실패를 구분하고 두 독립 시스템의 새 검증 사례로 책임 확정. 기존 품질 숫자만으로 수정 저장소를 결정하지 않는다.
+- [ ] **graph-tool-call:** 직접 호출에서 재현되는 유사 도구 혼동·정답 후보 누락·잘못된 선행 후보를 해당 저장소에서 개선. 검색·색인/임베딩·reranking은 별도 비교 후 채택한다.
+- [ ] **xgen:** 직접 호출과 경유 호출의 입력·설정·후보/계약 전달 차이를 수정. 모델의 검색어 구성 실패를 별도 평가하고 검색 알고리즘은 중복 구현하지 않는다.
+- [ ] **추론 모델·SEV:** 전달된 올바른 후보/계약에서의 선택·거절 품질을 별도 평가. 모델/프롬프트 개선과 xgen 역할 연결 개발을 구분한다.
 - [x] **xgen:** 검색 결과·오류 코드를 구분하고, worker 실패·시간/출력 한도·Ctrl+C·자식 프로세스 정리를 검증. 빈 후보에서 업무 도구를 실행하는 경로는 없다.
 
 완료 기준: xgen에서 자연어 요청으로 외부 도구 후보와 정확한 스키마를 얻는다. 두 독립 명세에서 동작하고, 전체 목록 제공과 검색 경로의 비용·후보 포함률을 비교할 수 있다.
@@ -42,7 +47,8 @@
 
 - [x] **xgen:** `xgen.http/read` 프록시로 exact 외부 도구·입력·계약·target을 기존 권한·실행·Receipt·완료 검증 경로에 연결. 개별 외부 Definition/Instance 자동 admission은 2번 후속이다.
 - [x] **xgen:** 원본 로컬 JSON 명세 보존과 GET scalar path/query·2xx JSON 응답·bearer/no-auth 어댑터 구현. 조회 효과는 `connect --allow-get`으로 지정하고 Run read 승인을 유지한다.
-- [ ] **xgen + graph-tool-call:** 원격 URL/Swagger UI 수집 원본 보존과 기존 collection 실행 이행, header/body/배열·인증 방식 등 HTTP 계약 지원 확대. 지원하지 않는 계약을 추측해 호출하지 않는다.
+- [ ] **graph-tool-call:** 원격 URL/Swagger UI 수집 원본·출처 보존의 공개 계약을 검토·개선. 정규화된 발견 계약과 완전한 실행 계약을 구분한다.
+- [ ] **xgen:** 원격 원본 수집 계약을 연결하고 기존 collection 실행 이행·연결 점검을 제공. header/body/배열·인증 방식의 HTTP 어댑터 지원을 확대한다. 지원하지 않는 계약을 추측해 호출하지 않는다.
 - [x] **xgen:** `tools connect` 주소·숨김 bearer 입력/OS secret store·환경 참조·불변 연결 저장·재사용 구현. 인증값은 그래프·worker·모델·Receipt에 넣지 않는다.
 - [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증.
 - [x] **평가:** 보류한 두 독립 fixture에서 검색 → describe → 실제 loopback GET → 검증 body 기반 최종 응답·완료 재생 확인. 모델은 결정적 endpoint이며 LLM 품질 비교가 아니다. 승인·입력/계약/연결 drift 차단과 실행 중 kill 후 중복 방지도 검증했다. [범위·명령·한도](http-read-tools.md).
