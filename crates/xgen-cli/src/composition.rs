@@ -1015,6 +1015,8 @@ where
     } else {
         graph_discovery::Snapshots::new()
     };
+    let http_connections = crate::http_read::discover(&discovery_snapshots)
+        .map_err(|()| PublicRunError::Configuration)?;
     let planning_constraints_required = catalog.workspace_discovery() || process.is_some();
     let config = planner_config(
         &request.base_url,
@@ -1044,6 +1046,7 @@ where
         &catalog,
         process.as_ref(),
         &discovery_snapshots,
+        &http_connections,
     )?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
     let manifest = RunManifest::new(
@@ -1062,6 +1065,8 @@ where
     .map_err(|_| PublicRunError::Configuration)?;
     let manifest = manifest
         .with_tool_discovery_snapshots(discovery_snapshots)
+        .map_err(|_| PublicRunError::Configuration)?
+        .with_http_read_connections(http_connections)
         .map_err(|_| PublicRunError::Configuration)?;
     let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?
         .with_final_response_schema(request.final_response_schema)
@@ -1291,6 +1296,7 @@ where
             &catalog,
             process.as_ref(),
             manifest.tool_discovery_snapshots(),
+            manifest.http_read_connections(),
         )?
     {
         let current = process
@@ -1313,6 +1319,18 @@ where
         return Err(PublicRunError::ConfigurationMismatch {
             field: "execution_profile",
             changed_items,
+        });
+    }
+    let current_connections = crate::http_read::discover(manifest.tool_discovery_snapshots())
+        .map_err(|()| PublicRunError::Configuration)?;
+    if manifest
+        .http_read_connections()
+        .iter()
+        .any(|(name, connection)| current_connections.get(name) != Some(connection))
+    {
+        return Err(PublicRunError::ConfigurationMismatch {
+            field: "http_connections",
+            changed_items: Vec::new(),
         });
     }
     if !manifest.remote_model_egress() {
@@ -1437,7 +1455,7 @@ impl PlanMaterializer for LocalMaterializer {
     ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
         if matches!(
             request.capability().capability_id.as_str(),
-            graph_discovery::SEARCH | graph_discovery::DESCRIBE
+            graph_discovery::SEARCH | graph_discovery::DESCRIBE | crate::http_read::READ
         ) {
             return self
                 .discovery
@@ -1521,6 +1539,7 @@ fn continue_incomplete(
         mut route,
     } = local_tool_product(workspace, &catalog, process)?;
     let discovery = DiscoveryCatalog::saved(manifest.tool_discovery_snapshots().clone())
+        .and_then(|catalog| catalog.with_connections(manifest.http_read_connections().clone()))
         .map_err(|()| PublicRunError::Integrity)?;
     register_discovery(
         &discovery,
@@ -1543,6 +1562,9 @@ fn continue_incomplete(
             PlanningConstraint::new("tools.discovery-snapshots", discovery.hint())
                 .map_err(|_| PublicRunError::Internal)?,
         );
+    }
+    if discovery.has_connections() {
+        planning_constraints.push(PlanningConstraint::new("http.read-connections", "Host-approved GET connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host.").map_err(|_| PublicRunError::Internal)?);
     }
     if let Some(process) = process {
         planning_constraints.push(
@@ -2854,15 +2876,51 @@ fn discovery_specs(
     if discovery.is_empty() {
         return Ok(Vec::new());
     }
-    [
-        (graph_discovery::SEARCH, include_str!("../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-search.json")),
-        (graph_discovery::DESCRIBE, include_str!("../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-describe.json")),
-    ].into_iter().map(|(operation, fixture)| {
-        let (definition, mut instance) = filesystem_spec(fixture, operation, graph_discovery::VERSION,
-            &format!("local.tools.{}.builtin.v1",operation.rsplit('/').next().ok_or(PublicRunError::Internal)?), discovery.adapter(operation).binding())?;
-        instance.hints = None;
-        Ok((definition, instance))
-    }).collect()
+    let mut fixtures = vec![
+        (
+            graph_discovery::SEARCH,
+            include_str!(
+                "../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-search.json"
+            ),
+        ),
+        (
+            graph_discovery::DESCRIBE,
+            include_str!(
+                "../../../protocol/fixtures/v1alpha1/valid/capability-definition.tools-describe.json"
+            ),
+        ),
+    ];
+    if discovery.has_connections() {
+        fixtures.push((
+            crate::http_read::READ,
+            include_str!(
+                "../../../protocol/fixtures/v1alpha1/valid/capability-definition.http-read.json"
+            ),
+        ));
+    }
+    fixtures
+        .into_iter()
+        .map(|(operation, fixture)| {
+            let (definition, mut instance) = filesystem_spec(
+                fixture,
+                operation,
+                graph_discovery::VERSION,
+                &format!(
+                    "local.tools.{}.builtin.v1",
+                    operation
+                        .rsplit('/')
+                        .next()
+                        .ok_or(PublicRunError::Internal)?
+                ),
+                discovery.adapter(operation).binding(),
+            )?;
+            instance.hints = None;
+            if operation == crate::http_read::READ {
+                instance.data_boundary = DataBoundary::External;
+            }
+            Ok((definition, instance))
+        })
+        .collect()
 }
 
 fn register_discovery(
@@ -2876,6 +2934,7 @@ fn register_discovery(
         let operation = match definition.metadata.id.as_str() {
             graph_discovery::SEARCH => graph_discovery::SEARCH,
             graph_discovery::DESCRIBE => graph_discovery::DESCRIBE,
+            crate::http_read::READ => crate::http_read::READ,
             _ => return Err(PublicRunError::Internal),
         };
         let adapter = discovery.adapter(operation);
@@ -2905,14 +2964,16 @@ fn execution_profile_with_discovery(
     catalog: &LocalReadCatalog,
     process: Option<&ProcessTooling>,
     snapshots: &graph_discovery::Snapshots,
+    connections: &crate::http_read::Connections,
 ) -> Result<String, PublicRunError> {
     let local_digest = local_execution_profile_digest(workspace, catalog, process)?;
     if snapshots.is_empty() {
         return Ok(local_digest);
     }
-    let discovery =
-        DiscoveryCatalog::saved(snapshots.clone()).map_err(|()| PublicRunError::Configuration)?;
-    let profile = serde_json::json!({
+    let discovery = DiscoveryCatalog::saved(snapshots.clone())
+        .and_then(|catalog| catalog.with_connections(connections.clone()))
+        .map_err(|()| PublicRunError::Configuration)?;
+    let mut profile = serde_json::json!({
         "domain":"xgen.cli.local-and-tool-discovery-execution-profile/v1",
         "local_profile_digest":local_digest,
         "discovery_specs":discovery_specs(&discovery)?,
@@ -2921,7 +2982,14 @@ fn execution_profile_with_discovery(
         "material_provider":graph_discovery::PROVIDER,
         "material_recipe_domain":"xgen.cli.tool-discovery-recipe/v1",
         "host_policy_profile":"xgen.cli.host-tool-discovery/v1",
+        "http_read_profile": if connections.is_empty() { serde_json::Value::Null } else { serde_json::json!({"version":1,"get_only":true,"max_body_bytes":32768,"timeout_seconds":30,"redirects":false,"proxy":false}) },
     });
+    if connections.is_empty() {
+        profile
+            .as_object_mut()
+            .ok_or(PublicRunError::Internal)?
+            .remove("http_read_profile");
+    }
     Ok(sha256_digest(
         &serde_jcs::to_vec(&profile).map_err(|_| PublicRunError::Internal)?,
     ))
@@ -2972,6 +3040,13 @@ struct LocalResourceResolver {
 
 impl ResourceResolver for LocalResourceResolver {
     fn resolve(&self, scope: &str, resource: &str) -> Result<String, ResourceResolutionFailure> {
+        if scope == crate::http_read::SCOPE {
+            return if self.discovery.connection(resource).is_some() {
+                graph_discovery::resolve(resource)
+            } else {
+                Err(ResourceResolutionFailure::InvalidResource)
+            };
+        }
         if scope == graph_discovery::SCOPE {
             return if self.discovery.contains(resource) {
                 graph_discovery::resolve(resource)
@@ -3049,7 +3124,10 @@ impl PlannedRoutePort for ExactLocalRoute {
                 idempotency_query: false,
             },
             allowed_trust_levels: vec![TrustLevel::Verified],
-            allowed_data_boundaries: vec![if planned.capability_id() == WEB_SEARCH_CAPABILITY_ID {
+            allowed_data_boundaries: vec![if matches!(
+                planned.capability_id(),
+                WEB_SEARCH_CAPABILITY_ID | crate::http_read::READ
+            ) {
                 DataBoundary::External
             } else {
                 DataBoundary::Local
@@ -3151,17 +3229,24 @@ impl ExplicitLocalApproval {
     ) -> Option<(&'static str, &'static str, bool)> {
         if matches!(
             request.capability().capability_id.as_str(),
-            graph_discovery::SEARCH | graph_discovery::DESCRIBE
+            graph_discovery::SEARCH | graph_discovery::DESCRIBE | crate::http_read::READ
         ) {
+            let scope = if request.capability().capability_id == crate::http_read::READ {
+                crate::http_read::SCOPE
+            } else {
+                graph_discovery::SCOPE
+            };
             let exact = request.run_id() == self.run_id
                 && request.capability().contract_version == graph_discovery::VERSION
                 && request.effect_class() == EffectClass::ReadOnly
                 && request.requested_lifetime() == GrantLifetime::Once
-                && request.requested_scopes() == [graph_discovery::SCOPE]
+                && request.requested_scopes() == [scope]
                 && request.resources().len() == 1
                 && request.resources().first().is_some_and(|r| {
-                    r.scope() == graph_discovery::SCOPE
+                    r.scope() == scope
                         && self.discovery.contains(r.canonical_resource())
+                        && (scope != crate::http_read::SCOPE
+                            || self.discovery.connection(r.canonical_resource()).is_some())
                 })
                 && request.critical_actions().is_empty();
             return exact.then_some((
@@ -3394,7 +3479,8 @@ mod tests {
                 &workspace,
                 &catalog,
                 None,
-                &graph_discovery::Snapshots::new()
+                &graph_discovery::Snapshots::new(),
+                &crate::http_read::Connections::new()
             )
             .unwrap(),
             local_execution_profile_digest(&workspace, &catalog, None).unwrap()
@@ -3402,8 +3488,22 @@ mod tests {
         let first = graph_discovery::Snapshots::from([("assets".into(), "a".repeat(64))]);
         let second = graph_discovery::Snapshots::from([("calendar".into(), "b".repeat(64))]);
         assert_ne!(
-            execution_profile_with_discovery(&workspace, &catalog, None, &first).unwrap(),
-            execution_profile_with_discovery(&workspace, &catalog, None, &second).unwrap()
+            execution_profile_with_discovery(
+                &workspace,
+                &catalog,
+                None,
+                &first,
+                &crate::http_read::Connections::new()
+            )
+            .unwrap(),
+            execution_profile_with_discovery(
+                &workspace,
+                &catalog,
+                None,
+                &second,
+                &crate::http_read::Connections::new()
+            )
+            .unwrap()
         );
         let discovery = DiscoveryCatalog::saved(first).unwrap();
         let specs = discovery_specs(&discovery).unwrap();

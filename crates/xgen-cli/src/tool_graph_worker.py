@@ -1,5 +1,6 @@
 """Pinned internal retrieval worker. No business API execution or model calls."""
 
+import copy
 import hashlib
 import gzip
 import json
@@ -148,6 +149,7 @@ def dispatch(request):
         inputs = [source if source.startswith("https://") else read_json(source, 5_000_000)
                   for source in sources]
         artifact = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
+        artifact["metadata"]["xgen_http_sources"] = {f"inline:{index}": copy.deepcopy(value) for index, value in enumerate(inputs, 1)} if all(isinstance(value, dict) for value in inputs) else {}
         artifact["metadata"]["xgen_source_inputs"] = [
             {"kind": "https" if isinstance(value, str) else "json",
              "label": source if isinstance(value, str) else Path(source).name,
@@ -164,7 +166,8 @@ def dispatch(request):
         tool = graph.tools.get(request["tool"])
         if tool is None:
             raise WorkerError("tool_not_found")
-        return {"ok": True, **summarize(envelope), "tool": tool.to_dict(),
+        contract = http_read_contract(envelope["artifact"], tool.to_dict())
+        return {"ok": True, **summarize(envelope), "tool": tool.to_dict(), "http_read": contract,
                 "contract_kind": "discovery_candidate", "effect_class": "unclassified"}
     if operation == "search":
         query, top_k = request["query"], request["top_k"]
@@ -183,6 +186,113 @@ def dispatch(request):
                 "omitted_producers": max(0, len(set(expanded) - set(names)) - 40),
                 "relations_verified_by_execution": False}
     raise WorkerError("unknown_operation")
+
+
+def dereference(value, document, stack=(), depth=0):
+    if depth > 48:
+        raise WorkerError("http_schema_depth_limit")
+    if isinstance(value, list):
+        return [dereference(item, document, stack, depth+1) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if "$ref" in value:
+        reference = value["$ref"]
+        if not isinstance(reference, str) or not reference.startswith("#/") or reference in stack:
+            raise WorkerError("http_schema_reference_unsupported")
+        target = document
+        try:
+            for part in reference[2:].split("/"):
+                target = target[part.replace("~1", "/").replace("~0", "~")]
+        except (KeyError, TypeError):
+            raise WorkerError("http_schema_reference_missing") from None
+        resolved = dereference(target, document, (*stack,reference), depth+1)
+        if len(value) != 1:
+            raise WorkerError("http_schema_ref_siblings_unsupported")
+        return resolved
+    return {key:dereference(item, document, stack, depth+1) for key,item in value.items()}
+
+
+def check_http_schema(value):
+    # Visit schema positions, never instance examples or maps of property names.
+    if not isinstance(value, dict):
+        return
+    if "nullable" in value or any(isinstance(value.get(k),bool) for k in ("exclusiveMinimum","exclusiveMaximum")) or any(k in value for k in ("$dynamicRef","$recursiveRef")):
+        raise WorkerError("http_schema_dialect_unsupported")
+    for key in ("properties","patternProperties","$defs","definitions","dependentSchemas"):
+        for schema in value.get(key,{}).values():
+            check_http_schema(schema)
+    for key in ("allOf","anyOf","oneOf","prefixItems"):
+        for schema in value.get(key,[]):
+            check_http_schema(schema)
+    for key in ("items","additionalProperties","unevaluatedProperties","unevaluatedItems","contains","propertyNames","not","if","then","else"):
+        check_http_schema(value.get(key))
+
+
+def http_read_contract(artifact, tool):
+    # The normalized graph is discovery data. Invoke only against retained source schemas.
+    metadata = tool.get("metadata", {})
+    source = artifact.get("metadata", {}).get("xgen_http_sources", {}).get(metadata.get("source_url"))
+    try:
+        if not isinstance(source, dict):
+            raise WorkerError("http_original_source_unavailable")
+        method, path = metadata.get("method"), metadata.get("path")
+        if method != "get":
+            raise WorkerError("http_method_not_read_approved")
+        item = dereference(source["paths"][path], source)
+        operation = item[method]
+        if operation.get("requestBody") or any(p.get("in") == "body" for p in operation.get("parameters", [])):
+            raise WorkerError("http_get_body_unsupported")
+        merged = {}
+        for parameter in [*item.get("parameters", []), *operation.get("parameters", [])]:
+            parameter = dereference(parameter, source)
+            location, name = parameter.get("in"), parameter.get("name")
+            if location not in ("path", "query") or not isinstance(name, str) or not name:
+                raise WorkerError("http_parameter_location_unsupported")
+            schema = parameter.get("schema")
+            if schema is None and source.get("swagger") == "2.0":
+                schema = {key:value for key,value in parameter.items() if key in ("type","enum","minimum","maximum","exclusiveMinimum","exclusiveMaximum","minLength","maxLength","pattern","format","default","multipleOf")}
+            if not isinstance(schema, dict) or schema.get("type") not in ("string","integer","number","boolean"):
+                raise WorkerError("http_parameter_type_unsupported")
+            if parameter.get("style", "simple" if location == "path" else "form") != ("simple" if location == "path" else "form") or parameter.get("allowReserved",False) or parameter.get("content"):
+                raise WorkerError("http_parameter_serialization_unsupported")
+            merged[(location,name)] = {"location":location,"name":name,"required":bool(parameter.get("required")) or location=="path","schema":dereference(schema,source)}
+        responses = {}
+        for status,response in operation.get("responses", {}).items():
+            if not str(status).isdigit() or not 200 <= int(status) <= 299:
+                continue
+            if source.get("swagger") == "2.0":
+                produces = operation.get("produces", source.get("produces", []))
+                if produces and "application/json" not in produces:
+                    raise WorkerError("http_response_media_unsupported")
+                schema = response.get("schema")
+            else:
+                schema = response.get("content",{}).get("application/json",{}).get("schema")
+            if not isinstance(schema,(dict,bool)):
+                raise WorkerError("http_response_schema_missing")
+            responses[str(status)] = dereference(schema,source)
+        if not responses:
+            raise WorkerError("http_success_schema_missing")
+        security = operation.get("security",source.get("security",[]))
+        schemes = source.get("components",{}).get("securitySchemes",source.get("securityDefinitions",{}))
+        for requirement in security:
+            if not isinstance(requirement,dict) or len(requirement)>1:
+                raise WorkerError("http_security_unsupported")
+            for name,scopes in requirement.items():
+                scheme = dereference(schemes.get(name,{}),source)
+                if scheme.get("type") != "http" or scheme.get("scheme", "").lower() != "bearer" or scopes:
+                    raise WorkerError("http_security_unsupported")
+        for parameter in merged.values():
+            check_http_schema(parameter["schema"])
+        for schema in responses.values():
+            check_http_schema(schema)
+        contract = {"format_version":1,"method":"GET","path":path,"base_path":source.get("basePath", ""),"parameters":list(merged.values()),"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
+        if len(canonical(contract)) > 49152:
+            raise WorkerError("http_contract_size_limit")
+        return {"supported":True,"contract_digest":digest(contract),"contract":contract}
+    except WorkerError as error:
+        return {"supported":False,"error":str(error)}
+    except (KeyError,TypeError,ValueError):
+        return {"supported":False,"error":"http_original_contract_invalid"}
 
 
 def main():

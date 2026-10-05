@@ -1,0 +1,212 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgen.http/read",
+    "contractVersion": "1.0.0",
+    "displayName": "Read a connected HTTP API",
+    "labels": {
+      "xgeny.io/pack": "core-os"
+    }
+  },
+  "spec": {
+    "summary": "Execute one host-approved GET operation from an exact retained OpenAPI contract and connected collection. Credentials and target origin are host-owned. Use the http_read contract digest from describe; results require successful HTTP status and response schema verification.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "collection",
+        "tool",
+        "contractDigest",
+        "parameters"
+      ],
+      "properties": {
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "contractDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "parameters": {
+          "type": "object",
+          "required": [
+            "path",
+            "query"
+          ],
+          "properties": {
+            "path": {
+              "type": "object"
+            },
+            "query": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "ok",
+        "collection",
+        "artifact_digest",
+        "backend_version",
+        "execution_enabled",
+        "request",
+        "tool",
+        "contractDigest",
+        "method",
+        "target",
+        "status",
+        "body",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "backend_version": {
+          "const": "0.46.0"
+        },
+        "execution_enabled": {
+          "const": true
+        },
+        "request": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "required": [
+            "collection",
+            "tool",
+            "contractDigest",
+            "parameters"
+          ],
+          "properties": {
+            "collection": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "contractDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "parameters": {
+              "type": "object",
+              "required": [
+                "path",
+                "query"
+              ],
+              "properties": {
+                "path": {
+                  "type": "object"
+                },
+                "query": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "contractDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "method": {
+          "const": "GET"
+        },
+        "target": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "body": {},
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 80
+        }
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "class": "read_only",
+      "resourceSelectors": [
+        {
+          "scope": "http.read",
+          "argumentPointer": "/collection"
+        }
+      ],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": [
+        "sync"
+      ],
+      "cancellable": false,
+      "idempotencyKeySupported": false,
+      "defaultTimeoutMs": 150000,
+      "maxTimeoutMs": 150000
+    },
+    "verification": [
+      {
+        "strategy": "output_schema",
+        "required": true
+      },
+      {
+        "strategy": "postcondition",
+        "required": true,
+        "description": "Exact original request, immutable source contract, host-connected target, successful HTTP status and response schema are verified against the observation digest."
+      }
+    ],
+    "discovery": {
+      "keywords": [
+        "http",
+        "api",
+        "read"
+      ],
+      "examples": [
+        "Read a selected operation using the contract digest returned by xgen.tools/describe."
+      ]
+    }
+  }
+}

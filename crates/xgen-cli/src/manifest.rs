@@ -35,6 +35,8 @@ struct RunManifestRecord {
     process_fingerprints: Option<std::collections::BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     tool_discovery_snapshots: crate::graph_discovery::Snapshots,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    http_read_connections: crate::http_read::Connections,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
@@ -161,6 +163,7 @@ impl RunManifest {
             local_execution_profile_digest: local_execution_profile_digest.to_owned(),
             process_fingerprints: None,
             tool_discovery_snapshots: crate::graph_discovery::Snapshots::new(),
+            http_read_connections: crate::http_read::Connections::new(),
             budget,
             conversation_responses: false,
             final_response_schema: None,
@@ -172,6 +175,19 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_http_read_connections(
+        mut self,
+        connections: crate::http_read::Connections,
+    ) -> Result<Self, ManifestError> {
+        self.record.http_read_connections = connections;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+    pub(crate) fn http_read_connections(&self) -> &crate::http_read::Connections {
+        &self.record.http_read_connections
     }
 
     pub(crate) fn with_tool_discovery_snapshots(
@@ -364,7 +380,12 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     }) {
         return Err(ManifestError::Invalid);
     }
-    if !crate::graph_discovery::valid_snapshots(&record.tool_discovery_snapshots)
+    if !crate::http_read::valid_connections(&record.http_read_connections)
+        || record
+            .http_read_connections
+            .keys()
+            .any(|name| !record.tool_discovery_snapshots.contains_key(name))
+        || !crate::graph_discovery::valid_snapshots(&record.tool_discovery_snapshots)
         || record.format_version != MANIFEST_FORMAT_VERSION
         || !valid_run_id(&record.run_id)
         || WorkspaceId::new(&record.workspace_id).is_err()
@@ -503,6 +524,37 @@ mod tests {
                 Value::String("c".repeat(64));
             assert!(RunManifest::from_bytes(&serde_json::to_vec(&tampered).unwrap()).is_err());
         }
+    }
+
+    #[test]
+    fn http_connections_are_optional_pinned_and_not_credentials() {
+        let legacy = fixture();
+        assert!(legacy.http_read_connections().is_empty());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("httpReadConnections")
+        );
+        let connection = serde_json::from_value(serde_json::json!({"format_version":1,"base_url":"https://example.test/api","allow_get":true,"bearer_env":"FIXTURE_TOKEN","credential_ref":null})).unwrap();
+        let bound = legacy
+            .with_tool_discovery_snapshots(crate::graph_discovery::Snapshots::from([(
+                "sample".into(),
+                "a".repeat(64),
+            )]))
+            .unwrap()
+            .with_http_read_connections(crate::http_read::Connections::from([(
+                "sample".into(),
+                connection,
+            )]))
+            .unwrap();
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap()).unwrap(),
+            bound
+        );
+        let mut value: Value = serde_json::from_slice(&bound.to_bytes().unwrap()).unwrap();
+        value["record"]["httpReadConnections"]["sample"]["base_url"] =
+            Value::String("https://example.test/changed".into());
+        assert!(RunManifest::from_bytes(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 
     #[test]

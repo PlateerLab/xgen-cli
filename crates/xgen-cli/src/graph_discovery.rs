@@ -52,6 +52,7 @@ pub(crate) fn resolve(resource: &str) -> Result<String, ResourceResolutionFailur
 pub(crate) struct DiscoveryCatalog {
     root: PathBuf,
     snapshots: Snapshots,
+    connections: crate::http_read::Connections,
 }
 
 impl DiscoveryCatalog {
@@ -99,15 +100,50 @@ impl DiscoveryCatalog {
         Ok(Self {
             root: crate::tool_catalog_directory().map_err(|_| ())?,
             snapshots,
+            connections: crate::http_read::Connections::new(),
         })
     }
 
+    pub(crate) fn with_connections(
+        mut self,
+        connections: crate::http_read::Connections,
+    ) -> Result<Self, ()> {
+        if !crate::http_read::valid_connections(&connections)
+            || connections.keys().any(|name| !self.contains(name))
+        {
+            return Err(());
+        }
+        self.connections = connections;
+        Ok(self)
+    }
+    pub(crate) fn connection(&self, name: &str) -> Option<&crate::http_read::Connection> {
+        self.connections.get(name)
+    }
+    pub(crate) fn has_connections(&self) -> bool {
+        !self.connections.is_empty()
+    }
+    pub(crate) fn snapshot(&self, name: &str) -> &str {
+        &self.snapshots[name]
+    }
+    pub(crate) fn describe(&self, name: &str, tool: &str) -> Result<Value, &'static str> {
+        let output = crate::tools::invoke_offline(
+            &json!({"operation":"describe","root":self.root.to_str().ok_or("invalid_state_home")?,"name":name,"tool":tool,"expected_digest":self.snapshots.get(name).ok_or("collection_not_found")?}),
+        )?;
+        inspect(
+            self,
+            DESCRIBE,
+            &json!({"collection":name,"tool":tool}),
+            &output,
+        )
+        .map_err(|()| "http_discovery_contract_invalid")?;
+        Ok(output)
+    }
     pub(crate) fn is_empty(&self) -> bool {
         self.snapshots.is_empty()
     }
     pub(crate) fn hint(&self) -> String {
         format!(
-            "Saved tool collections (immutable snapshots): {}. Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Do not claim API execution.",
+            "Saved tool collections (immutable snapshots): {}. Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution.",
             self.snapshots
                 .keys()
                 .cloned()
@@ -147,6 +183,7 @@ impl DiscoveryCatalog {
                         !s.is_empty() && s.len() <= 1024 && !s.chars().any(char::is_control)
                     })
             }
+            crate::http_read::READ => crate::http_read::accepts(self, input),
             _ => false,
         }
     }
@@ -165,7 +202,11 @@ pub(crate) struct DiscoveryAdapter {
 }
 impl DiscoveryAdapter {
     pub(crate) fn binding(&self) -> InstanceBinding {
-        let encoded = serde_jcs::to_vec(&self.catalog.snapshots).expect("finite snapshot map");
+        let encoded = if self.operation == crate::http_read::READ {
+            serde_jcs::to_vec(&serde_json::json!({"snapshots":self.catalog.snapshots,"connections":self.catalog.connections,"profile":"xgen.http.read/v1"})).expect("finite host profile")
+        } else {
+            serde_jcs::to_vec(&self.catalog.snapshots).expect("finite snapshot map")
+        };
         InstanceBinding {
             protocol_version: None,
             binding_ref: format!(
@@ -228,6 +269,9 @@ impl EffectAdapter for DiscoveryAdapter {
             || instance.features.idempotency_query
         {
             return Err(AdapterPrepareFailure::UnsupportedProtocol);
+        }
+        if self.operation == crate::http_read::READ {
+            return crate::http_read::prepare(&self.catalog, request.normalized_arguments());
         }
         Ok(Box::new(PreparedDiscovery {
             adapter: self.clone(),
@@ -309,9 +353,12 @@ fn inspect(
         || output["collection"] != name
         || output["artifact_digest"].as_str() != catalog.snapshots.get(name).map(String::as_str)
         || output["backend_version"] != "0.46.0"
-        || output["execution_enabled"] != false
+        || output["execution_enabled"] != (operation == crate::http_read::READ)
     {
         return Err(());
+    }
+    if operation == crate::http_read::READ {
+        return crate::http_read::inspect(catalog, input, output);
     }
     if output["ok"] == false {
         return if output["snapshot_verified"] == false

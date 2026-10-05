@@ -18,6 +18,8 @@ clap.workspace = true
 ctrlc.workspace = true
 getrandom.workspace = true
 process-wrap.workspace = true
+jsonschema.workspace = true
+ureq.workspace = true
 keyring.workspace = true
 rpassword.workspace = true
 rusqlite.workspace = true
@@ -38,8 +40,6 @@ xgen-provider-openai = { path = "../xgen-provider-openai" }
 xgen-runtime = { path = "../xgen-runtime" }
 xgen-workgraph = { path = "../xgen-workgraph" }
 zeroize.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true
 
 [build-dependencies]

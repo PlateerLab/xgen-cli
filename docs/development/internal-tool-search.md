@@ -126,3 +126,7 @@ worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker
 추가 Rust 검사는 승인 전 실행 차단, 재개 뒤 단 한 번 검색·조회와 Receipt 2개, 새 collection 제외, 잘못된 collection·후보 실행 거절, 변경된 snapshot의 실패 Receipt, 원래 입력 digest·snapshot 바인딩을 확인한다. 실제 worker Python 검사는 10개로 늘었다. 상태 폴더 생성도 Run의 private directory 절차를 재사용하도록 바꿔 `tools import`가 먼저 실행된 경우를 검증한다.
 
 최종 로컬 검증: `cargo test -p xgen-cli` 172개 통과·실패 0·live 검사 3개 ignored, Clippy warnings 0, fmt·public docs contract 통과. worker Python 10개를 실제 pinned 환경·compiled CLI로 실행했다. 독립 diff 리뷰의 원래 입력 검증 지적은 material digest 바인딩으로 수정하고 두 입력 변조 사례로 검증했다.
+
+## 후속: HTTP 조회 실행
+
+[HTTP read adapter](http-read-tools.md)를 연결했다. discovery candidate 자체는 효과 미분류 상태를 유지하며, 사용자 연결이 승인한 GET만 별도 `xgen.http/read` 프록시로 실행한다. 원본 로컬 JSON을 새 artifact에 보존하고 describe의 `http_read`에 실행 계약 지원 여부를 제공한다. 원격 수집/기존 artifact는 원본이 없으므로 조회 실행을 거절한다. 개별 외부 Definition/Instance 자동 admission과 live 품질 평가는 후속이다.

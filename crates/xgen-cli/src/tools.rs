@@ -30,6 +30,25 @@ pub enum ToolsCommand {
         #[arg(long, required = true, num_args = 1..)]
         source: Vec<String>,
     },
+    /// Connect an imported collection to a host-approved GET-only API base URL.
+    Connect {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        base_url: String,
+        /// Confirm that this system's GET operations are non-mutating read operations.
+        #[arg(long, required = true)]
+        allow_get: bool,
+        /// Read the bearer token from a local environment variable at execution time.
+        #[arg(long)]
+        bearer_env: Option<String>,
+        /// Read a bearer token locally with a hidden prompt and save it in the OS secret store.
+        #[arg(long)]
+        bearer: bool,
+        /// Read the bearer token from stdin and save it in the OS secret store.
+        #[arg(long)]
+        token_stdin: bool,
+    },
     /// List saved collections.
     List,
     /// Retrieve candidates and possible prerequisite producers; never executes them.
@@ -57,7 +76,24 @@ pub fn run(command: ToolsCommand) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
-    match request(command).and_then(|request| invoke(&request)) {
+    let result = match command {
+        ToolsCommand::Connect {
+            name,
+            base_url,
+            allow_get,
+            bearer_env,
+            bearer,
+            token_stdin,
+        } => {
+            if allow_get {
+                crate::http_read::connect(&name, base_url, bearer_env, token_stdin, bearer)
+            } else {
+                Err("http_get_consent_required")
+            }
+        }
+        command => request(command).and_then(|request| invoke(&request)),
+    };
+    match result {
         Ok(response) => {
             // JSON encoding keeps terminal controls escaped, including across chunks.
             println!("{response}");
@@ -107,6 +143,7 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
                 .collect();
             json!({"operation": "import", "name": name, "sources": sources?})
         }
+        ToolsCommand::Connect { .. } => return Err("unsupported_transport_operation"),
         ToolsCommand::List => json!({"operation": "list"}),
         ToolsCommand::Search { name, query, top_k } => {
             if query.trim().is_empty() || query.len() > 4096 {

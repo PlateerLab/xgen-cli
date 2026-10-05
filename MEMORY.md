@@ -48,7 +48,7 @@
 
 ## 현재 확인한 결과
 
-- `xgen tools import/search/describe/list`로 graph-tool-call 기반 발견·검색을 구현했다. agent loop는 여전히 `CapabilityRegistry`에 등록한 도구를 ID·버전 순서로 컨텍스트 한도 안에서 제공한다. `CapabilityRouter`는 지정된 exact Capability의 실행 Instance를 선택하며 자연어 검색기가 아니다. 새 workspace Run에는 검색·조회 built-in 두 개를 등록하고 collection snapshot을 manifest에 고정한다. 외부 후보 자체의 실행 admission은 아직 없다.
+- `xgen tools import/search/describe/list`로 graph-tool-call 기반 발견·검색을 구현했다. agent loop는 여전히 `CapabilityRegistry`에 등록한 도구를 ID·버전 순서로 컨텍스트 한도 안에서 제공한다. `CapabilityRouter`는 지정된 exact Capability의 실행 Instance를 선택하며 자연어 검색기가 아니다. 새 workspace Run에는 검색·조회 built-in 두 개를 등록하고 collection snapshot을 manifest에 고정한다. 외부 후보별 자동 Definition/Instance admission은 아직 없고 연결된 GET의 실행은 `xgen.http/read` 프록시로 제공한다.
 - [내부 검색 계약·구현](docs/development/internal-tool-search.md): 원본 계약과 snapshot digest 보존, 덮어쓰기 없는 압축 저장, 변조 검증, 제한된 worker 통신. 검색 후보는 실행 권한이 없고 효과 미분류 상태다.
 - 이번 agent loop 연결의 CLI 패키지 회귀 검사 172개·실제 worker Python 검사 10개·Clippy를 통과했다(live Rust 검사 3개 ignored).
 - 실제 graph-tool-call 0.46.0과 CLI·loopback model endpoint로 두 명세의 목록 요청에서 검색 → schema 조회 → 최종 응답 연결을 검증했다. 실제 LLM·업무 API 호출은 없으며 품질 비교가 아니다. 승인 전 차단, 재개·입력 digest·snapshot 검증, 변경 snapshot의 실패 Receipt를 확인했다.
@@ -67,13 +67,17 @@
 - SEV의 API 후보 선택 실험은 이미 있지만 브라우저·API·xgen 통합은 아직 없다. 화면 요소 refs는 현재 스냅샷에 묶고 영구 도구 ID로 저장하지 않는 설계를 제안했다.
 - 상세 근거와 통합 과제는 [브라우저·도구 그래프·SEV 검토](docs/development/browser-tool-graph-sev-2026-10-06.md)에 기록했다. 해당 문서의 결과는 기존 기록을 검토한 것이며 새 실행 실험은 아니다.
 
+- [HTTP 조회 실행 계약·사용법](docs/development/http-read-tools.md): `tools connect` 한 번 설정한 주소·로컬 auth 참조를 Run에 고정한다. GET scalar 입력·2xx JSON response subset이며 원본이 없는 기존/원격 collection은 실행 거절한다. 두 새 fixture의 실제 HTTP·승인/입력/연결 drift·실패 Receipt·kill 후 중복 방지를 검증했다. 실제 LLM·live 시스템·OS keyring backend 검증은 아니다.
+
+- HTTP 조회 추가 후 CLI Rust 검사 178개 통과·3개 live 검사 ignored, protocol 13개·Python 도구 검사 29개(새 HTTP 검사 8개 포함)·Clippy·fmt·공개 문서 검사 통과. release에서도 두 새 API fixture의 검색→GET→최종 응답·완료 재생을 재확인하고 로컬 바이너리를 갱신했다.
+
 ## 다음 과제
 
 작업 목록과 완료 기준의 정본은 [도구·모델 통합 TODO](docs/development/tool-integration-todo.md)다. 이 메모에 체크리스트를 중복 관리하지 않는다.
 
 순서: 공통 계약·검증 계획 → 내부 도구 검색 → API 조회 실행·연결 UX → 브라우저·SEV → API·화면 그래프 통합 → 역할별 모델·STT → 배포·기본값 결정.
 
-공통 계약·검증 계획 문서와 명시적인 CLI 검색 연결은 구현했다. agent loop 검색·조회 연결까지 구현했고, 다음은 외부 API 후보의 실행용 Capability admission·HTTP 조회 adapter·연결 UX다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
+공통 계약·검색과 `xgen.http/read`의 GET 실행·연결 저장을 구현했다. 다음은 원격 명세 원본 보존·연결 점검 UX·HTTP 계약 지원 확대이고, 이후 브라우저·SEV 연결이다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
 
 ## 도구별 개선과 비용 추적 방식
 
@@ -94,4 +98,5 @@
 - graph-tool-call: 유사한 업무의 도구를 구별하는 검색 품질과 선행 도구 선택을 추가 평가. 현재는 문제 관찰 단계이며 해결 방법은 미정.
 - browser-use / 변환 어댑터: 화면 수집 결과의 공통 계약과 갱신 조건 설계. 아직 구현·검증하지 않았다.
 - SEV: 기존 API/UI 판단을 통합 호출 계약으로 연결하고, 없는 대상의 오실행·후보 품질·비용을 별도 평가. 같은 프로토콜만으로 API/UI 체크포인트를 통합하지 않는다.
-- xgen CLI: 검색·조회 내부 호출 계약과 승인·실행·Receipt 연결은 구현했다. 외부 API 실행·인증과 사용자 연결 UX, 동기 worker의 대화형 즉시 취소 연결은 남았다.
+- xgen CLI: 검색·describe와 연결된 GET 실행·인증 참조·Receipt·완료 재생을 구현했다. 두 독립 loopback API에서 검증했다. 원격 명세 실행·연결 점검/수정 UX·실제 OS secret store backend·즉시 취소는 남았다.
+- graph-tool-call 연계: 정규화된 api_contract만으로 원본 HTTP 스키마를 복원할 수 없었다. xgen worker가 로컬 JSON 원본을 추가 보존하도록 했으며 remote URL/Swagger UI 원본 보존은 후속이다. 업스트림 코드는 변경하지 않았다.

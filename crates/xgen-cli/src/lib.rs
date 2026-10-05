@@ -8,6 +8,7 @@ mod driver;
 mod environment;
 mod final_response;
 mod graph_discovery;
+mod http_read;
 mod manifest;
 mod material_catalog;
 mod model_profile;

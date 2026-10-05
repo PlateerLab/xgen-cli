@@ -40,10 +40,13 @@
 
 ## 3. API 조회 실행과 사용자 연결 흐름
 
-- [ ] **xgen:** 검색된 API 도구를 기존 권한·실행·Receipt·완료 검증 경로로 연결.
-- [ ] **xgen:** 명세의 HTTP 파라미터 위치·본문·응답·인증 요구를 보존하는 어댑터 구현. 도구 설명이나 annotation만으로 효과를 신뢰하지 않는다.
-- [ ] **xgen:** 주소 입력·로컬 인증·연결 저장·재사용 흐름 제공. 인증 정보는 그래프·모델 컨텍스트에 넣지 않는다.
-- [ ] **평가:** 두 시스템의 조회 작업에서 자연어 요청 → 검색 → 실행 → 근거 있는 최종 응답 검증.
+- [x] **xgen:** `xgen.http/read` 프록시로 exact 외부 도구·입력·계약·target을 기존 권한·실행·Receipt·완료 검증 경로에 연결. 개별 외부 Definition/Instance 자동 admission은 2번 후속이다.
+- [x] **xgen:** 원본 로컬 JSON 명세 보존과 GET scalar path/query·2xx JSON 응답·bearer/no-auth 어댑터 구현. 조회 효과는 `connect --allow-get`으로 지정하고 Run read 승인을 유지한다.
+- [ ] **xgen + graph-tool-call:** 원격 URL/Swagger UI 수집 원본 보존과 기존 collection 실행 이행, header/body/배열·인증 방식 등 HTTP 계약 지원 확대. 지원하지 않는 계약을 추측해 호출하지 않는다.
+- [x] **xgen:** `tools connect` 주소·숨김 bearer 입력/OS secret store·환경 참조·불변 연결 저장·재사용 구현. 인증값은 그래프·worker·모델·Receipt에 넣지 않는다.
+- [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증.
+- [x] **평가:** 보류한 두 독립 fixture에서 검색 → describe → 실제 loopback GET → 검증 body 기반 최종 응답·완료 재생 확인. 모델은 결정적 endpoint이며 LLM 품질 비교가 아니다. 승인·입력/계약/연결 drift 차단과 실행 중 kill 후 중복 방지도 검증했다. [범위·명령·한도](http-read-tools.md).
+- [ ] **평가:** 실제 LLM·접근이 허용된 live 시스템의 조회 성공률·응답 정확성과 호출/토큰/시간/비용 비교.
 
 완료 기준: 도구별 JSON 설정 없이 재사용 가능한 연결로 조회 작업을 완료한다. 실제 API 실행 결과와 Receipt를 제시할 수 있다. fixture 검증과 live 검증은 각각 표시한다.
 
