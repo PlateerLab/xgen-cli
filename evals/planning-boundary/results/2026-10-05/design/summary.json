@@ -1,0 +1,7 @@
+{
+  "trials": 400,
+  "passed": 400,
+  "completed": 160,
+  "failed_trials": [],
+  "interpretation": "Contract safety is distinct from automatic recovery completion; no model performance claim."
+}

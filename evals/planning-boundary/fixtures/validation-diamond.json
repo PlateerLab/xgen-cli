@@ -1,0 +1,90 @@
+{
+  "id": "validation-diamond",
+  "split": "validation",
+  "plan": {
+    "initial": [
+      {
+        "key": "root",
+        "resource": "probe:root",
+        "value": [
+          1,
+          2
+        ],
+        "depends_on": []
+      },
+      {
+        "key": "left",
+        "resource": "probe:left",
+        "value": {
+          "a": 3
+        },
+        "depends_on": [
+          "root"
+        ]
+      },
+      {
+        "key": "right",
+        "resource": "probe:right",
+        "value": false,
+        "depends_on": [
+          "root"
+        ]
+      },
+      {
+        "key": "join",
+        "resource": "probe:join",
+        "value": null,
+        "depends_on": [
+          "left",
+          "right"
+        ]
+      }
+    ]
+  },
+  "oracle": {
+    "applied": [
+      {
+        "operation": "root",
+        "resource": "probe:root",
+        "value": [
+          1,
+          2
+        ]
+      },
+      {
+        "operation": "left",
+        "resource": "probe:left",
+        "value": {
+          "a": 3
+        }
+      },
+      {
+        "operation": "right",
+        "resource": "probe:right",
+        "value": false
+      },
+      {
+        "operation": "join",
+        "resource": "probe:join",
+        "value": null
+      }
+    ],
+    "planner_calls": {
+      "1": 5,
+      "4": 2
+    },
+    "dependencies": {
+      "root": [],
+      "left": [
+        "root"
+      ],
+      "right": [
+        "root"
+      ],
+      "join": [
+        "left",
+        "right"
+      ]
+    }
+  }
+}
