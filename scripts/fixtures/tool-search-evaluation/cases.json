@@ -1,0 +1,322 @@
+[
+  {
+    "id": "gitea-owned-repos-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Show the repositories owned by my signed-in account.",
+    "expected_method": "get",
+    "expected_path": "/user/repos",
+    "expected_operation_id": "userCurrentListRepos"
+  },
+  {
+    "id": "gitea-owned-repos-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "내 계정이 소유한 저장소 목록을 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/user/repos",
+    "expected_operation_id": "userCurrentListRepos"
+  },
+  {
+    "id": "gitea-org-repos-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Which repositories belong to this organization?",
+    "expected_method": "get",
+    "expected_path": "/orgs/{org}/repos",
+    "expected_operation_id": "orgListRepos"
+  },
+  {
+    "id": "gitea-org-repos-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 조직에 속한 저장소들을 찾아줘.",
+    "expected_method": "get",
+    "expected_path": "/orgs/{org}/repos",
+    "expected_operation_id": "orgListRepos"
+  },
+  {
+    "id": "gitea-repo-branches-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Show all branches of this repository.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/branches",
+    "expected_operation_id": "repoListBranches"
+  },
+  {
+    "id": "gitea-repo-branches-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 저장소의 브랜치 목록을 알려줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/branches",
+    "expected_operation_id": "repoListBranches"
+  },
+  {
+    "id": "gitea-repo-releases-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Show the releases published for this repository.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/releases",
+    "expected_operation_id": "repoListReleases"
+  },
+  {
+    "id": "gitea-repo-releases-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 저장소에 게시된 릴리즈 목록을 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/releases",
+    "expected_operation_id": "repoListReleases"
+  },
+  {
+    "id": "gitea-repo-issues-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "List the issues reported in this repository.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/issues",
+    "expected_operation_id": "issueListIssues"
+  },
+  {
+    "id": "gitea-repo-issues-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 저장소에 등록된 이슈 목록을 조회해줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/issues",
+    "expected_operation_id": "issueListIssues"
+  },
+  {
+    "id": "gitea-repo-pulls-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "List the pull requests for this repository.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/pulls",
+    "expected_operation_id": "repoListPullRequests"
+  },
+  {
+    "id": "gitea-repo-pulls-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 저장소의 풀 리퀘스트 목록을 조회해줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/pulls",
+    "expected_operation_id": "repoListPullRequests"
+  },
+  {
+    "id": "gitea-issue-comments-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Read every comment on this issue.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/issues/{index}/comments",
+    "expected_operation_id": "issueGetComments"
+  },
+  {
+    "id": "gitea-issue-comments-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 이슈에 달린 댓글들을 읽어줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/issues/{index}/comments",
+    "expected_operation_id": "issueGetComments"
+  },
+  {
+    "id": "gitea-file-content-en",
+    "system": "gitea",
+    "language": "en",
+    "split": "validation",
+    "query": "Read the contents of a file at a given path in this repository.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/contents/{filepath}",
+    "expected_operation_id": "repoGetContents"
+  },
+  {
+    "id": "gitea-file-content-ko",
+    "system": "gitea",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 저장소에서 지정한 경로의 파일 내용을 읽어줘.",
+    "expected_method": "get",
+    "expected_path": "/repos/{owner}/{repo}/contents/{filepath}",
+    "expected_operation_id": "repoGetContents"
+  },
+  {
+    "id": "wiremock-all-mappings-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Show all configured stub mappings.",
+    "expected_method": "get",
+    "expected_path": "/__admin/mappings",
+    "expected_operation_id": "getAllStubMappings"
+  },
+  {
+    "id": "wiremock-all-mappings-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "설정된 스텁 매핑 목록을 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/mappings",
+    "expected_operation_id": "getAllStubMappings"
+  },
+  {
+    "id": "wiremock-mapping-detail-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Read the stub mapping with this ID.",
+    "expected_method": "get",
+    "expected_path": "/__admin/mappings/{stubMappingId}",
+    "expected_operation_id": "getStubMappingById"
+  },
+  {
+    "id": "wiremock-mapping-detail-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 ID에 해당하는 스텁 매핑을 조회해줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/mappings/{stubMappingId}",
+    "expected_operation_id": "getStubMappingById"
+  },
+  {
+    "id": "wiremock-request-journal-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Show the requests recorded in the request journal.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests",
+    "expected_operation_id": "getAllRequestsInJournal"
+  },
+  {
+    "id": "wiremock-request-journal-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "요청 로그에 기록된 요청 목록을 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests",
+    "expected_operation_id": "getAllRequestsInJournal"
+  },
+  {
+    "id": "wiremock-request-detail-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Read the logged request identified by this ID.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests/{requestId}",
+    "expected_operation_id": "getRequestById"
+  },
+  {
+    "id": "wiremock-request-detail-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "이 ID로 기록된 요청의 상세 내용을 조회해줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests/{requestId}",
+    "expected_operation_id": "getRequestById"
+  },
+  {
+    "id": "wiremock-unmatched-requests-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Find received requests that matched no stub mapping.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests/unmatched",
+    "expected_operation_id": "findUnmatchedRequests"
+  },
+  {
+    "id": "wiremock-unmatched-requests-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "스텁 매핑과 일치하지 않은 요청들을 찾아줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/requests/unmatched",
+    "expected_operation_id": "findUnmatchedRequests"
+  },
+  {
+    "id": "wiremock-recording-status-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Check whether request recording is currently running.",
+    "expected_method": "get",
+    "expected_path": "/__admin/recordings/status",
+    "expected_operation_id": "getRecordingStatus"
+  },
+  {
+    "id": "wiremock-recording-status-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "요청 녹화가 지금 실행 중인지 확인해줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/recordings/status",
+    "expected_operation_id": "getRecordingStatus"
+  },
+  {
+    "id": "wiremock-scenarios-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "Show all stateful scenarios and their current states.",
+    "expected_method": "get",
+    "expected_path": "/__admin/scenarios",
+    "expected_operation_id": "getAllScenarios"
+  },
+  {
+    "id": "wiremock-scenarios-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "모든 시나리오와 현재 상태를 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/scenarios",
+    "expected_operation_id": "getAllScenarios"
+  },
+  {
+    "id": "wiremock-files-en",
+    "system": "wiremock",
+    "language": "en",
+    "split": "validation",
+    "query": "List the names of all stored response files.",
+    "expected_method": "get",
+    "expected_path": "/__admin/files",
+    "expected_operation_id": "getAllFileNames"
+  },
+  {
+    "id": "wiremock-files-ko",
+    "system": "wiremock",
+    "language": "ko",
+    "split": "validation",
+    "query": "저장된 응답 파일의 이름 목록을 보여줘.",
+    "expected_method": "get",
+    "expected_path": "/__admin/files",
+    "expected_operation_id": "getAllFileNames"
+  }
+]

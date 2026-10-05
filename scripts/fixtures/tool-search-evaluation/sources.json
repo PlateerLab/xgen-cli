@@ -1,0 +1,16 @@
+[
+  {
+    "id": "gitea",
+    "source_url": "https://raw.githubusercontent.com/go-gitea/gitea/08c6ea6728ee35a16f9a39588e725044b7f389cd/templates/swagger/v1_json.tmpl",
+    "source_sha256": "c418b5362113c352e012d82d9e9eb7a430c41cd8310ec938aa944d70a8dcdcee",
+    "source_bytes": 739456,
+    "reference": "https://github.com/go-gitea/gitea/blob/08c6ea6728ee35a16f9a39588e725044b7f389cd/templates/swagger/v1_json.tmpl"
+  },
+  {
+    "id": "wiremock",
+    "source_url": "https://raw.githubusercontent.com/wiremock/wiremock/1a9a61507fbca5c7d6da72de4b22d54ceef48760/src/main/resources/swagger/wiremock-admin-api.json",
+    "source_sha256": "ab12a954320dbad1cebc1a54898aaab2d4ffe4b92165768fded650c9891a68fd",
+    "source_bytes": 90716,
+    "reference": "https://github.com/wiremock/wiremock/blob/1a9a61507fbca5c7d6da72de4b22d54ceef48760/src/main/resources/swagger/wiremock-admin-api.json"
+  }
+]

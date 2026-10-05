@@ -1,0 +1,2345 @@
+{
+  "format_version": 1,
+  "summary": {
+    "agent_describe_mismatches": 14,
+    "agent_failures": 14,
+    "agent_search_mismatches": 0,
+    "backend_version": "0.46.0",
+    "business_api_calls": 0,
+    "cases": 32,
+    "describe_mismatches": 0,
+    "direct_cli_mismatches": 0,
+    "groups": {
+      "gitea-en": {
+        "mrr5": 0.4375,
+        "n": 8,
+        "top1": 3,
+        "top5": 4
+      },
+      "gitea-ko": {
+        "mrr5": 0.125,
+        "n": 8,
+        "top1": 0,
+        "top5": 2
+      },
+      "wiremock-en": {
+        "mrr5": 0.84375,
+        "n": 8,
+        "top1": 6,
+        "top5": 8
+      },
+      "wiremock-ko": {
+        "mrr5": 0.3229166666666667,
+        "n": 8,
+        "top1": 2,
+        "top5": 4
+      }
+    },
+    "live_model_calls": 0,
+    "median_cli_seconds": 0.8338145875022747,
+    "median_direct_load_search_seconds": 0.34266494697658345,
+    "median_direct_search_seconds": 0.1452991219703108,
+    "registration_sha256": "eb2586980705436d6f4fd7c879a6150ed8e4bf05e4ad3755ac5fc4faf5273418",
+    "source_description_missing": 2,
+    "source_required_missing": 0,
+    "systems": {
+      "gitea": {
+        "artifact_digest": "de13788e57e585cf37357a77a1ce6df0e58b229b5bf207b53b62c1028d290443",
+        "direct_build_seconds": 1.2428093400085345,
+        "normalized_tools_equal": true,
+        "tool_count": 448
+      },
+      "wiremock": {
+        "artifact_digest": "2bf15fc4bd97ed0380bf84fd8a77f294c864bc1ee39f3131f04cf7ba45130b49",
+        "direct_build_seconds": 0.6355888450052589,
+        "normalized_tools_equal": true,
+        "tool_count": 40
+      }
+    },
+    "unstable_cases": 0
+  },
+  "cases": [
+    {
+      "id": "gitea-owned-repos-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Show the repositories owned by my signed-in account.",
+      "expected_tool": "userCurrentListRepos",
+      "expected_method": "get",
+      "expected_path": "/user/repos",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoGetByID",
+        "repoSearch",
+        "userListSubscriptions",
+        "getGeneralRepositorySettings",
+        "adminUnadoptedList"
+      ]
+    },
+    {
+      "id": "gitea-owned-repos-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "내 계정이 소유한 저장소 목록을 보여줘.",
+      "expected_tool": "userCurrentListRepos",
+      "expected_method": "get",
+      "expected_path": "/user/repos",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListPullReviews",
+        "ActionsListRepositoryWorkflows",
+        "issueListIssueAttachments",
+        "getRepoVariablesList",
+        "listForks"
+      ]
+    },
+    {
+      "id": "gitea-org-repos-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Which repositories belong to this organization?",
+      "expected_tool": "orgListRepos",
+      "expected_method": "get",
+      "expected_path": "/orgs/{org}/repos",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoSearch",
+        "renameOrg",
+        "orgDelete",
+        "orgGet",
+        "adminUnadoptedList"
+      ]
+    },
+    {
+      "id": "gitea-org-repos-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 조직에 속한 저장소들을 찾아줘.",
+      "expected_tool": "orgListRepos",
+      "expected_method": "get",
+      "expected_path": "/orgs/{org}/repos",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "userCurrentPutSubscription",
+        "repoUpdateAvatar",
+        "repoMergeUpstream",
+        "userCurrentPutStar",
+        "repoUpdateBranch"
+      ]
+    },
+    {
+      "id": "gitea-repo-branches-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Show all branches of this repository.",
+      "expected_tool": "repoListBranches",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/branches",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListBranches",
+        "GetTree",
+        "repoGetBranch",
+        "repoGet",
+        "repoGetRawFile"
+      ]
+    },
+    {
+      "id": "gitea-repo-branches-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 저장소의 브랜치 목록을 알려줘.",
+      "expected_tool": "repoListBranches",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/branches",
+      "rank": 2,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.5,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListBranchProtection",
+        "repoListBranches",
+        "repoGetContentsList",
+        "repoListStatusesByRef",
+        "repoListPullRequests"
+      ]
+    },
+    {
+      "id": "gitea-repo-releases-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Show the releases published for this repository.",
+      "expected_tool": "repoListReleases",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/releases",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListReleases",
+        "GetTree",
+        "repoGet",
+        "repoGetLatestRelease",
+        "repoTrackedTimes"
+      ]
+    },
+    {
+      "id": "gitea-repo-releases-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 저장소에 게시된 릴리즈 목록을 보여줘.",
+      "expected_tool": "repoListReleases",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/releases",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListPullReviews",
+        "ActionsListRepositoryWorkflows",
+        "issueListIssueAttachments",
+        "getRepoVariablesList",
+        "listForks"
+      ]
+    },
+    {
+      "id": "gitea-repo-issues-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "List the issues reported in this repository.",
+      "expected_tool": "issueListIssues",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/issues",
+      "rank": 2,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.5,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListPinnedIssues",
+        "issueListIssues",
+        "issueListBlocks",
+        "repoListHooks",
+        "GetTree"
+      ]
+    },
+    {
+      "id": "gitea-repo-issues-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 저장소에 등록된 이슈 목록을 조회해줘.",
+      "expected_tool": "issueListIssues",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/issues",
+      "rank": 2,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.5,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListPinnedIssues",
+        "issueListIssues",
+        "ActionsListRepositoryWorkflows",
+        "getUserVariablesList",
+        "issueListBlocks"
+      ]
+    },
+    {
+      "id": "gitea-repo-pulls-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "List the pull requests for this repository.",
+      "expected_tool": "repoListPullRequests",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/pulls",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoListPullRequests",
+        "repoListPinnedPullRequests",
+        "repoListPullReviews",
+        "repoGetPullRequest",
+        "repoGetPullRequestCommits"
+      ]
+    },
+    {
+      "id": "gitea-repo-pulls-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 저장소의 풀 리퀘스트 목록을 조회해줘.",
+      "expected_tool": "repoListPullRequests",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/pulls",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "ActionsListRepositoryWorkflows",
+        "getRepoVariablesList",
+        "issueListIssueAttachments",
+        "repoListPullReviews",
+        "issueListIssues"
+      ]
+    },
+    {
+      "id": "gitea-issue-comments-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Read every comment on this issue.",
+      "expected_tool": "issueGetComments",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/issues/{index}/comments",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "issueGetComment",
+        "issueEditComment",
+        "issueDeleteComment",
+        "issueCreateComment",
+        "repoGetReviewers"
+      ]
+    },
+    {
+      "id": "gitea-issue-comments-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 이슈에 달린 댓글들을 읽어줘.",
+      "expected_tool": "issueGetComments",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/issues/{index}/comments",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "issueEditComment",
+        "issueGetComment",
+        "issueDeleteComment",
+        "issueCreateComment",
+        "issuePostCommentReaction"
+      ]
+    },
+    {
+      "id": "gitea-file-content-en",
+      "system": "gitea",
+      "language": "en",
+      "query": "Read the contents of a file at a given path in this repository.",
+      "expected_tool": "repoGetContents",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoUpdateFile",
+        "repoGetRawFile",
+        "repoCreateFile",
+        "repoDeleteFile",
+        "repoChangeFiles"
+      ]
+    },
+    {
+      "id": "gitea-file-content-ko",
+      "system": "gitea",
+      "language": "ko",
+      "query": "이 저장소에서 지정한 경로의 파일 내용을 읽어줘.",
+      "expected_tool": "repoGetContents",
+      "expected_method": "get",
+      "expected_path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "repoChangeFiles",
+        "repoUpdateFile",
+        "repoDownloadPullDiffOrPatch",
+        "repoEditBranchProtection",
+        "renderMarkup"
+      ]
+    },
+    {
+      "id": "wiremock-all-mappings-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Show all configured stub mappings.",
+      "expected_tool": "getAllStubMappings",
+      "expected_method": "get",
+      "expected_path": "/__admin/mappings",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllStubMappings",
+        "findUnmatchedStubMappings",
+        "deleteAllStubMappings",
+        "getStubMappingById",
+        "importStubMappings"
+      ]
+    },
+    {
+      "id": "wiremock-all-mappings-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "설정된 스텁 매핑 목록을 보여줘.",
+      "expected_tool": "getAllStubMappings",
+      "expected_method": "get",
+      "expected_path": "/__admin/mappings",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllStubMappings",
+        "findUnmatchedRequests",
+        "findUnmatchedStubMappings",
+        "findNearMissesForRequest",
+        "findStubMappingsByMetadata"
+      ]
+    },
+    {
+      "id": "wiremock-mapping-detail-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Read the stub mapping with this ID.",
+      "expected_tool": "getStubMappingById",
+      "expected_method": "get",
+      "expected_path": "/__admin/mappings/{stubMappingId}",
+      "rank": 2,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.5,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "updateStubMapping",
+        "getStubMappingById",
+        "createNewStubMapping",
+        "deleteStubMapping",
+        "getAllStubMappings"
+      ]
+    },
+    {
+      "id": "wiremock-mapping-detail-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "이 ID에 해당하는 스텁 매핑을 조회해줘.",
+      "expected_tool": "getStubMappingById",
+      "expected_method": "get",
+      "expected_path": "/__admin/mappings/{stubMappingId}",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllFileNames",
+        "getAllScenarios",
+        "getFileById",
+        "getRequestById",
+        "getRecordingStatus"
+      ]
+    },
+    {
+      "id": "wiremock-request-journal-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Show the requests recorded in the request journal.",
+      "expected_tool": "getAllRequestsInJournal",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllRequestsInJournal",
+        "deleteAllRequestsInJournal",
+        "getRequestById",
+        "findUnmatchedRequests",
+        "countRequestsByCriteria"
+      ]
+    },
+    {
+      "id": "wiremock-request-journal-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "요청 로그에 기록된 요청 목록을 보여줘.",
+      "expected_tool": "getAllRequestsInJournal",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "findUnmatchedRequests",
+        "findNearMissesForRequest",
+        "findRequestsByCriteria",
+        "findUnmatchedStubMappings",
+        "findNearMissesForRequestPattern"
+      ]
+    },
+    {
+      "id": "wiremock-request-detail-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Read the logged request identified by this ID.",
+      "expected_tool": "getRequestById",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests/{requestId}",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getRequestById",
+        "deleteRequestById",
+        "getFileById",
+        "getStubMappingById",
+        "getAllRequestsInJournal"
+      ]
+    },
+    {
+      "id": "wiremock-request-detail-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "이 ID로 기록된 요청의 상세 내용을 조회해줘.",
+      "expected_tool": "getRequestById",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests/{requestId}",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getRequestById",
+        "getAllRequestsInJournal",
+        "getFileById",
+        "getHealth",
+        "getRecordingStatus"
+      ]
+    },
+    {
+      "id": "wiremock-unmatched-requests-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Find received requests that matched no stub mapping.",
+      "expected_tool": "findUnmatchedRequests",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests/unmatched",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": false,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "findUnmatchedRequests",
+        "getStubMappingById",
+        "updateStubMapping",
+        "findUnmatchedStubMappings",
+        "findRequestsByCriteria"
+      ]
+    },
+    {
+      "id": "wiremock-unmatched-requests-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "스텁 매핑과 일치하지 않은 요청들을 찾아줘.",
+      "expected_tool": "findUnmatchedRequests",
+      "expected_method": "get",
+      "expected_path": "/__admin/requests/unmatched",
+      "rank": 4,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.25,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": false,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "deleteRequestById",
+        "getRequestById",
+        "deleteAllRequestsInJournal",
+        "findUnmatchedRequests",
+        "getAllRequestsInJournal"
+      ]
+    },
+    {
+      "id": "wiremock-recording-status-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Check whether request recording is currently running.",
+      "expected_tool": "getRecordingStatus",
+      "expected_method": "get",
+      "expected_path": "/__admin/recordings/status",
+      "rank": 4,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.25,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "startRecording",
+        "takeRecordingSnapshot",
+        "stopRecording",
+        "getRecordingStatus",
+        "findNearMissesForRequestPattern"
+      ]
+    },
+    {
+      "id": "wiremock-recording-status-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "요청 녹화가 지금 실행 중인지 확인해줘.",
+      "expected_tool": "getRecordingStatus",
+      "expected_method": "get",
+      "expected_path": "/__admin/recordings/status",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "retrieveNearMissesForUnmatchedRequests",
+        "startRecording",
+        "takeRecordingSnapshot",
+        "deleteRequestById",
+        "getRequestById"
+      ]
+    },
+    {
+      "id": "wiremock-scenarios-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "Show all stateful scenarios and their current states.",
+      "expected_tool": "getAllScenarios",
+      "expected_method": "get",
+      "expected_path": "/__admin/scenarios",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllScenarios",
+        "resetAllScenarios",
+        "findStubMappingsByMetadata",
+        "createNewStubMapping",
+        "updateStubMapping"
+      ]
+    },
+    {
+      "id": "wiremock-scenarios-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "모든 시나리오와 현재 상태를 보여줘.",
+      "expected_tool": "getAllScenarios",
+      "expected_method": "get",
+      "expected_path": "/__admin/scenarios",
+      "rank": null,
+      "top1": false,
+      "top5": false,
+      "rr5": 0.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getRecordingStatus",
+        "getHealth",
+        "resetAllScenarios",
+        "createNewStubMapping",
+        "updateStubMapping"
+      ]
+    },
+    {
+      "id": "wiremock-files-en",
+      "system": "wiremock",
+      "language": "en",
+      "query": "List the names of all stored response files.",
+      "expected_tool": "getAllFileNames",
+      "expected_method": "get",
+      "expected_path": "/__admin/files",
+      "rank": 1,
+      "top1": true,
+      "top5": true,
+      "rr5": 1.0,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": true,
+      "stable": true,
+      "agent_returncode": 0,
+      "fixture_model_requests": 3,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllFileNames",
+        "findUnmatchedStubMappings",
+        "findUnmatchedRequests",
+        "findNearMissesForRequest",
+        "findStubMappingsByMetadata"
+      ]
+    },
+    {
+      "id": "wiremock-files-ko",
+      "system": "wiremock",
+      "language": "ko",
+      "query": "저장된 응답 파일의 이름 목록을 보여줘.",
+      "expected_tool": "getAllFileNames",
+      "expected_method": "get",
+      "expected_path": "/__admin/files",
+      "rank": 3,
+      "top1": false,
+      "top5": true,
+      "rr5": 0.3333333333333333,
+      "direct_cli_equal": true,
+      "describe_equal": true,
+      "agent_search_equal": true,
+      "agent_describe_equal": false,
+      "stable": true,
+      "agent_returncode": 20,
+      "fixture_model_requests": 2,
+      "source_description_present": true,
+      "source_required_preserved": true,
+      "candidate_ids": [
+        "getAllStubMappings",
+        "findUnmatchedRequests",
+        "getAllFileNames",
+        "findUnmatchedStubMappings",
+        "findNearMissesForRequest"
+      ]
+    }
+  ],
+  "diagnosis": {
+    "rows_sha256": "196a72f99e8d0acfa91146cec04cdb026088c178934e6e1d98739d6f6bb83ea1",
+    "source_description_check_is_normalized_text_only": true,
+    "scope_enrichment": {
+      "gitea": {
+        "injected_cluster_wide": 121,
+        "tools": 448
+      },
+      "wiremock": {
+        "injected_cluster_wide": 5,
+        "tools": 40
+      }
+    },
+    "cases": [
+      {
+        "id": "gitea-owned-repos-en",
+        "first_candidate": "repoGetByID",
+        "stdout_bytes": 163218,
+        "metadata_sizes": {
+          "ai_metadata": 656,
+          "api_contract": 60095,
+          "consumes": 2541,
+          "contract_signal_policy": 396,
+          "input_locations": 60,
+          "method": 5,
+          "openapi": 81642,
+          "path": 20,
+          "produces": 1656,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 15124,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-owned-repos-ko",
+        "first_candidate": "repoListPullReviews",
+        "stdout_bytes": 74724,
+        "metadata_sizes": {
+          "ai_metadata": 718,
+          "api_contract": 27140,
+          "consumes": 3505,
+          "contract_signal_policy": 396,
+          "input_locations": 92,
+          "method": 5,
+          "openapi": 34881,
+          "path": 45,
+          "produces": 1184,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 5291,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-org-repos-en",
+        "first_candidate": "repoSearch",
+        "stdout_bytes": 247090,
+        "metadata_sizes": {
+          "ai_metadata": 640,
+          "api_contract": 99074,
+          "consumes": 3953,
+          "contract_signal_policy": 396,
+          "input_locations": 223,
+          "method": 5,
+          "openapi": 121458,
+          "path": 15,
+          "produces": 2443,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 15422,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-org-repos-ko",
+        "first_candidate": "userCurrentPutSubscription",
+        "stdout_bytes": 17003,
+        "metadata_sizes": {
+          "ai_metadata": 580,
+          "api_contract": 4392,
+          "consumes": 2782,
+          "contract_signal_policy": 396,
+          "input_locations": 70,
+          "method": 5,
+          "openapi": 7014,
+          "path": 36,
+          "produces": 2,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 610,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-branches-en",
+        "first_candidate": "repoListBranches",
+        "stdout_bytes": 44612,
+        "metadata_sizes": {
+          "ai_metadata": 687,
+          "api_contract": 15636,
+          "consumes": 3219,
+          "contract_signal_policy": 396,
+          "input_locations": 84,
+          "method": 5,
+          "openapi": 20005,
+          "path": 32,
+          "produces": 2,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 3208,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-branches-ko",
+        "first_candidate": "repoListBranchProtection",
+        "stdout_bytes": 49812,
+        "metadata_sizes": {
+          "ai_metadata": 748,
+          "api_contract": 18453,
+          "consumes": 2782,
+          "contract_signal_policy": 396,
+          "input_locations": 70,
+          "method": 5,
+          "openapi": 23041,
+          "path": 42,
+          "produces": 2,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 3136,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-releases-en",
+        "first_candidate": "repoListReleases",
+        "stdout_bytes": 61827,
+        "metadata_sizes": {
+          "ai_metadata": 675,
+          "api_contract": 22366,
+          "consumes": 3219,
+          "contract_signal_policy": 396,
+          "input_locations": 106,
+          "method": 5,
+          "openapi": 28323,
+          "path": 32,
+          "produces": 1196,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 3888,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-releases-ko",
+        "first_candidate": "repoListPullReviews",
+        "stdout_bytes": 74724,
+        "metadata_sizes": {
+          "ai_metadata": 718,
+          "api_contract": 27140,
+          "consumes": 3505,
+          "contract_signal_policy": 396,
+          "input_locations": 92,
+          "method": 5,
+          "openapi": 34881,
+          "path": 45,
+          "produces": 1184,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 5291,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-issues-en",
+        "first_candidate": "repoListPinnedIssues",
+        "stdout_bytes": 146959,
+        "metadata_sizes": {
+          "ai_metadata": 697,
+          "api_contract": 55296,
+          "consumes": 2782,
+          "contract_signal_policy": 396,
+          "input_locations": 70,
+          "method": 5,
+          "openapi": 71547,
+          "path": 37,
+          "produces": 3650,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 11344,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-issues-ko",
+        "first_candidate": "repoListPinnedIssues",
+        "stdout_bytes": 146959,
+        "metadata_sizes": {
+          "ai_metadata": 697,
+          "api_contract": 55296,
+          "consumes": 2782,
+          "contract_signal_policy": 396,
+          "input_locations": 70,
+          "method": 5,
+          "openapi": 71547,
+          "path": 37,
+          "produces": 3650,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 11344,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-pulls-en",
+        "first_candidate": "repoListPullRequests",
+        "stdout_bytes": 638749,
+        "metadata_sizes": {
+          "ai_metadata": 688,
+          "api_contract": 252853,
+          "consumes": 3868,
+          "contract_signal_policy": 396,
+          "input_locations": 143,
+          "method": 5,
+          "openapi": 321167,
+          "path": 29,
+          "produces": 9388,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 48132,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-repo-pulls-ko",
+        "first_candidate": "ActionsListRepositoryWorkflows",
+        "stdout_bytes": 27417,
+        "metadata_sizes": {
+          "ai_metadata": 718,
+          "api_contract": 7416,
+          "consumes": 2782,
+          "contract_signal_policy": 396,
+          "input_locations": 70,
+          "method": 5,
+          "openapi": 13634,
+          "path": 41,
+          "produces": 2,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 1210,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-issue-comments-en",
+        "first_candidate": "issueGetComment",
+        "stdout_bytes": 50151,
+        "metadata_sizes": {
+          "ai_metadata": 650,
+          "api_contract": 16310,
+          "consumes": 3054,
+          "contract_signal_policy": 396,
+          "input_locations": 75,
+          "method": 5,
+          "openapi": 23090,
+          "path": 44,
+          "produces": 1558,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 3767,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-issue-comments-ko",
+        "first_candidate": "issueEditComment",
+        "stdout_bytes": 53544,
+        "metadata_sizes": {
+          "ai_metadata": 570,
+          "api_contract": 16631,
+          "consumes": 3507,
+          "contract_signal_policy": 396,
+          "input_locations": 81,
+          "method": 7,
+          "openapi": 25291,
+          "path": 44,
+          "produces": 1558,
+          "request_body_refs": 49,
+          "request_body_schema": 281,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 3808,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-file-content-en",
+        "first_candidate": "repoUpdateFile",
+        "stdout_bytes": 84248,
+        "metadata_sizes": {
+          "ai_metadata": 595,
+          "api_contract": 23043,
+          "consumes": 4054,
+          "contract_signal_policy": 396,
+          "input_locations": 194,
+          "method": 5,
+          "openapi": 45294,
+          "path": 43,
+          "produces": 2,
+          "request_body_refs": 44,
+          "request_body_schema": 2428,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 5217,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "gitea-file-content-ko",
+        "first_candidate": "repoChangeFiles",
+        "stdout_bytes": 87761,
+        "metadata_sizes": {
+          "ai_metadata": 603,
+          "api_contract": 24139,
+          "consumes": 3833,
+          "contract_signal_policy": 396,
+          "input_locations": 210,
+          "method": 6,
+          "openapi": 47510,
+          "path": 32,
+          "produces": 2,
+          "request_body_schema": 3012,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 5239,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 11,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-all-mappings-en",
+        "first_candidate": "getAllStubMappings",
+        "stdout_bytes": 635556,
+        "metadata_sizes": {
+          "ai_metadata": 672,
+          "api_contract": 228248,
+          "base_url": 3,
+          "consumes": 457,
+          "contract_signal_policy": 395,
+          "input_locations": 72,
+          "method": 5,
+          "openapi": 327081,
+          "path": 19,
+          "produces": 752,
+          "response_content_type": 18,
+          "response_schema": 76703,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-all-mappings-ko",
+        "first_candidate": "getAllStubMappings",
+        "stdout_bytes": 635556,
+        "metadata_sizes": {
+          "ai_metadata": 672,
+          "api_contract": 228248,
+          "base_url": 3,
+          "consumes": 457,
+          "contract_signal_policy": 395,
+          "input_locations": 72,
+          "method": 5,
+          "openapi": 327081,
+          "path": 19,
+          "produces": 752,
+          "response_content_type": 18,
+          "response_schema": 76703,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-mapping-detail-en",
+        "first_candidate": "updateStubMapping",
+        "stdout_bytes": 1196418,
+        "metadata_sizes": {
+          "ai_metadata": 590,
+          "api_contract": 208184,
+          "base_url": 3,
+          "consumes": 8072,
+          "contract_signal_policy": 395,
+          "input_locations": 1284,
+          "method": 5,
+          "openapi": 821226,
+          "path": 35,
+          "produces": 465,
+          "request_body_refs": 51,
+          "request_body_schema": 76385,
+          "request_content_type": 18,
+          "response_content_type": 18,
+          "response_schema": 76444,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-mapping-detail-ko",
+        "first_candidate": "getAllFileNames",
+        "stdout_bytes": 3994,
+        "metadata_sizes": {
+          "ai_metadata": 630,
+          "api_contract": 357,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 1621,
+          "path": 16,
+          "produces": 2,
+          "response_content_type": 18,
+          "response_schema": 92,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-request-journal-en",
+        "first_candidate": "getAllRequestsInJournal",
+        "stdout_bytes": 19955,
+        "metadata_sizes": {
+          "ai_metadata": 684,
+          "api_contract": 345,
+          "base_url": 3,
+          "consumes": 227,
+          "contract_signal_policy": 395,
+          "input_locations": 71,
+          "method": 5,
+          "openapi": 17145,
+          "path": 19,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-request-journal-ko",
+        "first_candidate": "findUnmatchedRequests",
+        "stdout_bytes": 11530,
+        "metadata_sizes": {
+          "ai_metadata": 744,
+          "api_contract": 40,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 9860,
+          "path": 29,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-request-detail-en",
+        "first_candidate": "getRequestById",
+        "stdout_bytes": 14566,
+        "metadata_sizes": {
+          "ai_metadata": 657,
+          "api_contract": 183,
+          "base_url": 3,
+          "consumes": 283,
+          "contract_signal_policy": 395,
+          "input_locations": 67,
+          "method": 5,
+          "openapi": 12028,
+          "path": 31,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-request-detail-ko",
+        "first_candidate": "getRequestById",
+        "stdout_bytes": 14566,
+        "metadata_sizes": {
+          "ai_metadata": 657,
+          "api_contract": 183,
+          "base_url": 3,
+          "consumes": 283,
+          "contract_signal_policy": 395,
+          "input_locations": 67,
+          "method": 5,
+          "openapi": 12028,
+          "path": 31,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-unmatched-requests-en",
+        "first_candidate": "findUnmatchedRequests",
+        "stdout_bytes": 11530,
+        "metadata_sizes": {
+          "ai_metadata": 744,
+          "api_contract": 40,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 9860,
+          "path": 29,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-unmatched-requests-ko",
+        "first_candidate": "deleteRequestById",
+        "stdout_bytes": 3688,
+        "metadata_sizes": {
+          "ai_metadata": 574,
+          "api_contract": 183,
+          "base_url": 3,
+          "consumes": 283,
+          "contract_signal_policy": 395,
+          "input_locations": 67,
+          "method": 8,
+          "openapi": 1223,
+          "path": 31,
+          "produces": 2,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-recording-status-en",
+        "first_candidate": "startRecording",
+        "stdout_bytes": 635945,
+        "metadata_sizes": {
+          "ai_metadata": 566,
+          "api_contract": 26538,
+          "base_url": 3,
+          "consumes": 5012,
+          "contract_signal_policy": 395,
+          "input_locations": 931,
+          "method": 6,
+          "openapi": 525459,
+          "path": 27,
+          "produces": 2,
+          "request_body_schema": 74446,
+          "request_content_type": 18,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-recording-status-ko",
+        "first_candidate": "retrieveNearMissesForUnmatchedRequests",
+        "stdout_bytes": 38659,
+        "metadata_sizes": {
+          "ai_metadata": 975,
+          "api_contract": 10281,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 24118,
+          "path": 41,
+          "produces": 2,
+          "response_content_type": 18,
+          "response_schema": 1037,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-scenarios-en",
+        "first_candidate": "getAllScenarios",
+        "stdout_bytes": 9301,
+        "metadata_sizes": {
+          "ai_metadata": 647,
+          "api_contract": 2105,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 4110,
+          "path": 20,
+          "produces": 2,
+          "response_content_type": 18,
+          "response_schema": 639,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-scenarios-ko",
+        "first_candidate": "getRecordingStatus",
+        "stdout_bytes": 4331,
+        "metadata_sizes": {
+          "ai_metadata": 682,
+          "api_contract": 361,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 1760,
+          "path": 28,
+          "produces": 2,
+          "response_content_type": 18,
+          "response_schema": 125,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-files-en",
+        "first_candidate": "getAllFileNames",
+        "stdout_bytes": 3994,
+        "metadata_sizes": {
+          "ai_metadata": 630,
+          "api_contract": 357,
+          "base_url": 3,
+          "input_locations": 56,
+          "method": 5,
+          "openapi": 1621,
+          "path": 16,
+          "produces": 2,
+          "response_content_type": 18,
+          "response_schema": 92,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": null,
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "wiremock-files-ko",
+        "first_candidate": "getAllStubMappings",
+        "stdout_bytes": 635556,
+        "metadata_sizes": {
+          "ai_metadata": 672,
+          "api_contract": 228248,
+          "base_url": 3,
+          "consumes": 457,
+          "contract_signal_policy": 395,
+          "input_locations": 72,
+          "method": 5,
+          "openapi": 327081,
+          "path": 19,
+          "produces": 752,
+          "response_content_type": 18,
+          "response_schema": 76703,
+          "response_status": 5,
+          "source": 9,
+          "source_label": 10,
+          "source_url": 10
+        },
+        "describe_error": "tool_discovery_response_invalid",
+        "receipts": [
+          {
+            "capability": "xgen.tools/search",
+            "status": "succeeded",
+            "verification": [
+              "passed",
+              "passed"
+            ]
+          },
+          {
+            "capability": "xgen.tools/describe",
+            "status": "failed",
+            "verification": [
+              "passed",
+              "failed"
+            ]
+          }
+        ]
+      }
+    ],
+    "all_failed_describes_above_64k": true,
+    "failed_describe_errors": [
+      "tool_discovery_response_invalid"
+    ],
+    "failed_size_min": 74724,
+    "failed_size_max": 1196418
+  },
+  "live_evaluation": {
+    "status": "blocked_before_network",
+    "reason": "agent_describe_gate_failed",
+    "live_model_calls": 0,
+    "business_api_calls": 0
+  },
+  "evidence_sha256": {
+    "registration.json": "eb2586980705436d6f4fd7c879a6150ed8e4bf05e4ad3755ac5fc4faf5273418",
+    "rows.json": "196a72f99e8d0acfa91146cec04cdb026088c178934e6e1d98739d6f6bb83ea1",
+    "summary.json": "99486ee540aad75df49d76ee9b41736c711aaeab48d02b32e38e73149f2540fb",
+    "diagnosis.json": "90ccac83cfc7dcd1fb61a124a5ebf7801380a29335c619c23356384d6a043e8d"
+  },
+  "scope": "Frozen public-source endpoint retrieval and transport diagnosis; not LLM or business task success."
+}
