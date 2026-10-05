@@ -1,7 +1,7 @@
 # 계획 크기·모델 판단 경계 비교 평가
 
 - 기준일: 2026-10-05
-- 상태: 사전등록 초안. Benchmark fixture·runner·외부 엔진 adapter는 아직 구현하지 않았다.
+- 상태: 모델 없는 contract probe 800회 완료. 실제 모델 pilot·외부 엔진 adapter는 미실행.
 - 변경 분류: 범용 평가. 아래 사례는 평가용이며 engine/prompt의 사례별 조건문으로 옮기지 않는다.
 - 근거: [아키텍처 비교](2026-10-05-harness-architecture-comparison.md), [ADR-0050](../adr/0050-frontier-first-execution-and-planning-boundaries.md)
 - 상위 평가 계약: [기존 runtime 평가 프로토콜](2026-08-28-runtime-evaluation-protocol.md)
@@ -109,3 +109,15 @@ Typed output reference나 병렬 실행의 효과는 X1/XN 결과와 섞지 않�
 기록은 fixture/config/binary/source hash, engine/version, split, trial ID, scenario, fault boundary, status, oracle 결과, call·token·effect·Receipt 수, 비용·latency·manual intervention을 포함한다. Raw workspace content와 credential은 보고서에 넣지 않는다. 미실행·미구현 조건에는 0점 대신 `NOT_RUN`/`NOT_IMPLEMENTED`를 사용한다.
 
 이 문서는 실행 계획이며 성능 개선·외부 비교가 이미 완료됐다는 기록이 아니다.
+
+## Offline contract probe 사전 고정 (2026-10-05)
+
+단계 1의 sink는 Run journal과 독립된 SQLite DB다. 각 적용을 중복 제거 없이 append해서 재실행을 감추지 않는다. HTTP·network adapter의 timeout 동작은 측정하지 않는다. Fixture는 `evals/planning-boundary/fixtures`의 design 2개와 validation 2개다. Literal 독립 작업, output에서 다음 작업을 발견하는 chain, diamond dependency, 2단계 관찰과 sibling을 구분한다. 이는 위의 실제 project/model pilot family를 대체하지 않는 별도 engine contract 사례다.
+
+정상, adapter 실패, plan commit, sink apply, Receipt 직전, model reservation, 승인 뒤 catalog/material/profile 변경을 각 packet size 1/4로 10회 반복한다. Sink apply는 adapter의 query feature 광고 유무를 별도로 실행한다. 현재 planned admission은 `sink_guarantee=None`으로 고정하므로 feature 광고만으로 query reconciliation에 들어갈 수 없다. Query 복구 경로의 완료율은 `NOT_IMPLEMENTED`이며 두 조건 모두 manual 중단이 예상된다. 예상: 정상·plan·Receipt 복구는 같은 Run에서 완료, sink apply 뒤에는 중복 적용 없이 미완료가 허용되지만 완료 성공으로 세지 않는다. 추가로 Query의 Applied가 typed output을 반환하지 않는 현 계약은 소스에서 확인한 제약이다. 이번 planned admission probe에서 이 경로를 실행·검증한 것으로 주장하지 않는다. Model reservation은 자동 재호출 없이 recovery required를 먼저 확인하고 명시적 abandon 후 budget을 환급하지 않고 진행한다. Profile 변경은 평가 host의 manifest gate이며 product CLI 전체의 profile 검증을 대신하지 않는다.
+
+Runner는 실행 전에 fixture/config/binary/source hash를 freeze하고 각 trial의 sink oracle, 중복, false completion, 호출 수, journal/Receipt, 재개 후 재실행 여부를 기록한다. 실제 모델 token·비용·외부 엔진은 NOT_MEASURED/NOT_RUN이다.
+
+## 단계 1 실행 결과
+
+[구현·결과 기록](../development/planning-boundary-probe-2026-10-05.md)을 참고해. Design 400회와 동일 코드·binary의 validation 400회에서 contract는 통과했어. 자동 완료 240회와 명시적 model-call abandon 뒤 완료 80회를 구분했고, 나머지 미완료 조건을 완료 성공에 넣지 않았어. 실제 모델 비용 gate는 UNKNOWN이며 planner policy·engine 구조를 변경하지 않아.

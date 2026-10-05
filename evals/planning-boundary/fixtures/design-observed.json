@@ -1,0 +1,66 @@
+{
+  "id": "design-observed",
+  "split": "design",
+  "plan": {
+    "initial": [
+      {
+        "key": "seed",
+        "resource": "probe:seed",
+        "value": {
+          "next": [
+            {
+              "key": "follow",
+              "resource": "probe:follow",
+              "value": {
+                "result": true
+              },
+              "depends_on": [
+                "seed"
+              ]
+            }
+          ]
+        },
+        "depends_on": []
+      }
+    ]
+  },
+  "oracle": {
+    "applied": [
+      {
+        "operation": "seed",
+        "resource": "probe:seed",
+        "value": {
+          "next": [
+            {
+              "key": "follow",
+              "resource": "probe:follow",
+              "value": {
+                "result": true
+              },
+              "depends_on": [
+                "seed"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "operation": "follow",
+        "resource": "probe:follow",
+        "value": {
+          "result": true
+        }
+      }
+    ],
+    "planner_calls": {
+      "1": 3,
+      "4": 3
+    },
+    "dependencies": {
+      "seed": [],
+      "follow": [
+        "seed"
+      ]
+    }
+  }
+}

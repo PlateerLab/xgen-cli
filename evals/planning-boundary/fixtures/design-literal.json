@@ -1,0 +1,42 @@
+{
+  "id": "design-literal",
+  "split": "design",
+  "plan": {
+    "initial": [
+      {
+        "key": "alpha",
+        "resource": "probe:alpha",
+        "value": "bounded text",
+        "depends_on": []
+      },
+      {
+        "key": "beta",
+        "resource": "probe:beta",
+        "value": 17,
+        "depends_on": []
+      }
+    ]
+  },
+  "oracle": {
+    "applied": [
+      {
+        "operation": "alpha",
+        "resource": "probe:alpha",
+        "value": "bounded text"
+      },
+      {
+        "operation": "beta",
+        "resource": "probe:beta",
+        "value": 17
+      }
+    ],
+    "planner_calls": {
+      "1": 3,
+      "4": 2
+    },
+    "dependencies": {
+      "alpha": [],
+      "beta": []
+    }
+  }
+}
