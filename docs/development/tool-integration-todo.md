@@ -40,6 +40,9 @@
 - [x] **분리 평가:** 새 20개 요청·2회·실제 DeepSeek 120회로 검색어 생성과 두 후보 선택 baseline 비교. 전달 차이 0·동결 선택 16/32→26/32. branch-tip 정답 기준 결함의 4회를 원점수 보존 후 결함 판정에서 제외했다. 나머지 28회 사후 분석에서 정답 후보 포함 시 선택 오류는 없었다. [등록·점수·소유자·범위](live-tool-choice-2026-10-06.md).
 - [ ] **평가 — 다음:** parameter·response 최상위 ref와 대체 API를 함께 audit한 새 held-out 요청을 고정하고, 실제 xgen planner의 query proposal 재생을 standalone query baseline과 비교한다. 이미 본 20개 요청은 설계 자료로 전환한다.
 - [ ] **graph-tool-call:** 직접 호출에서 재현된 목표 endpoint 누락과 원본에 없는 scope 설명 주입을 해당 저장소에서 개선. 범용 정규화·검색·색인/임베딩·reranking과 scope 보강 ablation을 별도 비교 후 채택한다. 이번 32개 요청은 설계 자료로 전환하고 추가 보류 사례를 사용한다.
+  - 2026-10-07 1차: graph-tool-call `feat/search-recall-0.47`에 자연어 요청 recall 하네스(xgen worker와 같은 공개 경로)를 추가했다. 사전 등록한 held-out(Docker·Grafana·사내 한국어 명세, raw/모델 검색어 각 48건)으로 후보 1개(구조화 의미 채널을 융합에서 제외)를 판정해 불채택했다. hit@5 54/96 -> 54/96, 모델 검색어 35 -> 34, 영어 요청 x 한국어 명세 칸 5 -> 3. MRR과 지연(0.14 -> 0.04초)은 개선됐다.
+  - 확인한 주 누락 원인은 교차언어(영어 요청 x 한국어 명세, 반대 방향)다. 다음 후보는 이를 직접 다루고 새 held-out으로 판정한다. 시험 후 버린 변경(tie-aware RRF, K8s scope 토큰 조건화, 한국어 코퍼스 ko->en 사전 생략)은 설계셋 효과가 없거나 저장소 BO 가드에서 하락했다.
+  - 저장소 기본 retrieval 벤치마크 8셋은 ai_metadata 경로를 타지 않아 구조화 의미 점수 변경을 감지하지 못한다. 새 하네스와 `benchmarks/xgen_api_scale`로 보완한다.
 - [ ] **xgen:** 후보 전달 차이는 이번 평가에서 미검출이며 이를 수정 대상으로 가정하지 않는다. 큰 계약 전달 실패는 수정했고 standalone query/선택 baseline을 완료했으며 production planner는 별도 평가한다. 검색 알고리즘은 중복 구현하지 않는다.
 - [ ] **xgen:** 큰 enum 값·중첩 schema의 상세 조회 필요성과 생략이 모델 선택에 주는 영향을 평가하고, 필요하면 전체 계약 digest에 묶인 제한된 상세 조회를 추가한다. 입력 목록 페이지와 schema 상세 조회를 구분한다.
 - [ ] **추론 모델·SEV:** 전달된 올바른 후보/계약에서의 선택·거절 품질을 별도 평가. 모델/프롬프트 개선과 xgen 역할 연결 개발을 구분한다.
