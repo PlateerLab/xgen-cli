@@ -39,6 +39,8 @@
 - [x] **xgen:** 모델용 describe 2.0.0과 별도 전체 실행 계약·입력 페이지·생략 표시·digest·한도 오류 구현. 이전 Gitea/WireMock 32개 설계 회귀의 전달 실패 14→0, 추가 두 검증 fixture의 원본 제약·재생 검사 통과. [조건·수치·버전 이행·한계](bounded-tool-describe-2026-10-06.md).
 - [x] **분리 평가:** 새 20개 요청·2회·실제 DeepSeek 120회로 검색어 생성과 두 후보 선택 baseline 비교. 전달 차이 0·동결 선택 16/32→26/32. branch-tip 정답 기준 결함의 4회를 원점수 보존 후 결함 판정에서 제외했다. 나머지 28회 사후 분석에서 정답 후보 포함 시 선택 오류는 없었다. [등록·점수·소유자·범위](live-tool-choice-2026-10-06.md).
 - [ ] **평가 — 다음:** parameter·response 최상위 ref와 대체 API를 함께 audit한 새 held-out 요청을 고정하고, 실제 xgen planner의 query proposal 재생을 standalone query baseline과 비교한다. 이미 본 20개 요청은 설계 자료로 전환한다.
+  - 2026-10-07 진행: audit held-out #4(공개 한국어 2개, 영어 1개, 60건 중 지원 48건, 대안 22개, 사례마다 응답 schema·근거 필드·필수 입력·검토한 대안 기록)를 고정했다. Q1(production 첫 검색어 vs standalone 검색어)과 Q2(production에서 언어 힌트 유지 여부, 192회)를 사전 등록하고 재생 하네스(실행 DB의 search 입력·후보·describe·토큰 추출)를 만들었다.
+  - 1차 실행은 DeepSeek 잔액 소진(HTTP 402)으로 절반 이상 실패해 무효 처리했다. 결과는 열지 않았으며 충전 후 같은 조건으로 전체를 다시 실행한다.
 - [ ] **graph-tool-call:** 직접 호출에서 재현된 목표 endpoint 누락과 원본에 없는 scope 설명 주입을 해당 저장소에서 개선. 범용 정규화·검색·색인/임베딩·reranking과 scope 보강 ablation을 별도 비교 후 채택한다. 이번 32개 요청은 설계 자료로 전환하고 추가 보류 사례를 사용한다.
   - 2026-10-07 1차: graph-tool-call `feat/search-recall-0.47`에 자연어 요청 recall 하네스(xgen worker와 같은 공개 경로)를 추가했다. 사전 등록한 held-out(Docker·Grafana·사내 한국어 명세, raw/모델 검색어 각 48건)으로 후보 1개(구조화 의미 채널을 융합에서 제외)를 판정해 불채택했다. hit@5 54/96 -> 54/96, 모델 검색어 35 -> 34, 영어 요청 x 한국어 명세 칸 5 -> 3. MRR과 지연(0.14 -> 0.04초)은 개선됐다.
   - 확인한 주 누락 원인은 교차언어(영어 요청 x 한국어 명세, 반대 방향)다. 다음 후보는 이를 직접 다루고 새 held-out으로 판정한다. 시험 후 버린 변경(tie-aware RRF, K8s scope 토큰 조건화, 한국어 코퍼스 ko->en 사전 생략)은 설계셋 효과가 없거나 저장소 BO 가드에서 하락했다.
