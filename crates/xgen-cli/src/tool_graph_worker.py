@@ -1,5 +1,6 @@
 """Pinned internal retrieval worker. No business API execution or model calls."""
 
+import collections
 import copy
 import hashlib
 import gzip
@@ -9,6 +10,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+import unicodedata
 import warnings
 
 VERSION = "0.46.0"
@@ -117,6 +119,54 @@ def graph_from_artifact(artifact):
         return ToolGraph.load(path)
 
 
+def letter_script(char):
+    name = unicodedata.name(char, "").split(" ")
+    if name[0] in ("FULLWIDTH", "HALFWIDTH") and len(name) > 1:
+        name = name[1:]
+    return {"CJK": "Han", "HIRAGANA": "Kana", "KATAKANA": "Kana"}.get(name[0], name[0].title()) or None
+
+
+def summary_script(text):
+    """Script of one summary. Latin letters appear in identifiers and acronyms of any
+    documentation, so any other script wins; Hangul and Kana win over Han because
+    Korean and Japanese text may contain Han."""
+    letters = collections.Counter(letter_script(char) for char in text if char.isalpha())
+    letters.pop(None, None)
+    other = {script: count for script, count in letters.items() if script != "Latin"}
+    if not letters:
+        return None
+    if not other:
+        return "Latin"
+    for script in ("Hangul", "Kana"):
+        if script in other:
+            return script
+    return min(other, key=lambda script: (-other[script], script))
+
+
+def documentation_samples(artifact, count=2, limit=80):
+    """Representative operation summaries in the collection's dominant script.
+
+    The planner writes search queries; showing real documentation lets it match the
+    documentation language without a script-to-language table. Derived only from the
+    pinned artifact, so the same snapshot always yields the same samples.
+    """
+    summaries = []
+    for name in sorted(artifact["tools"]):
+        tool = artifact["tools"][name]
+        openapi = (tool.get("metadata") or {}).get("openapi") or {}
+        text = " ".join(str(openapi.get("summary") or tool.get("description") or "").split())
+        script = summary_script(text)
+        if script:
+            summaries.append((script, text[:limit]))
+    if not summaries:
+        return []
+    counts = collections.Counter(script for script, _ in summaries)
+    dominant = min(counts, key=lambda script: (-counts[script], script))
+    matching = [text for script, text in summaries if script == dominant]
+    picks = sorted({len(matching) * (index + 1) // (count + 1) for index in range(count)})
+    return [matching[index] for index in picks]
+
+
 def summarize(envelope):
     artifact = envelope["artifact"]
     return {"collection": envelope["collection"], "artifact_digest": envelope["artifact_digest"],
@@ -137,8 +187,11 @@ def dispatch(request):
     root = root_directory(request["root"])
     operation = request["operation"]
     if operation == "list":
-        return {"ok": True, "collections": [summarize(load(root, path.name[:-8]))
-                                                for path in sorted(root.glob("*.json.gz"))]}
+        envelopes = [load(root, path.name[:-8]) for path in sorted(root.glob("*.json.gz"))]
+        # Listing only: search/describe observations shown to the model stay unchanged.
+        return {"ok": True, "collections": [
+            {**summarize(envelope), "documentation_samples": documentation_samples(envelope["artifact"])}
+            for envelope in envelopes]}
     if operation == "import":
         if (root / (name + ".json.gz")).exists():
             raise WorkerError("collection_already_exists")

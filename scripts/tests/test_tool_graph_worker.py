@@ -83,6 +83,24 @@ class WorkerTests(unittest.TestCase):
                 self.assertEqual(built["artifact_digest"], schema["artifact_digest"])
         self.assertEqual(len(self.call("list")["collections"]), 2)
 
+    def test_list_reports_documentation_samples_in_dominant_script(self):
+        korean = asset_spec()
+        korean["paths"]["/assets"]["get"]["summary"] = "자산 목록 조회 (API v2)"
+        korean["paths"]["/assets/{asset_id}"]["get"]["summary"] = "Read asset detail"
+        korean["paths"]["/labels"] = {"get": {"operationId": "listLabels", "summary": "라벨 목록 조회",
+                                              "responses": {"200": {"description": "OK"}}}}
+        self.install("assets", asset_spec())
+        self.install("korean", korean)
+        rows = {row["collection"]: row for row in self.call("list")["collections"]}
+        self.assertEqual(rows["assets"]["documentation_samples"], ["Read asset detail", "List assets in inventory"])
+        self.assertTrue(rows["korean"]["documentation_samples"])
+        self.assertTrue(all(WORKER.summary_script(text) == "Hangul" for text in rows["korean"]["documentation_samples"]))
+        search = self.call("search", name="korean", query="자산 목록", top_k=1)
+        self.assertNotIn("documentation_samples", search)
+        self.assertEqual(WORKER.summary_script("プロジェクト一覧を取得"), "Kana")
+        self.assertEqual(WORKER.summary_script("获取项目列表"), "Han")
+        self.assertIsNone(WORKER.summary_script("123 / {}"))
+
     def test_required_producers_and_source_identity(self):
         self.install()
         result = self.call("search", name="assets", query="read asset detail", top_k=1)
