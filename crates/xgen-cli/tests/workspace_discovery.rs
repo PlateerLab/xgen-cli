@@ -1341,6 +1341,10 @@ def summary(name,row):
  return dict(collection=name,artifact_digest=row['digest'],backend_version='0.46.0',execution_enabled=False,tool_count=1,source_count=1)
 if r['operation']=='list':
  out=dict(ok=True,collections=[summary(p.name[:-8],json.loads(p.read_text())) for p in sorted(root.glob('*.json.gz'))])
+elif r['operation']=='language_hints':
+ assert '--offline' in sys.argv
+ rows={n:json.loads((root/(n+'.json.gz')).read_text()) for n in r['snapshots']}
+ out=dict(ok=False,error='collection_snapshot_changed') if any(rows[n]['digest']!=d for n,d in r['snapshots'].items()) else dict(ok=True,collections={n:dict(documentation_script='Latin',script_differs=False) for n in rows})
 else:
  assert '--offline' in sys.argv
  row=json.loads((root/(r['name']+'.json.gz')).read_text())

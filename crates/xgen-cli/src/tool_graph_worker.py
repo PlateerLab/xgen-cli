@@ -143,28 +143,40 @@ def summary_script(text):
     return min(other, key=lambda script: (-other[script], script))
 
 
-def documentation_samples(artifact, count=2, limit=80):
-    """Representative operation summaries in the collection's dominant script.
-
-    The planner writes search queries; showing real documentation lets it match the
-    documentation language without a script-to-language table. Derived only from the
-    pinned artifact, so the same snapshot always yields the same samples.
-    """
-    summaries = []
-    for name in sorted(artifact["tools"]):
-        tool = artifact["tools"][name]
+def documentation_script(artifact):
+    """Dominant script of operation summaries in the pinned artifact, or None."""
+    counts = collections.Counter()
+    for tool in artifact["tools"].values():
         openapi = (tool.get("metadata") or {}).get("openapi") or {}
-        text = " ".join(str(openapi.get("summary") or tool.get("description") or "").split())
-        script = summary_script(text)
+        script = summary_script(str(openapi.get("summary") or tool.get("description") or ""))
         if script:
-            summaries.append((script, text[:limit]))
-    if not summaries:
-        return []
-    counts = collections.Counter(script for script, _ in summaries)
-    dominant = min(counts, key=lambda script: (-counts[script], script))
-    matching = [text for script, text in summaries if script == dominant]
-    picks = sorted({len(matching) * (index + 1) // (count + 1) for index in range(count)})
-    return [matching[index] for index in picks]
+            counts[script] += 1
+    return min(counts, key=lambda script: (-counts[script], script)) if counts else None
+
+
+def language_hints(root, request, snapshots):
+    """Per pinned collection: documentation script and whether the request uses another script.
+
+    The planner writes search queries. Measured on held-out requests, a query that keeps
+    the request's terms and adds documentation-language terms recovers cross-language
+    misses; same-script requests keep the unchanged prompt.
+    """
+    if (not isinstance(request, str) or not isinstance(snapshots, dict)
+            or not 1 <= len(snapshots) <= 16):
+        raise WorkerError("invalid_language_hint_request")
+    request_script = summary_script(request)
+    result = {}
+    for name, expected in sorted(snapshots.items()):
+        if not isinstance(name, str) or not 1 <= len(name) <= 64 or not all(
+                c.isascii() and (c.isalnum() or c in "-_") for c in name):
+            raise WorkerError("invalid_collection_name")
+        envelope = load(root, name)
+        if envelope["artifact_digest"] != expected:
+            raise WorkerError("collection_snapshot_changed")
+        script = documentation_script(envelope["artifact"])
+        result[name] = {"documentation_script": script,
+                        "script_differs": bool(request_script and script and request_script != script)}
+    return result
 
 
 def summarize(envelope):
@@ -187,11 +199,10 @@ def dispatch(request):
     root = root_directory(request["root"])
     operation = request["operation"]
     if operation == "list":
-        envelopes = [load(root, path.name[:-8]) for path in sorted(root.glob("*.json.gz"))]
-        # Listing only: search/describe observations shown to the model stay unchanged.
-        return {"ok": True, "collections": [
-            {**summarize(envelope), "documentation_samples": documentation_samples(envelope["artifact"])}
-            for envelope in envelopes]}
+        return {"ok": True, "collections": [summarize(load(root, path.name[:-8]))
+                                                for path in sorted(root.glob("*.json.gz"))]}
+    if operation == "language_hints":
+        return {"ok": True, "collections": language_hints(root, request.get("request"), request.get("snapshots"))}
     if operation == "import":
         if (root / (name + ".json.gz")).exists():
             raise WorkerError("collection_already_exists")

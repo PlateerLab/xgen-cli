@@ -29,6 +29,11 @@ pub(crate) const SCOPE: &str = "tools.discover";
 pub(crate) const PROVIDER: &str = "xgen.cli.tool-discovery-material.v1";
 pub(crate) const MAX_OUTPUT: usize = 64 * 1024;
 pub(crate) type Snapshots = BTreeMap<String, String>;
+/// Leading characters of the run goal sent for script detection. The decision is made from
+/// the goal's letters, so a bounded prefix keeps the worker request under its size limit.
+const LANGUAGE_REQUEST_CHARS: usize = 4096;
+const BILINGUAL_QUERY_ONE: &str = "The request is written in a different script from this collection's documentation: write the xgen.tools/search query with the request's key terms in both the request's language and the documentation's language. ";
+const BILINGUAL_QUERY_MANY: &str = "The request is written in a different script from the documentation of each collection marked with a documentation script: for those collections, write the xgen.tools/search query with the request's key terms in both the request's language and the documentation's language. ";
 
 pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
@@ -60,6 +65,8 @@ pub(crate) struct DiscoveryCatalog {
     root: PathBuf,
     snapshots: Snapshots,
     connections: crate::http_read::Connections,
+    /// Documentation script of each collection whose script differs from the run goal's.
+    language: BTreeMap<String, String>,
 }
 
 impl DiscoveryCatalog {
@@ -108,7 +115,55 @@ impl DiscoveryCatalog {
             root: crate::tool_catalog_directory().map_err(|_| ())?,
             snapshots,
             connections: crate::http_read::Connections::new(),
+            language: BTreeMap::new(),
         })
+    }
+
+    /// Mark collections documented in a different script from the run goal. The worker
+    /// derives both scripts from the goal and the pinned artifacts, so a resumed run gets
+    /// the same planner hint. The hint is advisory: when it cannot be derived (for example
+    /// a changed snapshot, which search reports as a failed observation), the unchanged
+    /// hint is used.
+    pub(crate) fn with_request_language(mut self, goal: &str) -> Self {
+        if self.snapshots.is_empty() {
+            return self;
+        }
+        match self.request_language(goal) {
+            Ok(language) => self.language = language,
+            Err(()) => eprintln!("XGEN_TOOLS warning=language_hint_unavailable"),
+        }
+        self
+    }
+
+    fn request_language(&self, goal: &str) -> Result<BTreeMap<String, String>, ()> {
+        let request = goal
+            .chars()
+            .take(LANGUAGE_REQUEST_CHARS)
+            .collect::<String>();
+        let output = crate::tools::invoke_offline(
+            &json!({"operation":"language_hints","root":self.root.to_str().ok_or(())?,"request":request,"snapshots":self.snapshots}),
+        )
+        .map_err(|_| ())?;
+        let rows = output["collections"]
+            .as_object()
+            .filter(|rows| output["ok"] == true && rows.len() == self.snapshots.len())
+            .ok_or(())?;
+        let mut language = BTreeMap::new();
+        for name in self.snapshots.keys() {
+            let row = rows.get(name).ok_or(())?;
+            let script = &row["documentation_script"];
+            if !script.is_null()
+                && !script.as_str().is_some_and(|s| {
+                    (1..=32).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_alphabetic())
+                })
+            {
+                return Err(());
+            }
+            if row["script_differs"].as_bool().ok_or(())? {
+                language.insert(name.clone(), script.as_str().ok_or(())?.to_owned());
+            }
+        }
+        Ok(language)
     }
 
     pub(crate) fn with_connections(
@@ -154,13 +209,22 @@ impl DiscoveryCatalog {
         self.snapshots.is_empty()
     }
     pub(crate) fn hint(&self) -> String {
+        let names = self
+            .snapshots
+            .keys()
+            .map(|name| match self.language.get(name) {
+                Some(script) => format!("{name} (documentation script: {script})"),
+                None => name.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let language = match (self.language.len(), self.snapshots.len()) {
+            (0, _) => "",
+            (_, 1) => BILINGUAL_QUERY_ONE,
+            _ => BILINGUAL_QUERY_MANY,
+        };
         format!(
-            "Saved tool collections (immutable snapshots): {}. Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution.",
-            self.snapshots
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
+            "Saved tool collections (immutable snapshots): {names}. {language}Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution."
         )
     }
     pub(crate) fn contains(&self, name: &str) -> bool {
@@ -588,6 +652,26 @@ mod tests {
             ("calendar".into(), "b".repeat(64)),
         ]))
         .unwrap()
+    }
+    #[test]
+    fn hint_adds_bilingual_query_rule_only_for_collections_in_another_script() {
+        let unchanged = "Saved tool collections (immutable snapshots): assets, calendar. Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution.";
+        assert_eq!(catalog().hint(), unchanged);
+        let mut many = catalog();
+        many.language = BTreeMap::from([("calendar".into(), "Hangul".into())]);
+        assert!(many.hint().starts_with(
+            "Saved tool collections (immutable snapshots): assets, calendar (documentation script: Hangul). The request is written in a different script from the documentation of each collection marked"
+        ));
+        let mut one =
+            DiscoveryCatalog::saved(Snapshots::from([("bo".into(), "a".repeat(64))])).unwrap();
+        one.language = BTreeMap::from([("bo".into(), "Hangul".into())]);
+        assert_eq!(
+            one.hint(),
+            format!(
+                "Saved tool collections (immutable snapshots): bo (documentation script: Hangul). {BILINGUAL_QUERY_ONE}{}",
+                &unchanged[unchanged.find("Search with").unwrap()..]
+            )
+        );
     }
     #[test]
     fn query_contracts_bind_exact_collections_and_reject_injected_fields() {
