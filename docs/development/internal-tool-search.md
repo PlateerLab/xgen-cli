@@ -13,7 +13,7 @@ xgen tools list
 
 `--source`는 여러 JSON 명세 파일 또는 공개 HTTPS OpenAPI/Swagger UI 주소를 받는다. 로컬 JSON은 문서당 5 MB, 입력은 최대 16개다. URL에 인증값을 넣지 않도록 userinfo·query·fragment는 거절한다. 인증이 필요한 명세 수집은 아직 제공하지 않는다. 원격 명세 수집은 graph-tool-call의 기본 네트워크 검증을 사용하며 private-host 허용 옵션을 제공하지 않는다.
 
-CLI가 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 자동 호출한다. uv가 Python 3.12와 `graph-tool-call==0.46.0`을 관리한다. 별도 서버·포트·pip 설정은 없다. **현재 개발 버전은 PATH의 uv가 필요하고 최초 준비에는 네트워크가 필요하다.** uv 자체를 포함하는 OS별 배포는 후속 TODO다. uv 설정·프로젝트·`.env` 로딩과 Python 경로 주입을 차단하고 모델 API 키 등은 worker 환경에 넘기지 않는다.
+CLI가 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 자동 호출한다. uv가 Python 3.12와 `graph-tool-call==0.47.0`을 관리한다. 별도 서버·포트·pip 설정은 없다. **현재 개발 버전은 PATH의 uv가 필요하고 최초 준비에는 네트워크가 필요하다.** uv 자체를 포함하는 OS별 배포는 후속 TODO다. uv 설정·프로젝트·`.env` 로딩과 Python 경로 주입을 차단하고 모델 API 키 등은 worker 환경에 넘기지 않는다.
 
 요청·출력·시간 제한: 요청 64 KiB, worker 응답 16 MiB, 전체 worker 실행 120초. 시간·출력 한도를 넘으면 process group 또는 Windows Job Object를 종료한다. 상세 upstream 오류·stderr는 표시하지 않고 오류 코드만 반환한다. 공개 HTTPS 주소라 해도 업무 API를 호출하는 기능은 없다. 처음 준비하는 패키지 다운로드는 이 제한 시간에 포함된다.
 
@@ -22,6 +22,8 @@ CLI가 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 자동
 Run과 같은 OS별·legacy 호환 state root 아래 `tool-collections`에 저장한다. `XGEN_STATE_HOME`도 기존 규칙을 따른다. Unix collection 디렉터리는 사용자 소유·0700이어야 한다. 완성된 임시 파일을 hard link로 공개하고 같은 이름은 덮어쓰지 않는다. 현재는 갱신·삭제 명령을 제공하지 않으며 새 이름으로 새 snapshot을 저장한다.
 
 저장 envelope는 `format_version=1`, collection 이름, backend·version, artifact digest, upstream artifact로 구성한다. digest는 worker의 정렬된 ASCII JSON 직렬화에 대한 SHA-256이며 JCS나 서명된 Receipt는 아니다. 로드 시 검증해 손상된 artifact의 사용을 거절한다. 원본 snapshot manifest와 로컬 명세의 내용 digest·파일명도 보존한다.
+
+artifact는 이를 만든 graph-tool-call 버전에서만 연다. 고정 버전을 올린 바이너리는 이전 버전 collection을 `collection_backend_version_mismatch`로 거절하며, 하나라도 남아 있으면 `tools list`와 collection을 쓰는 새 Run이 실패한다. 0.46.0 → 0.47.0은 import 시 만드는 도구 설명 자체가 바뀌었으므로(path 유도 scope 문구 제거) 기존 artifact를 그대로 읽으면 수정이 반영되지 않는다. 삭제 명령이 아직 없어 `tool-collections/<이름>.json.gz`를 지우고 같은 이름으로 다시 import한다. `tools connect` 설정은 collection 이름 기준이라 유지된다. 실행 프로필 digest에 backend 버전이 포함되므로 이전 버전에서 시작한 Run은 재개 시 프로필 불일치로 거절된다.
 
 저장 파일은 `.json.gz`다. 명세 입력의 5 MB 제한과 별개로, 그래프는 압축 전 256 MiB·압축 후 64 MiB 한도를 둔다. 압축 해제도 한도 이상 읽지 않는다. 실제 대규모 명세에서 반복되는 계약 정보 때문에 64 MiB 저장 제한을 넘는 사례가 있어 이 경계를 분리했다. hard link를 지원하지 않는 저장소는 `collection_publish_unavailable`로 실패한다.
 
@@ -75,7 +77,7 @@ role binding에 backend/model/version, timeout, 호출·비용 예산을 연결�
 cargo build -p xgen-cli
 XGEN_TOOL_TEST_BINARY="$PWD/target/debug/xgen" \
   uv run --no-project --no-config --no-env-file --isolated \
-  --python 3.12 --with graph-tool-call==0.46.0 -- \
+  --python 3.12 --with graph-tool-call==0.47.0 -- \
   python -m unittest discover -s scripts/tests -p test_tool_graph_worker.py -v
 cargo test -p xgen-cli
 cargo clippy -p xgen-cli --all-targets -- -D warnings
@@ -111,7 +113,7 @@ xgen run --workspace . --allow-dir . --allow-read \
 
 검색·조회는 `tools.discover` scope의 읽기 작업이며 기존 `--allow-read` 승인, material recipe 저장·복구, 실행, 검증, Receipt 경로를 사용한다. 모델 입력은 등록된 collection·정확한 입력 계약만 허용한다. `root`, runtime 옵션, digest override 등 추가 입력은 거절한다. 모델은 query를 정하고 후보가 나온 뒤 필요한 tool의 계약을 조회한다. 검색 의미 선택의 품질은 별도 평가 대상이다.
 
-worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker는 artifact 무결성뿐 아니라 이 digest를 검사한 뒤 그래프를 로드한다. binding에는 전체 collection snapshot map의 JCS digest, discovery 계약 1.0.0, graph-tool-call 0.46.0, offline 실행 프로필을 연결한다. Run execution profile digest도 실제 등록과 같은 Definition/Instance·backend·한도·material/policy 프로필에서 파생하며 재개 시 비교한다. 실행 단계의 `uv --offline`은 패키지·Python 다운로드를 허용하지 않는다. 최초 collection 확인은 호스트 준비 단계이며 필요 시 기존 uv 준비 경로를 사용한다. offline은 uv의 다운로드 제한으로, OS 네트워크 sandbox를 의미하지 않는다.
+worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker는 artifact 무결성뿐 아니라 이 digest를 검사한 뒤 그래프를 로드한다. binding에는 전체 collection snapshot map의 JCS digest, discovery 계약 1.0.0, graph-tool-call 0.47.0, offline 실행 프로필을 연결한다. Run execution profile digest도 실제 등록과 같은 Definition/Instance·backend·한도·material/policy 프로필에서 파생하며 재개 시 비교한다. 실행 단계의 `uv --offline`은 패키지·Python 다운로드를 허용하지 않는다. 최초 collection 확인은 호스트 준비 단계이며 필요 시 기존 uv 준비 경로를 사용한다. offline은 uv의 다운로드 제한으로, OS 네트워크 sandbox를 의미하지 않는다.
 
 결과에 호스트가 원래 `request`를 붙이고 verifier가 그 material digest를 EffectIntent의 승인 바인딩과 비교한다. 따라서 `topK=1`을 20으로 바꾸거나 조회 tool을 다른 이름으로 바꾼 결과는 통과하지 않는다. verifier는 출력 digest·snapshot·backend·발견 상태도 검사하고 canonical JSON artifact를 Receipt에 연결한다. worker 실패·snapshot 변경·응답 한도 초과는 `ok=false`, 오류 코드, `snapshot_verified=false`로 저장하며 postcondition이 실패한 Receipt를 만든다. 실패한 조회를 성공으로 취급하지 않는다.
 

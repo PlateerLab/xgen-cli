@@ -60,7 +60,7 @@ CLI Rust 178개 통과·live 검사 3개 ignored, protocol 13개·Python 도구 
 cargo build -p xgen-cli
 XGEN_TOOL_TEST_BINARY="$PWD/target/debug/xgen" \
   uv run --no-project --no-config --no-env-file --isolated \
-  --python 3.12 --with graph-tool-call==0.46.0 -- \
+  --python 3.12 --with graph-tool-call==0.47.0 -- \
   python -m unittest discover -s scripts/tests -p 'test_*tools.py' -v
 cargo test -p xgen-cli
 cargo clippy -p xgen-cli --all-targets -- -D warnings

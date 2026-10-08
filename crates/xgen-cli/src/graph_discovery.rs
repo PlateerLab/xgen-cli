@@ -88,7 +88,7 @@ impl DiscoveryCatalog {
         }
         let mut snapshots = Snapshots::new();
         for item in response["collections"].as_array().ok_or(())? {
-            if item["backend_version"] != "0.46.0" || item["execution_enabled"] != false {
+            if item["backend_version"] != "0.47.0" || item["execution_enabled"] != false {
                 return Err(());
             }
             let name = item["collection"].as_str().ok_or(())?.to_owned();
@@ -141,7 +141,7 @@ impl DiscoveryCatalog {
         if output["ok"] != true
             || output["collection"] != name
             || output["artifact_digest"].as_str() != self.snapshots.get(name).map(String::as_str)
-            || output["backend_version"] != "0.46.0"
+            || output["backend_version"] != "0.47.0"
             || output["execution_enabled"] != false
             || output["tool_name"] != tool
             || output["contract_kind"] != "host_http_contract"
@@ -229,7 +229,7 @@ impl DiscoveryAdapter {
                 digest(&encoded).trim_start_matches("sha256:")
             ),
             operation_ref: Some(format!(
-                "{}@{};graph-tool-call=0.46.0;offline",
+                "{}@{};graph-tool-call=0.47.0;offline",
                 self.operation,
                 version(self.operation)
             )),
@@ -339,7 +339,7 @@ impl PreparedAdapterInvocation for PreparedDiscovery {
         let mut output = result.unwrap_or_else(|code| {
             json!({
                 "ok":false, "error":code, "collection":self.input["collection"],
-                "artifact_digest":self.request["expected_digest"], "backend_version":"0.46.0",
+                "artifact_digest":self.request["expected_digest"], "backend_version":"0.47.0",
                 "execution_enabled":false, "snapshot_verified":false,
             })
         });
@@ -348,7 +348,7 @@ impl PreparedAdapterInvocation for PreparedDiscovery {
             .ok()
             .is_none_or(|bytes| bytes.len() > MAX_OUTPUT)
         {
-            output = json!({"ok":false,"error":"tool_discovery_output_limit","collection":self.input["collection"],"artifact_digest":self.request["expected_digest"],"backend_version":"0.46.0","execution_enabled":false,"snapshot_verified":false,"request":self.input});
+            output = json!({"ok":false,"error":"tool_discovery_output_limit","collection":self.input["collection"],"artifact_digest":self.request["expected_digest"],"backend_version":"0.47.0","execution_enabled":false,"snapshot_verified":false,"request":self.input});
         }
         let bytes = serde_jcs::to_vec(&output).expect("bounded finite discovery output");
         AdapterExecutionObservation::SucceededWithOutput {
@@ -384,7 +384,7 @@ fn inspect(
         || !output["ok"].is_boolean()
         || output["collection"] != name
         || output["artifact_digest"].as_str() != catalog.snapshots.get(name).map(String::as_str)
-        || output["backend_version"] != "0.46.0"
+        || output["backend_version"] != "0.47.0"
         || output["execution_enabled"] != (operation == crate::http_read::READ)
     {
         return Err(());
@@ -617,7 +617,7 @@ mod tests {
         let catalog = catalog();
         for name in ["assets", "calendar"] {
             let input = json!({"collection":name,"tool":"getRecord"});
-            let good = json!({"ok":true,"collection":name,"artifact_digest":catalog.snapshots[name],"backend_version":"0.46.0","execution_enabled":false,"tool":{"name":"getRecord","parameters":[],"metadata":{"api_contract":{}}},"contract_kind":"discovery_view","effect_class":"unclassified","view_version":2,"complete":false,"full_tool_digest":"a".repeat(64),"parameter_page":{"offset":0,"total":0,"next_offset":null},"http_read":{"supported":false,"error":"http_original_source_unavailable"}});
+            let good = json!({"ok":true,"collection":name,"artifact_digest":catalog.snapshots[name],"backend_version":"0.47.0","execution_enabled":false,"tool":{"name":"getRecord","parameters":[],"metadata":{"api_contract":{}}},"contract_kind":"discovery_view","effect_class":"unclassified","view_version":2,"complete":false,"full_tool_digest":"a".repeat(64),"parameter_page":{"offset":0,"total":0,"next_offset":null},"http_read":{"supported":false,"error":"http_original_source_unavailable"}});
             assert!(inspect(&catalog, DESCRIBE, &input, &good).is_ok());
             for (key, value) in [
                 ("artifact_digest", json!("c".repeat(64))),
