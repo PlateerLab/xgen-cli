@@ -43,7 +43,7 @@
   - 1차 실행은 DeepSeek 잔액 소진(HTTP 402)으로 절반 이상 실패해 무효 처리했다. 결과는 열지 않았으며 충전 후 같은 조건으로 전체를 다시 실행한다.
   - 2026-10-08 결과(192회, 인프라 실패 0): Q1 단독 생성 검색어와 production 첫 검색어의 오프라인 hit@5 차이는 3·2건(48건 기준)으로 사전 기준 이내라, 단독 생성을 검색어 대리 지표로 계속 쓴다. Q2 언어 힌트는 첫 검색 실제 후보 top-5 61 -> 59로 유지 기준 1을 못 맞춰 재설계 대상이다(칸 하락 최대 1, 실패 28 -> 14, 정답 describe 89 = 89, 토큰 +22).
   - 측정 차이 발견: graph-tool-call `retrieve_with_scores`의 앞 5개가 top_k에 따라 바뀐다(top_k=5 vs planner가 쓴 10/20, 34/96건 상이). 하네스를 같은 topK로 돌리면 production 후보와 96/96 일치한다. 지금까지의 오프라인 hit@5는 모두 top_k=5 기준이었다.
-- [ ] **graph-tool-call:** 직접 호출에서 재현된 목표 endpoint 누락과 원본에 없는 scope 설명 주입을 해당 저장소에서 개선. 범용 정규화·검색·색인/임베딩·reranking과 scope 보강 ablation을 별도 비교 후 채택한다. 이번 32개 요청은 설계 자료로 전환하고 추가 보류 사례를 사용한다.
+- [ ] **graph-tool-call:** 직접 호출에서 재현된 목표 endpoint 누락과 원본에 없는 scope 설명 주입을 해당 저장소에서 개선(scope 설명 주입은 0.47.0에서 해결, 목표 endpoint 누락이 남음). 범용 정규화·검색·색인/임베딩·reranking과 scope 보강 ablation을 별도 비교 후 채택한다. 이번 32개 요청은 설계 자료로 전환하고 추가 보류 사례를 사용한다.
   - 2026-10-07 1차: graph-tool-call `feat/search-recall-0.47`에 자연어 요청 recall 하네스(xgen worker와 같은 공개 경로)를 추가했다. 사전 등록한 held-out(Docker·Grafana·사내 한국어 명세, raw/모델 검색어 각 48건)으로 후보 1개(구조화 의미 채널을 융합에서 제외)를 판정해 불채택했다. hit@5 54/96 -> 54/96, 모델 검색어 35 -> 34, 영어 요청 x 한국어 명세 칸 5 -> 3. MRR과 지연(0.14 -> 0.04초)은 개선됐다.
   - 확인한 주 누락 원인은 교차언어(영어 요청 x 한국어 명세, 반대 방향)다. 다음 후보는 이를 직접 다루고 새 held-out으로 판정한다. 시험 후 버린 변경(tie-aware RRF, K8s scope 토큰 조건화, 한국어 코퍼스 ko->en 사전 생략)은 설계셋 효과가 없거나 저장소 BO 가드에서 하락했다.
   - 저장소 기본 retrieval 벤치마크 8셋은 ai_metadata 경로를 타지 않아 구조화 의미 점수 변경을 감지하지 못한다. 새 하네스와 `benchmarks/xgen_api_scale`로 보완한다.
@@ -51,7 +51,8 @@
   - 남은 것: 목표 endpoint 누락. held-out #5 raw 요청 hit@5가 31/64로 낮고 영어 명세 x 한국어 요청 칸이 가장 약하다(각 1/8). 모델 검색어 조건은 DeepSeek 잔액 충전 후 측정한다.
   - 다음 후보: top_k에 따라 앞 순위가 바뀌는 문제. 원인은 `retrieval/engine.py::_preserve_dominant_keyword_candidates` 한 곳이다(2026-10-09 진단: 이 단계의 top_k만 고정하면 재생 검색어 113개 모두 top_k=5와 20의 앞 5개가 같아지고, 다른 top_k 사용 단계는 영향 없음). BM25 상위 후보를 'top_k번째 점수 바로 위'로 올리므로 top_k=5에서는 앞 5개에 들어오고 planner가 쓰는 10·20에서는 6~20위에 머문다. 기준선을 요청 개수와 무관하게 정하는 변경(고정 앞부분 기준, 최고점 기준 상대 보정, 제거)을 production과 같은 topK에서 비교하고 새 held-out #6으로 판정한다.
   - 2026-10-09 3차(top_k 의존 순위, 채택): 보정 기준을 고정 앞 5개(`_DOMINANT_KEYWORD_HEAD`)로 바꿨다(graph-tool-call b9f7b8a). 사전 등록 held-out #6(공개 명세 4개, 지원 64건)에서 모델 검색어 hit@5 top_k=20 88 -> 91, top_k=10 88 -> 91, 하락 칸 0, 원문 29 -> 29, 앞 5개 불일치 55/192 -> 0. 설계셋 top_k=20 465 -> 480, 보정 제거는 453으로 하락해 불채택. 이제 오프라인 top_k=5 채점이 planner의 topK 10·20 앞 5개와 같다.
-  - xgen 반영 대기: graph-tool-call 0.47.0 릴리즈(설명 주입 제거 901cd9d + 이 변경) 후 xgen의 `graph-tool-call==0.46.0` 고정 3곳 갱신. push·배포는 승인 후.
+  - 2026-10-09 릴리즈·반영: graph-tool-call 0.47.0을 PyPI에 배포했다(PR #140·#141, tag v0.47.0). xgen 고정 15곳(worker·uv 실행·binding·실행 프로필·capability 정의 3개·테스트)을 0.47.0으로 올렸다(xgen-cli `feat/graph-tool-call-0.47` ee5c63e, 원격 `feat/live-tool-selection-evaluation` 기준, 언어 힌트 미포함, push 전). cargo test 692개·clippy·fmt·worker 11개 통과. 실제 CLI에서 Firefly III 질의 16개의 top_k=5와 20 앞 5개 불일치 5 -> 0.
+  - 버전 변경 영향: 0.46.0 collection이 하나라도 있으면 `tools list`와 collection을 쓰는 새 Run이 실패한다. 오류를 `collection_integrity_failure`에서 `collection_backend_version_mismatch`로 분리했다. 0.47.0은 import 때 만드는 설명이 바뀌어 재import가 필요하고, 삭제 명령이 없어 파일을 지우고 같은 이름으로 다시 import한다(연결 설정 유지). 기본 state에는 기존 collection 없음. 버전을 올릴 때마다 반복되므로 collection 삭제·재빌드 명령은 별도 과제다(아래 연결 수정/삭제 UX 항목).
 - [x] **xgen — 검색어 언어 힌트:** 요청과 컬렉션 문서의 문자 체계가 다를 때만 planner 제약에 문서 문자 체계와 "요청 언어와 문서 언어 용어를 함께 쓰라"는 문장을 넣는다. worker `language_hints`가 판별하고 같은 체계면 문구가 이전과 같다. [계약·근거](internal-tool-search.md#검색어-언어-힌트--2026-10-07).
   - 세 번째 사전 등록 held-out(공개 한국어 2개, 영어 1개, 지원 48건 x 2회)에서 hit@5 59 -> 73, hit@1 40 -> 49, 6칸 하락 없음으로 채택했다.
   - 불채택 이력: 항상 힌트(57 -> 75지만 영어 x 영어 칸 12 -> 8, 같은 언어 검색어 흔들림), 문서 예시를 보여주는 조건부 힌트(63 -> 67이지만 한국어 명세 x 영어 칸 10 -> 6, 예시 문장 복제와 영어 operationId 매칭 손실). 문자 체계 이름만 항상 주면 "Latin"을 보고 영어를 프랑스어·포르투갈어로 번역했다.
@@ -72,7 +73,7 @@
 - [ ] **graph-tool-call:** 원격 URL/Swagger UI 수집 원본·출처 보존의 공개 계약을 검토·개선. 정규화된 발견 계약과 완전한 실행 계약을 구분한다.
 - [ ] **xgen:** 원격 원본 수집 계약을 연결하고 기존 collection 실행 이행·연결 점검을 제공. header/body/배열·인증 방식의 HTTP 어댑터 지원을 확대한다. 지원하지 않는 계약을 추측해 호출하지 않는다.
 - [x] **xgen:** `tools connect` 주소·숨김 bearer 입력/OS secret store·환경 참조·불변 연결 저장·재사용 구현. 인증값은 그래프·worker·모델·Receipt에 넣지 않는다.
-- [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증.
+- [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증. collection 삭제·재빌드 명령(backend 버전을 올리면 기존 collection을 다시 import해야 함)도 포함한다.
 - [x] **평가:** 보류한 두 독립 fixture에서 검색 → describe → 실제 loopback GET → 검증 body 기반 최종 응답·완료 재생 확인. 모델은 결정적 endpoint이며 LLM 품질 비교가 아니다. 승인·입력/계약/연결 drift 차단과 실행 중 kill 후 중복 방지도 검증했다. [범위·명령·한도](http-read-tools.md).
 - [ ] **평가:** 실제 LLM·접근이 허용된 live 시스템의 조회 성공률·응답 정확성과 호출/토큰/시간/비용 비교.
 
