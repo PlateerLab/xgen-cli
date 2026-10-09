@@ -76,6 +76,10 @@
 - [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증. collection 삭제·재빌드 명령(backend 버전을 올리면 기존 collection을 다시 import해야 함)도 포함한다.
 - [x] **평가:** 보류한 두 독립 fixture에서 검색 → describe → 실제 loopback GET → 검증 body 기반 최종 응답·완료 재생 확인. 모델은 결정적 endpoint이며 LLM 품질 비교가 아니다. 승인·입력/계약/연결 drift 차단과 실행 중 kill 후 중복 방지도 검증했다. [범위·명령·한도](http-read-tools.md).
 - [ ] **평가:** 실제 LLM·접근이 허용된 live 시스템의 조회 성공률·응답 정확성과 호출/토큰/시간/비용 비교.
+- [ ] **명세 없는 시스템의 API 복원:** Swagger가 없는 웹 서비스의 API를 클릭·트래픽 없이 찾아 OpenAPI 초안으로 만들고 기존 `tools import` 경로에 넣는다. 우선순위는 백엔드 코드·프레임워크 라우트(Spring springdoc·`/actuator/mappings`) > 프론트 번들 정적 분석 > 서버 접근 로그 > 자동 화면 탐색. 고객 시스템은 계약서에 대상·방법·데이터 처리를 명시한 범위에서만 한다.
+  - 2026-10-09 PoC(프론트 번들 정적 분석, 공개 앱): acorn AST로 호출 지점(verb member call·url 설정 객체·fetch)을 찾고, 압축 후 남은 메서드 이름과 호출 주변 코드를 LLM 한 줄 설명으로 보강했다. 설계 2개(listmonk, Shlink)와 별도 subagent가 고른 동결 검증 2개(Kavita, Traccar), 앱마다 질의 24건.
+  - 결과: 정밀도는 listmonk 85/85(공식 명세에 없는 실제 API 23개 포함), Shlink 23/23, Kavita 362/369, Traccar 16/18. 복원율은 Kavita 361/517, Traccar 16/117. 검색 hit@5(원래 명세 대비, 24건 중)는 Shlink 16 대 15, listmonk 11 대 15, Kavita 6 대 12, Traccar 2 대 13. 사전 기준(조건부 검색 0.7배)에 근소 미달.
+  - 병목: fetch를 감싼 함수 호출 누락(Traccar 99곳), 대규모 명세 대비 짧은 설명, 변수로 넘기는 query 파라미터·body schema 미복원. Kavita 채점은 경로 대소문자 무시가 필요했다(ASP.NET). 다음 후보는 wrapper 함수 추론 규칙이고 새 검증셋으로 판정한다. 평가 자료는 로컬 `bundle-api-2026-10-09/PLAN.md`.
 
 완료 기준: 도구별 JSON 설정 없이 재사용 가능한 연결로 조회 작업을 완료한다. 실제 API 실행 결과와 Receipt를 제시할 수 있다. fixture 검증과 live 검증은 각각 표시한다.
 
