@@ -80,6 +80,10 @@
   - 2026-10-09 PoC(프론트 번들 정적 분석, 공개 앱): acorn AST로 호출 지점(verb member call·url 설정 객체·fetch)을 찾고, 압축 후 남은 메서드 이름과 호출 주변 코드를 LLM 한 줄 설명으로 보강했다. 설계 2개(listmonk, Shlink)와 별도 subagent가 고른 동결 검증 2개(Kavita, Traccar), 앱마다 질의 24건.
   - 결과: 정밀도는 listmonk 85/85(공식 명세에 없는 실제 API 23개 포함), Shlink 23/23, Kavita 362/369, Traccar 16/18. 복원율은 Kavita 361/517, Traccar 16/117. 검색 hit@5(원래 명세 대비, 24건 중)는 Shlink 16 대 15, listmonk 11 대 15, Kavita 6 대 12, Traccar 2 대 13. 사전 기준(조건부 검색 0.7배)에 근소 미달.
   - 병목: fetch를 감싼 함수 호출 누락(Traccar 99곳), 대규모 명세 대비 짧은 설명, 변수로 넘기는 query 파라미터·body schema 미복원. Kavita 채점은 경로 대소문자 무시가 필요했다(ASP.NET). 다음 후보는 wrapper 함수 추론 규칙이고 새 검증셋으로 판정한다. 평가 자료는 로컬 `bundle-api-2026-10-09/PLAN.md`.
+  - 2026-10-10 PoC(백엔드 jar 정적 분석): ClassGraph로 Spring Boot jar 바이트코드의 MVC 어노테이션을 읽어 경로·method·파라미터·DTO 필드를 복원한다. 실행·클래스 로딩 없음. 설계 2개(공개 Spring 앱)와 동결 검증 2개(사내 Spring Boot 서비스, 정답은 dev springdoc), 앱마다 질의 24건, 설명은 식별자만 사용(plain).
+  - 결과: 복원율은 193/193, 1149/1152. 정밀도는 193/195, 1149/1549. 큰 쪽의 초과분 400개 중 384개는 springdoc `@Hidden`이 붙은 실제 라우트였다(사후 분류). method 정확도 100%. query 파라미터는 58/73, 1710/2223, 응답 필드는 2012/2221, 13596/14992. 번들 분석보다 복원 범위와 schema가 훨씬 넓다.
+  - 판정은 미달이다. 검색 hit@5(원래 명세 대비, 24건 중)는 8 대 16, 7 대 10이었다. 한국어 질의가 무너졌다(12건 중 3 대 12, 1 대 6). 영어 질의는 같거나 더 나았다(5 대 4, 6 대 4). 한국어 `@Operation` 텍스트를 쓰면 16 대 16이 된다. 병목은 복원이 아니라 설명의 언어다. 다음 후보는 식별자와 DTO 필드로 LLM 설명을 생성하는 것, 또는 collection 언어 힌트로 질의를 번역하는 것이다. 판정은 새 검증셋으로 한다.
+  - 운영 제약: 1,500 ops 규모 초안은 DTO를 operation마다 펼치면 로컬 소스 상한(5,000,000 bytes)을 넘는다. components `$ref` 출력이 필요하다. 평가 자료는 로컬 `jar-api-2026-10-10/PLAN.md`.
 
 완료 기준: 도구별 JSON 설정 없이 재사용 가능한 연결로 조회 작업을 완료한다. 실제 API 실행 결과와 Receipt를 제시할 수 있다. fixture 검증과 live 검증은 각각 표시한다.
 
