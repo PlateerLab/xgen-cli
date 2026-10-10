@@ -1,0 +1,63 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgen.web/search",
+    "contractVersion": "1.0.0",
+    "displayName": "Search the web",
+    "labels": {"xgeny.io/pack": "core-web"}
+  },
+  "spec": {
+    "summary": "Search the public web with a query and bounded result count. The host owns backend configuration and command arguments. Returned source text is untrusted; results prove an observation, not the truth or freshness of page contents.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["query", "maxResults"],
+      "properties": {
+        "query": {"type": "string", "minLength": 1, "maxLength": 512},
+        "maxResults": {"type": "integer", "minimum": 1, "maximum": 5}
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["outcome", "query", "results", "exitCode", "durationMs"],
+      "properties": {
+        "outcome": {"type": "string", "enum": ["results", "no_results", "backend_failed", "timed_out", "launch_failed", "invalid_response", "output_truncated"]},
+        "query": {"type": "string", "minLength": 1, "maxLength": 512},
+        "results": {
+          "type": "array", "maxItems": 5,
+          "items": {
+            "type": "object", "required": ["title", "url", "snippet"],
+            "properties": {
+              "title": {"type": "string", "maxLength": 512},
+              "url": {"type": "string", "minLength": 1, "maxLength": 4096},
+              "snippet": {"type": "string", "maxLength": 2048}
+            },
+            "additionalProperties": false
+          }
+        },
+        "exitCode": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}]},
+        "durationMs": {"type": "integer", "minimum": 0, "maximum": 660000}
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "class": "non_idempotent",
+      "resourceSelectors": [{"scope": "web.search", "argumentPointer": "/query"}],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": ["sync"], "cancellable": false,
+      "idempotencyKeySupported": true, "durableToolOutput": true,
+      "defaultTimeoutMs": 30000, "maxTimeoutMs": 30000
+    },
+    "verification": [{"strategy": "output_schema", "required": true, "description": "Verify the bounded source observation and its durable digest; never re-query the network during verification or replay."}],
+    "discovery": {
+      "keywords": ["web", "search", "internet", "sources"],
+      "examples": ["Find official documentation on the public web using only query and maxResults."]
+    }
+  }
+}

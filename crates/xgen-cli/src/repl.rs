@@ -39,6 +39,7 @@ const DEVELOPER_EXECUTABLES: &[&str] = &[
     "mvn",
     "swift",
     "xcodebuild",
+    "openserp",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

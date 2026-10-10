@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use xgen_adapter_process::{
     PROCESS_EXECUTE_CAPABILITY_ID, PROCESS_EXECUTE_CONTRACT_VERSION, ProcessWorkspace,
+    WEB_SEARCH_CAPABILITY_ID, WEB_SEARCH_CONTRACT_VERSION,
 };
 use xgen_domain::CapabilityRef;
 use xgen_runtime::{
@@ -27,6 +28,8 @@ pub(crate) const WORKSPACE_READ_RECIPE_DOMAIN: &str = "xgeny.cli.workspace-read-
 pub(crate) const PROCESS_MATERIAL_PROVIDER_ID: &str = "xgeny.cli.process-material.v1";
 pub(crate) const PROCESS_RECIPE_FORMAT_VERSION: u32 = 1;
 pub(crate) const PROCESS_RECIPE_DOMAIN: &str = "xgeny.cli.process-recipe/v1";
+pub(crate) const WEB_SEARCH_RECIPE_DOMAIN: &str = "xgen.cli.web-search-recipe/v1";
+pub(crate) const WEB_SEARCH_RECIPE_FORMAT_VERSION: u32 = 1;
 pub(crate) const MAX_RECIPE_BYTES: usize = 512 * 1024;
 
 const WORKSPACE_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
@@ -37,6 +40,11 @@ const WORKSPACE_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
 const PROCESS_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
     domain: PROCESS_RECIPE_DOMAIN,
     format_version: PROCESS_RECIPE_FORMAT_VERSION,
+    provider_id: PROCESS_MATERIAL_PROVIDER_ID,
+};
+const WEB_SEARCH_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
+    domain: WEB_SEARCH_RECIPE_DOMAIN,
+    format_version: WEB_SEARCH_RECIPE_FORMAT_VERSION,
     provider_id: PROCESS_MATERIAL_PROVIDER_ID,
 };
 
@@ -348,6 +356,15 @@ impl PlanMaterializer for ProcessMaterializer {
         &mut self,
         request: PlanMaterializationRequest<'_>,
     ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
+        if is_web_search_material(
+            request.capability(),
+            request.normalized_arguments(),
+            &self.workspace,
+        ) {
+            return self
+                .catalog
+                .persist_request_with_profile(&request, WEB_SEARCH_RECIPE_PROFILE);
+        }
         if request.capability().capability_id != PROCESS_EXECUTE_CAPABILITY_ID
             || request.capability().contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
             || !self
@@ -379,7 +396,23 @@ impl InvocationMaterialProvider for ProcessMaterialProvider {
     ) -> Result<Value, MaterialProviderFailure> {
         let record = self
             .catalog
-            .reconstruct_process_record(reference_id, revision)?;
+            .reconstruct_process_record(reference_id, revision)
+            .or_else(|error| {
+                if error == MaterialProviderFailure::RevisionChanged {
+                    self.catalog.reconstruct_record_with_profile(
+                        reference_id,
+                        revision,
+                        WEB_SEARCH_RECIPE_PROFILE,
+                    )
+                } else {
+                    Err(error)
+                }
+            })?;
+        if record.domain == WEB_SEARCH_RECIPE_PROFILE.domain {
+            return is_web_search_material(&record.capability, &record.arguments, &self.workspace)
+                .then_some(record.arguments)
+                .ok_or(MaterialProviderFailure::RevisionChanged);
+        }
         if record.capability.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
             || record.capability.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
             || !self
@@ -390,6 +423,18 @@ impl InvocationMaterialProvider for ProcessMaterialProvider {
         }
         Ok(record.arguments)
     }
+}
+
+fn is_web_search_material(
+    capability: &CapabilityRef,
+    input: &Value,
+    workspace: &ProcessWorkspace,
+) -> bool {
+    capability.capability_id == WEB_SEARCH_CAPABILITY_ID
+        && capability.contract_version == WEB_SEARCH_CONTRACT_VERSION
+        && workspace
+            .web_search_adapter()
+            .is_some_and(|adapter| adapter.accepts_normalized_material(input))
 }
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
@@ -639,6 +684,52 @@ mod tests {
                 .unwrap_err(),
             MaterialProviderFailure::RevisionChanged
         );
+    }
+
+    #[test]
+    fn web_search_recipes_reopen_and_cannot_be_reinterpreted_as_process_material() {
+        for query in ["English query", "한국어 검색"] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("materials.sqlite3");
+            RunMaterialCatalog::create(&path, RUN_ID).unwrap();
+            let mut catalog = RunMaterialCatalog::open_existing(&path, RUN_ID).unwrap();
+            let mut input = process_record(serde_json::json!({"query":query,"maxResults":3}));
+            input.domain = WEB_SEARCH_RECIPE_PROFILE.domain.to_owned();
+            input.format_version = WEB_SEARCH_RECIPE_PROFILE.format_version;
+            input.capability.capability_id = WEB_SEARCH_CAPABILITY_ID.to_owned();
+            let reference = catalog
+                .persist_record_with_profile(&input, WEB_SEARCH_RECIPE_PROFILE)
+                .unwrap();
+            assert!(!reference.reference_id().contains(query));
+            drop(catalog);
+            let reopened = RunMaterialCatalog::open_existing(&path, RUN_ID).unwrap();
+            assert_eq!(
+                reopened
+                    .reconstruct_record_with_profile(
+                        reference.reference_id(),
+                        reference.revision(),
+                        WEB_SEARCH_RECIPE_PROFILE
+                    )
+                    .unwrap(),
+                input
+            );
+            assert_eq!(
+                reopened
+                    .reconstruct_process_record(reference.reference_id(), reference.revision())
+                    .unwrap_err(),
+                MaterialProviderFailure::RevisionChanged
+            );
+            assert_eq!(
+                reopened
+                    .reconstruct_record_with_profile(
+                        reference.reference_id(),
+                        "sha256-wrong",
+                        WEB_SEARCH_RECIPE_PROFILE
+                    )
+                    .unwrap_err(),
+                MaterialProviderFailure::RevisionChanged
+            );
+        }
     }
 
     #[cfg(unix)]

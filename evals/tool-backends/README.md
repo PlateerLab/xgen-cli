@@ -45,3 +45,17 @@ python3 -m unittest discover -s scripts/tests -v
 Linux에서 현재 executable을 fixture로 실행하며 임시 workspace와 test 소유 process group만 사용한다.
 `Child::kill()`의 하위 process 잔존은 의도적으로 관찰하는 실패 사례다. group cancellation 등 검증한 보완
 경로가 실패하면 probe 자체가 실패한다. Linux 이외는 `not_validated`이고 production PTY 지원을 뜻하지 않는다.
+
+## Typed web search live 연결
+
+후속 구현인 `xgen.web/search`는 별도 native capability다. generic process 실험과 구분해서 평가한다.
+영어·한국어 기존 사례와 별도 SQLite·Rust 사례를 사용하며, 입력 query 일치와 generic process 호출 0개도 검사한다.
+
+```bash
+python3 scripts/smoke-web-search.py \
+  --binary /absolute/path/to/xgen \
+  --openserp /absolute/path/to/openserp \
+  --root /absolute/path/to/new-private-typed-experiment
+```
+
+[구현·검증 기록](../../docs/development/typed-web-search-2026-10-05.md)을 참고한다.
