@@ -1338,7 +1338,7 @@ from pathlib import Path
 r=json.load(sys.stdin)
 root=Path(r['root'])
 def summary(name,row):
- return dict(collection=name,artifact_digest=row['digest'],backend_version='0.46.0',execution_enabled=False,tool_count=1,source_count=1)
+ return dict(collection=name,artifact_digest=row['digest'],backend_version='0.47.0',execution_enabled=False,tool_count=1,source_count=1)
 if r['operation']=='list':
  out=dict(ok=True,collections=[summary(p.name[:-8],json.loads(p.read_text())) for p in sorted(root.glob('*.json.gz'))])
 else:
