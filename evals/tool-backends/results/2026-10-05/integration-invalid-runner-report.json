@@ -1,0 +1,24 @@
+{
+  "binary_sha256": "4c06cb56035070002fd226de3ffe1b34b33704fc00933b956961fcb30cb98c57",
+  "openserp_binary_sha256": "4b7ef41282758bee32a04cd6128fcd17579a60b2c747da47f970448834bacf8e",
+  "production_search_capability_registered": false,
+  "route": "existing xgeny.process/execute catalog and approval",
+  "cases": [
+    {
+      "query": "curl CURLOPT_SSL_VERIFYPEER official documentation",
+      "automatic_retries": 0,
+      "passed": false,
+      "approval_pause": false,
+      "process_outputs_before_approval": 0,
+      "failure": "approval_boundary_failed"
+    },
+    {
+      "query": "파이썬 ast 공식 문서",
+      "automatic_retries": 0,
+      "passed": false,
+      "approval_pause": false,
+      "process_outputs_before_approval": 0,
+      "failure": "approval_boundary_failed"
+    }
+  ]
+}

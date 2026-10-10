@@ -1,0 +1,51 @@
+{
+  "backend": "portable-pty",
+  "cases": [
+    {
+      "case": "input_resize_literal_argv",
+      "input": "hello",
+      "passed": true
+    },
+    {
+      "case": "input_resize_literal_argv",
+      "input": "한글 입력",
+      "passed": true
+    },
+    {
+      "case": "drain_beyond_retention_limit",
+      "passed": true,
+      "retained_bytes": 1024
+    },
+    {
+      "case": "nonzero_exit",
+      "passed": true
+    },
+    {
+      "cancel": "portable_pty_child_kill",
+      "case": "tree",
+      "descendant_escaped": true,
+      "passed": false
+    },
+    {
+      "cancel": "owned_process_group",
+      "case": "tree",
+      "descendant_escaped": false,
+      "passed": true
+    },
+    {
+      "cancel": "portable_pty_child_kill",
+      "case": "nested-tree",
+      "descendant_escaped": true,
+      "passed": false
+    },
+    {
+      "cancel": "owned_process_group",
+      "case": "nested-tree",
+      "descendant_escaped": false,
+      "passed": true
+    }
+  ],
+  "platform": "linux",
+  "production_registered": false,
+  "version": "0.9.0"
+}
