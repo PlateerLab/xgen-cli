@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{Read, Write};
 use std::sync::{
-    Arc, Mutex,
+    Arc, Mutex, PoisonError,
     atomic::{AtomicBool, Ordering},
 };
 use std::thread;
@@ -11,14 +11,57 @@ use super::{TerminalOperation, snapshot};
 use crate::{ProcessWorkspace, execution::PreparedProcess};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
-use nix::sys::signal::{Signal, killpg};
+use nix::sys::signal::{Signal, kill, killpg};
 use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid};
-use nix::unistd::Pid;
+use nix::unistd::{Pid, getsid};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde_json::Value;
 
 const POLL: Duration = Duration::from_millis(10);
 const MAX_SESSIONS: usize = 8;
+
+/// Session leaders that are still unreaped, across every registry in this host process.
+/// A leader is removed here before it can be reaped, so a listed PID still names its own session.
+static OWNED_LEADERS: Mutex<BTreeSet<i32>> = Mutex::new(BTreeSet::new());
+
+/// Kill every owned session before the host exits on a signal, when no destructor will run.
+pub(crate) fn kill_owned_sessions() {
+    let leaders = OWNED_LEADERS.lock().unwrap_or_else(PoisonError::into_inner);
+    for &leader in leaders.iter() {
+        let leader = Pid::from_raw(leader);
+        let flags = WaitPidFlag::WEXITED | WaitPidFlag::WNOHANG | WaitPidFlag::WNOWAIT;
+        if waitid(Id::Pid(leader), flags).is_ok() {
+            let _ = killpg(leader, Signal::SIGKILL);
+            kill_session_members(leader);
+        }
+    }
+}
+
+/// Shell job control moves background jobs into their own groups inside the leader's session.
+/// While the leader is unreaped its PID stays reserved as the session id, so matching ids are ours.
+fn kill_session_members(leader: Pid) {
+    for _ in 0..3 {
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return;
+        };
+        let mut found = false;
+        for pid in entries
+            .flatten()
+            .filter_map(|entry| entry.file_name().to_str()?.parse::<i32>().ok())
+            .map(Pid::from_raw)
+        {
+            if pid != leader
+                && getsid(Some(pid)) == Ok(leader)
+                && kill(pid, Signal::SIGKILL).is_ok()
+            {
+                found = true;
+            }
+        }
+        if !found {
+            return;
+        }
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct Sessions {
@@ -185,6 +228,10 @@ impl Session {
             .and_then(|pid| i32::try_from(pid).ok())
             .expect("native Linux child PID");
         drop(pair.slave);
+        OWNED_LEADERS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(pid);
         let buffer = Arc::new(Mutex::new(Buffer {
             bytes: VecDeque::new(),
             base: 0,
@@ -206,6 +253,14 @@ impl Session {
             exit_code: None,
         })
     }
+    fn release_group(&mut self) {
+        if let Some(group) = self.group.take() {
+            OWNED_LEADERS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&group.as_raw());
+        }
+    }
     fn tick(&mut self) {
         if self.child.is_none() {
             return;
@@ -220,7 +275,7 @@ impl Session {
                 }
                 Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..)) => self.stop("exited"),
                 _ => {
-                    self.group.take();
+                    self.release_group();
                     self.state = "cleanup_failed";
                     return;
                 }
@@ -243,13 +298,14 @@ impl Session {
             // Never signal a numeric group after the leader has been reaped elsewhere.
             let flags = WaitPidFlag::WEXITED | WaitPidFlag::WNOHANG | WaitPidFlag::WNOWAIT;
             if waitid(Id::Pid(group), flags).is_err() {
-                self.group.take();
+                self.release_group();
                 self.state = "cleanup_failed";
                 return;
             }
             match killpg(group, Signal::SIGKILL) {
                 Ok(()) | Err(Errno::ESRCH) => {
-                    self.group.take();
+                    kill_session_members(group);
+                    self.release_group();
                     self.state = state;
                 }
                 Err(_) => {
@@ -422,6 +478,24 @@ mod tests {
                     thread::sleep(Duration::from_secs(30));
                 }
             }
+            "job" | "job_exit" => {
+                // A shell with job control puts `cmd &` in its own group but the same session.
+                use std::os::unix::process::CommandExt as _;
+                let child = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "terminal::sessions::tests::terminal_child_fixture",
+                        "--exact",
+                        "--nocapture",
+                    ])
+                    .env("XGEN_PTY_TEST_MODE", "sleep")
+                    .process_group(0)
+                    .spawn()
+                    .unwrap();
+                std::fs::write("descendant.pid", child.id().to_string()).unwrap();
+                if mode == "job" {
+                    thread::sleep(Duration::from_secs(30));
+                }
+            }
             "sleep" => thread::sleep(Duration::from_secs(30)),
             _ => panic!("unknown fixture"),
         }
@@ -578,6 +652,54 @@ mod tests {
                     .map(|(_, status)| !status.starts_with('Z'))
             })
             .unwrap_or(false)
+    }
+    #[test]
+    fn termination_and_leader_exit_reach_jobs_in_their_own_groups() {
+        for mode in ["job", "job_exit"] {
+            let directory = tempfile::tempdir().unwrap();
+            let workspace = workspace(directory.path());
+            let id = handle(5);
+            workspace.terminals.execute(
+                TerminalOperation::Start,
+                &input(mode, 5000),
+                &id,
+                &workspace,
+            );
+            let leader = workspace.terminals.entries.lock().unwrap()[&id]
+                .lock()
+                .unwrap()
+                .group
+                .unwrap()
+                .as_raw();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let path = directory.path().join("descendant.pid");
+            while !path.is_file() {
+                assert!(Instant::now() < deadline);
+                thread::sleep(POLL);
+            }
+            let pid: i32 = std::fs::read_to_string(path).unwrap().parse().unwrap();
+            if mode == "job" {
+                assert!(OWNED_LEADERS.lock().unwrap().contains(&leader));
+                workspace.terminals.execute(
+                    TerminalOperation::Terminate,
+                    &json!({"sessionId":id}),
+                    "unused",
+                    &workspace,
+                );
+            }
+            // The job held the terminal open; without session-wide cleanup this never settles.
+            let expected = if mode == "job" {
+                "terminated"
+            } else {
+                "exited"
+            };
+            assert_eq!(settled(&workspace, &id)["state"], expected);
+            assert!(!OWNED_LEADERS.lock().unwrap().contains(&leader));
+            while alive(pid) {
+                assert!(Instant::now() < deadline, "job survived session cleanup");
+                thread::sleep(POLL);
+            }
+        }
     }
     #[test]
     fn termination_normal_exit_and_host_drop_clean_owned_descendants() {
