@@ -1653,6 +1653,126 @@ fn pty_cli_approves_start_commits_input_output_receipts_and_replays_offline() {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn start_then_signal_server(
+    listener: TcpListener,
+    pid_file: PathBuf,
+    receive_pid: Receiver<u32>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener).unwrap();
+        read_http_request(&mut stream);
+        let response = terminal_plan(
+            "start",
+            &json!({"executable":"helper","args":[],"cwd":".","env":{},"timeoutMs":60000,"maxOutputBytes":4096}),
+        );
+        let headers = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response.len()
+        );
+        stream.write_all(headers.as_bytes()).unwrap();
+        stream.write_all(&response).unwrap();
+        drop(stream);
+        // The next planning request means the session is running; end the host there.
+        let mut stream = accept_with_timeout(&listener).unwrap();
+        read_http_request(&mut stream);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !pid_file.is_file() {
+            assert!(Instant::now() < deadline, "helper did not start");
+            thread::sleep(Duration::from_millis(20));
+        }
+        let pid = receive_pid.recv().unwrap();
+        assert!(
+            Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .status()
+                .unwrap()
+                .success()
+        );
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn pty_sessions_do_not_outlive_a_host_ended_by_sigterm() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let root = tempdir().unwrap();
+    let workspace = root.path().join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    // Ignoring hangup models daemons and `nohup` jobs that survive the terminal closing.
+    let helper = workspace.join("terminal-helper");
+    fs::write(
+        &helper,
+        "#!/bin/sh\ntrap '' HUP TERM\nwhile read -r key value; do case $key in SigBlk:) printf '%s' \"$value\" > helper.sigblk;; esac; done < /proc/$$/status\nprintf '%s' $$ > helper.pid\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let (host_pid, receive_pid) = mpsc::channel::<u32>();
+    let server = start_then_signal_server(listener, workspace.join("helper.pid"), receive_pid);
+    let specification = format!("helper={}", helper.display());
+    let mut host = Command::new(env!("CARGO_BIN_EXE_xgen"))
+        .arg("run")
+        .env("XGEN_STATE_HOME", root.path().join("state"))
+        .env("XGEN_OPENAI_BASE_URL", &base_url)
+        .env("XGEN_OPENAI_MODEL", MODEL)
+        .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+        .env_remove("XGEN_OPENAI_API_KEY")
+        .args([
+            "--max-model-turns",
+            "4",
+            "--workspace",
+            path_text(&workspace),
+        ])
+        .args([
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--allow-read",
+        ])
+        .args(["--allow-executable", &specification, "--allow-execute"])
+        .arg("exercise owned terminal")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    host_pid.send(host.id()).unwrap();
+    server.join().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = host.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "host ignored SIGTERM");
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(status.code(), Some(128 + 15));
+    // The host blocks exit signals for its watcher; commands must still start with a clear mask.
+    // The helper reads its own status with builtins: a forked reader can catch the shell mid-vfork.
+    assert_eq!(
+        fs::read_to_string(workspace.join("helper.sigblk"))
+            .unwrap()
+            .split_whitespace()
+            .last(),
+        Some("0000000000000000")
+    );
+    let helper_pid = fs::read_to_string(workspace.join("helper.pid")).unwrap();
+    let alive = || {
+        fs::read_to_string(format!("/proc/{helper_pid}/stat"))
+            .ok()
+            .and_then(|stat| {
+                stat.rsplit_once(") ")
+                    .map(|(_, rest)| !rest.starts_with('Z'))
+            })
+            .unwrap_or(false)
+    };
+    while alive() {
+        assert!(Instant::now() < deadline, "PTY session outlived its host");
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn provider_response(content: &Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "id": RAW_RESPONSE_SENTINEL,
