@@ -129,6 +129,18 @@ worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker
 
 최종 로컬 검증: `cargo test -p xgen-cli` 172개 통과·실패 0·live 검사 3개 ignored, Clippy warnings 0, fmt·public docs contract 통과. worker Python 10개를 실제 pinned 환경·compiled CLI로 실행했다. 독립 diff 리뷰의 원래 입력 검증 지적은 material digest 바인딩으로 수정하고 두 입력 변조 사례로 검증했다.
 
+## 검색어 언어 힌트 — 2026-10-07
+
+컬렉션 문서와 요청의 문자 체계가 다르면 planner 제약에 컬렉션별 `documentation script`와 다음 문장을 추가한다. "write the xgen.tools/search query with the request's key terms in both the request's language and the documentation's language." 같은 체계거나 판별할 수 없으면 제약 문구는 이전과 같다.
+
+- run 시작 시 Rust가 goal 앞 4096자와 manifest의 snapshot digest를 worker `language_hints`에 넘긴다. worker는 고정 artifact의 operation summary 다수 문자 체계(Unicode 문자 이름 기준)와 goal 문자 체계를 비교한다. 체계에서 언어로 바꾸는 표는 없다. goal과 artifact가 같으므로 resume에서도 같은 문구가 나온다.
+- 힌트는 권고 정보다. 판별에 실패하면(snapshot 변경 등) 이전 문구로 진행하고 stderr에 `XGEN_TOOLS warning=language_hint_unavailable`를 남긴다. 변경된 snapshot은 기존처럼 검색 단계에서 실패 observation으로 기록된다.
+- 비용: 1,108개 도구 컬렉션에서 worker 판별 약 1.3초(uv 시작 제외)가 run 시작마다 든다.
+- 근거: 사전 등록한 세 번째 held-out(공개 한국어 명세 2개, 영어 명세 1개, 지원 48건 x 2회)에서 standalone 검색어 생성 + graph-tool-call 0.46.0 검색 hit@5 59 -> 73, hit@1 40 -> 49, 시스템 x 언어 6칸 하락 없음. 앞선 두 후보(항상 힌트, 문서 예시를 보여주는 조건부 힌트)는 각각 같은 언어 요청의 검색어 흔들림과 예시 문장 복제로 held-out 칸이 4 떨어져 불채택했다.
+- 측정 범위: 단일 컬렉션 문구만 평가했다. 여러 컬렉션 중 일부만 표시하는 문구와 production planner 전체 프롬프트에서의 효과는 아직 측정하지 않았다.
+- production 재생(2026-10-08, 새 held-out 48건 x 2회 x 바이너리 2개): 사전 등록 유지 기준 1 불충족. 첫 검색의 실제 후보 앞 5개 정답 61 -> 59, 다른 기준(칸 하락 3 미만, 실패 28 -> 14, 첫 호출 토큰 +22)은 충족. 재설계 대상이다.
+- 같은 재생에서 graph-tool-call의 앞 5개가 top_k(5 vs 10·20)에 따라 34/96건 달라지는 것을 확인했다. standalone 평가는 top_k=5로 채점했으므로 planner가 실제로 받는 순위와 다를 수 있다.
+
 ## 후속: HTTP 조회 실행
 
 [HTTP read adapter](http-read-tools.md)를 연결했다. discovery candidate 자체는 효과 미분류 상태를 유지하며, 사용자 연결이 승인한 GET만 별도 `xgen.http/read` 프록시로 실행한다. 원본 로컬 JSON을 새 artifact에 보존하고 describe의 `http_read`에 실행 계약 지원 여부를 제공한다. 원격 수집/기존 artifact는 원본이 없으므로 조회 실행을 거절한다. 개별 외부 Definition/Instance 자동 admission과 live 품질 평가는 후속이다.

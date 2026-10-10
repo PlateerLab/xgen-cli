@@ -1,5 +1,6 @@
 """Pinned internal retrieval worker. No business API execution or model calls."""
 
+import collections
 import copy
 import hashlib
 import gzip
@@ -9,6 +10,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+import unicodedata
 import warnings
 
 VERSION = "0.47.0"
@@ -119,6 +121,66 @@ def graph_from_artifact(artifact):
         return ToolGraph.load(path)
 
 
+def letter_script(char):
+    name = unicodedata.name(char, "").split(" ")
+    if name[0] in ("FULLWIDTH", "HALFWIDTH") and len(name) > 1:
+        name = name[1:]
+    return {"CJK": "Han", "HIRAGANA": "Kana", "KATAKANA": "Kana"}.get(name[0], name[0].title()) or None
+
+
+def summary_script(text):
+    """Script of one summary. Latin letters appear in identifiers and acronyms of any
+    documentation, so any other script wins; Hangul and Kana win over Han because
+    Korean and Japanese text may contain Han."""
+    letters = collections.Counter(letter_script(char) for char in text if char.isalpha())
+    letters.pop(None, None)
+    other = {script: count for script, count in letters.items() if script != "Latin"}
+    if not letters:
+        return None
+    if not other:
+        return "Latin"
+    for script in ("Hangul", "Kana"):
+        if script in other:
+            return script
+    return min(other, key=lambda script: (-other[script], script))
+
+
+def documentation_script(artifact):
+    """Dominant script of operation summaries in the pinned artifact, or None."""
+    counts = collections.Counter()
+    for tool in artifact["tools"].values():
+        openapi = (tool.get("metadata") or {}).get("openapi") or {}
+        script = summary_script(str(openapi.get("summary") or tool.get("description") or ""))
+        if script:
+            counts[script] += 1
+    return min(counts, key=lambda script: (-counts[script], script)) if counts else None
+
+
+def language_hints(root, request, snapshots):
+    """Per pinned collection: documentation script and whether the request uses another script.
+
+    The planner writes search queries. Measured on held-out requests, a query that keeps
+    the request's terms and adds documentation-language terms recovers cross-language
+    misses; same-script requests keep the unchanged prompt.
+    """
+    if (not isinstance(request, str) or not isinstance(snapshots, dict)
+            or not 1 <= len(snapshots) <= 16):
+        raise WorkerError("invalid_language_hint_request")
+    request_script = summary_script(request)
+    result = {}
+    for name, expected in sorted(snapshots.items()):
+        if not isinstance(name, str) or not 1 <= len(name) <= 64 or not all(
+                c.isascii() and (c.isalnum() or c in "-_") for c in name):
+            raise WorkerError("invalid_collection_name")
+        envelope = load(root, name)
+        if envelope["artifact_digest"] != expected:
+            raise WorkerError("collection_snapshot_changed")
+        script = documentation_script(envelope["artifact"])
+        result[name] = {"documentation_script": script,
+                        "script_differs": bool(request_script and script and request_script != script)}
+    return result
+
+
 def summarize(envelope):
     artifact = envelope["artifact"]
     return {"collection": envelope["collection"], "artifact_digest": envelope["artifact_digest"],
@@ -141,6 +203,8 @@ def dispatch(request):
     if operation == "list":
         return {"ok": True, "collections": [summarize(load(root, path.name[:-8]))
                                                 for path in sorted(root.glob("*.json.gz"))]}
+    if operation == "language_hints":
+        return {"ok": True, "collections": language_hints(root, request.get("request"), request.get("snapshots"))}
     if operation == "import":
         if (root / (name + ".json.gz")).exists():
             raise WorkerError("collection_already_exists")

@@ -83,6 +83,28 @@ class WorkerTests(unittest.TestCase):
                 self.assertEqual(built["artifact_digest"], schema["artifact_digest"])
         self.assertEqual(len(self.call("list")["collections"]), 2)
 
+    def test_language_hints_compare_request_and_documentation_scripts(self):
+        korean = asset_spec()
+        korean["paths"]["/assets"]["get"]["summary"] = "자산 목록 조회 (API v2)"
+        korean["paths"]["/labels"] = {"get": {"operationId": "listLabels", "summary": "라벨 목록 조회",
+                                              "responses": {"200": {"description": "OK"}}}}
+        snapshots = {name: self.install(name, spec)["artifact_digest"]
+                     for name, spec in (("assets", asset_spec()), ("korean", korean))}
+        english = self.call("language_hints", request="show every asset label", snapshots=snapshots)
+        self.assertEqual(english["collections"], {
+            "assets": {"documentation_script": "Latin", "script_differs": False},
+            "korean": {"documentation_script": "Hangul", "script_differs": True}})
+        hangul = self.call("language_hints", request="자산 라벨 보여줘", snapshots=snapshots)
+        self.assertEqual([row["script_differs"] for row in hangul["collections"].values()], [True, False])
+        neutral = self.call("language_hints", request="12345 ?", snapshots=snapshots)
+        self.assertFalse(any(row["script_differs"] for row in neutral["collections"].values()))
+        with self.assertRaisesRegex(WORKER.WorkerError, "snapshot_changed"):
+            self.call("language_hints", request="x", snapshots={"assets": "0" * 64})
+        self.assertNotIn("documentation_script", self.call("search", name="korean", query="자산", top_k=1))
+        self.assertEqual(WORKER.summary_script("プロジェクト一覧を取得"), "Kana")
+        self.assertEqual(WORKER.summary_script("获取项目列表"), "Han")
+        self.assertIsNone(WORKER.summary_script("123 / {}"))
+
     def test_required_producers_and_source_identity(self):
         self.install()
         result = self.call("search", name="assets", query="read asset detail", top_k=1)

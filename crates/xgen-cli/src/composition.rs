@@ -1541,6 +1541,16 @@ fn continue_incomplete(
     let discovery = DiscoveryCatalog::saved(manifest.tool_discovery_snapshots().clone())
         .and_then(|catalog| catalog.with_connections(manifest.http_read_connections().clone()))
         .map_err(|()| PublicRunError::Integrity)?;
+    let discovery = if discovery.is_empty() {
+        discovery
+    } else {
+        let goal = store
+            .load_current()
+            .map_err(|_| PublicRunError::Integrity)?
+            .ok_or(PublicRunError::Integrity)?
+            .goal;
+        discovery.with_request_language(&goal)
+    };
     register_discovery(
         &discovery,
         &mut capabilities,
