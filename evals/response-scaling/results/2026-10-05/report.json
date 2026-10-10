@@ -1,0 +1,4842 @@
+{
+  "registration": {
+    "hashes": {
+      "binary": "4c06cb56035070002fd226de3ffe1b34b33704fc00933b956961fcb30cb98c57",
+      "cases": "0ed52ce6389f546bbb44c8e0fb8d7dddedf010802a73473a3d820c928fbe3970",
+      "builder": "d050745b31a3a3856e12be9d53add9fcfcafd253e59472865e0e5c063f398978",
+      "always": "6e47c86e6ab2130c58b453cb99a4adff15e9003bc0708dd99c4cebf2e9bc8ed9",
+      "quote_only": "4ac1f9544657734423dd184c4d4918befbe1162fb045038d9ed286df595d65d7",
+      "runner": "53001b4ccaa16f707b7f895a46362eb6ce6ad506c1852206e2371502f61f3d66",
+      "evaluator": "ca3894897968f7bc45aa8fbcf6581a0eb77994590293b5f0d23c7d540ad130fa"
+    },
+    "attempts": 2,
+    "timeout": 240,
+    "gate": "all eight cells: no regression and every quote-only response passes; two family quote gains; <=25% quote calls/tokens, <=5% summary calls/tokens, <=30% driver latency; quote-only summary token saving vs always",
+    "limits": "synthetic preserved metadata for matched source sizes, not a real large-repository benchmark; active inference limits unchanged; no default prompt/profile change; no retries or monetary claim",
+    "order": "rotate variants by case and repetition; reverse on even repetitions",
+    "source_sizes": {
+      "python-pair-small-quote": 250,
+      "python-pair-small-summary": 250,
+      "python-pair-large-quote": 22582,
+      "python-pair-large-summary": 22582,
+      "node-pair-small-quote": 231,
+      "node-pair-small-summary": 231,
+      "node-pair-large-quote": 22563,
+      "node-pair-large-summary": 22563
+    }
+  },
+  "records": [
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 11,
+      "tool_effects": 10,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.232009910047054,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 10,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 11,
+        "observedCalls": 11,
+        "callsWithTokenUsage": 11,
+        "callsWithCacheUsage": 11,
+        "elapsedMillisSubtotal": 11241,
+        "tokenSubtotal": {
+          "inputTokens": 76627,
+          "outputTokens": 1390,
+          "totalTokens": 78017,
+          "cachedInputTokens": 50304,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.401691142003983,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.64353740902152,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 11818,
+        "tokenSubtotal": {
+          "inputTokens": 67804,
+          "outputTokens": 1600,
+          "totalTokens": 69404,
+          "cachedInputTokens": 45824,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.801401812001131,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.248578944941983,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 9463,
+        "tokenSubtotal": {
+          "inputTokens": 58205,
+          "outputTokens": 1108,
+          "totalTokens": 59313,
+          "cachedInputTokens": 39808,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.399990546051413,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 11,
+      "tool_effects": 10,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.918113928986713,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 10,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 11,
+        "observedCalls": 11,
+        "callsWithTokenUsage": 11,
+        "callsWithCacheUsage": 11,
+        "elapsedMillisSubtotal": 13050,
+        "tokenSubtotal": {
+          "inputTokens": 76690,
+          "outputTokens": 1387,
+          "totalTokens": 78077,
+          "cachedInputTokens": 51072,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 14.076384712010622,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.782144682016224,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": true
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10014,
+        "tokenSubtotal": {
+          "inputTokens": 58167,
+          "outputTokens": 1416,
+          "totalTokens": 59583,
+          "cachedInputTokens": 39936,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.939127462101169,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-small-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.36674641200807,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 11503,
+        "tokenSubtotal": {
+          "inputTokens": 67716,
+          "outputTokens": 1319,
+          "totalTokens": 69035,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.522937817964703,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.752075363066979,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10953,
+        "tokenSubtotal": {
+          "inputTokens": 59127,
+          "outputTokens": 1098,
+          "totalTokens": 60225,
+          "cachedInputTokens": 40576,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.901987449033186,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.644215453066863,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 9835,
+        "tokenSubtotal": {
+          "inputTokens": 58194,
+          "outputTokens": 1101,
+          "totalTokens": 59295,
+          "cachedInputTokens": 39808,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.79870571102947,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.282268907991238,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 11397,
+        "tokenSubtotal": {
+          "inputTokens": 67430,
+          "outputTokens": 1177,
+          "totalTokens": 68607,
+          "cachedInputTokens": 45696,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.440370705910027,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.041930809034966,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 9260,
+        "tokenSubtotal": {
+          "inputTokens": 59845,
+          "outputTokens": 1097,
+          "totalTokens": 60942,
+          "cachedInputTokens": 40960,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.194708112976514,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.643356311949901,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 11774,
+        "tokenSubtotal": {
+          "inputTokens": 67616,
+          "outputTokens": 1181,
+          "totalTokens": 68797,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.79314249905292,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-small-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.086311569088139,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10230,
+        "tokenSubtotal": {
+          "inputTokens": 58220,
+          "outputTokens": 1098,
+          "totalTokens": 59318,
+          "cachedInputTokens": 40192,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.237311010947451,
+      "family": "python-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 15.957054620957933,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 15188,
+        "tokenSubtotal": {
+          "inputTokens": 151532,
+          "outputTokens": 1991,
+          "totalTokens": 153523,
+          "cachedInputTokens": 39936,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 16.108812258928083,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 11,
+      "tool_effects": 10,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 16.712808081065305,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 10,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 11,
+        "observedCalls": 11,
+        "callsWithTokenUsage": 11,
+        "callsWithCacheUsage": 11,
+        "elapsedMillisSubtotal": 15757,
+        "tokenSubtotal": {
+          "inputTokens": 206699,
+          "outputTokens": 2168,
+          "totalTokens": 208867,
+          "cachedInputTokens": 51072,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 16.866185597027652,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.795317628071643,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11002,
+        "tokenSubtotal": {
+          "inputTokens": 138709,
+          "outputTokens": 1085,
+          "totalTokens": 139794,
+          "cachedInputTokens": 40960,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.96798148797825,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.422640718985349,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 12601,
+        "tokenSubtotal": {
+          "inputTokens": 137783,
+          "outputTokens": 1976,
+          "totalTokens": 139759,
+          "cachedInputTokens": 39936,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 13.587661843979731,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.618281943025067,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 7,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 8,
+        "observedCalls": 8,
+        "callsWithTokenUsage": 8,
+        "callsWithCacheUsage": 8,
+        "elapsedMillisSubtotal": 10898,
+        "tokenSubtotal": {
+          "inputTokens": 130599,
+          "outputTokens": 1054,
+          "totalTokens": 131653,
+          "cachedInputTokens": 35968,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.77958683599718,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-quote",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 11,
+      "tool_effects": 10,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 16.209557938040234,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 10,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 11,
+        "observedCalls": 11,
+        "callsWithTokenUsage": 11,
+        "callsWithCacheUsage": 11,
+        "elapsedMillisSubtotal": 15276,
+        "tokenSubtotal": {
+          "inputTokens": 206686,
+          "outputTokens": 2159,
+          "totalTokens": 208845,
+          "cachedInputTokens": 51072,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 16.36185430106707,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.26334860897623,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11501,
+        "tokenSubtotal": {
+          "inputTokens": 138698,
+          "outputTokens": 1098,
+          "totalTokens": 139796,
+          "cachedInputTokens": 40832,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.427225481020287,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.155712175997905,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11331,
+        "tokenSubtotal": {
+          "inputTokens": 138980,
+          "outputTokens": 1100,
+          "totalTokens": 140080,
+          "cachedInputTokens": 41088,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.316725902957842,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.979422200936824,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11155,
+        "tokenSubtotal": {
+          "inputTokens": 151360,
+          "outputTokens": 1098,
+          "totalTokens": 152458,
+          "cachedInputTokens": 39936,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.142475077998824,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.201465317048132,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": true,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 12359,
+        "tokenSubtotal": {
+          "inputTokens": 169028,
+          "outputTokens": 1171,
+          "totalTokens": 170199,
+          "cachedInputTokens": 45952,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.380364791024476,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.35892762907315,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11489,
+        "tokenSubtotal": {
+          "inputTokens": 137841,
+          "outputTokens": 1092,
+          "totalTokens": 138933,
+          "cachedInputTokens": 40064,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.540030414005741,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "python-pair-large-summary",
+      "split": "design",
+      "language": "python",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.78490694402717,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "bounds.py": false,
+        "chunks.py": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "-v"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "python3",
+            "-m",
+            "compileall",
+            "-q",
+            "."
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "bounds.py",
+        "chunks.py"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10948,
+        "tokenSubtotal": {
+          "inputTokens": 138729,
+          "outputTokens": 1094,
+          "totalTokens": 139823,
+          "cachedInputTokens": 41088,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.953966283937916,
+      "family": "python-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.613755897036754,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10663,
+        "tokenSubtotal": {
+          "inputTokens": 61156,
+          "outputTokens": 1236,
+          "totalTokens": 62392,
+          "cachedInputTokens": 40448,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.867763606016524,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.841304088011384,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10771,
+        "tokenSubtotal": {
+          "inputTokens": 60423,
+          "outputTokens": 1237,
+          "totalTokens": 61660,
+          "cachedInputTokens": 40064,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.07868590799626,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.808171769953333,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 11113,
+        "tokenSubtotal": {
+          "inputTokens": 70557,
+          "outputTokens": 1372,
+          "totalTokens": 71929,
+          "cachedInputTokens": 45952,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.035748108988628,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.912912963074632,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10960,
+        "tokenSubtotal": {
+          "inputTokens": 61384,
+          "outputTokens": 1347,
+          "totalTokens": 62731,
+          "cachedInputTokens": 41216,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.14221926103346,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.18781625200063,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "exact_final_source_quote": true,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": true,
+      "command_claims_match": true,
+      "changed_file_claims_match": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 10501,
+        "tokenSubtotal": {
+          "inputTokens": 70062,
+          "outputTokens": 1319,
+          "totalTokens": 71381,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.433113091043197,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.30927810096182,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 9366,
+        "tokenSubtotal": {
+          "inputTokens": 60568,
+          "outputTokens": 1117,
+          "totalTokens": 61685,
+          "cachedInputTokens": 40448,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.535193825955503,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.05279814102687,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 7,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 8,
+        "observedCalls": 8,
+        "callsWithTokenUsage": 8,
+        "callsWithCacheUsage": 8,
+        "elapsedMillisSubtotal": 8100,
+        "tokenSubtotal": {
+          "inputTokens": 53636,
+          "outputTokens": 994,
+          "totalTokens": 54630,
+          "cachedInputTokens": 34944,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.278558399062604,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.990960109978914,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 10307,
+        "tokenSubtotal": {
+          "inputTokens": 71878,
+          "outputTokens": 1092,
+          "totalTokens": 72970,
+          "cachedInputTokens": 45824,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.220280958106741,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 11.448713312973268,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 9491,
+        "tokenSubtotal": {
+          "inputTokens": 61420,
+          "outputTokens": 1066,
+          "totalTokens": 62486,
+          "cachedInputTokens": 40960,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 11.675037708017044,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 10.610300143947825,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 7,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 8,
+        "observedCalls": 8,
+        "callsWithTokenUsage": 8,
+        "callsWithCacheUsage": 8,
+        "elapsedMillisSubtotal": 8740,
+        "tokenSubtotal": {
+          "inputTokens": 53762,
+          "outputTokens": 1013,
+          "totalTokens": 54775,
+          "cachedInputTokens": 35712,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 10.836773484945297,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.168992154998705,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 10243,
+        "tokenSubtotal": {
+          "inputTokens": 61260,
+          "outputTokens": 1099,
+          "totalTokens": 62359,
+          "cachedInputTokens": 41216,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.392492239014246,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-small-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.720849153003655,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 10688,
+        "tokenSubtotal": {
+          "inputTokens": 70390,
+          "outputTokens": 1218,
+          "totalTokens": 71608,
+          "cachedInputTokens": 46208,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.94584763108287,
+      "family": "node-pair",
+      "size": "small",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 16.168732464080676,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 14549,
+        "tokenSubtotal": {
+          "inputTokens": 199976,
+          "outputTokens": 2122,
+          "totalTokens": 202098,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 16.387955476995558,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 14.491920283995569,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 12460,
+        "tokenSubtotal": {
+          "inputTokens": 172640,
+          "outputTokens": 1233,
+          "totalTokens": 173873,
+          "cachedInputTokens": 46208,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 14.718704344006255,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.504192681983113,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 7,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 8,
+        "observedCalls": 8,
+        "callsWithTokenUsage": 8,
+        "callsWithCacheUsage": 8,
+        "elapsedMillisSubtotal": 10668,
+        "tokenSubtotal": {
+          "inputTokens": 132586,
+          "outputTokens": 1118,
+          "totalTokens": 133704,
+          "cachedInputTokens": 35584,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.730638894019648,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 17.46516647899989,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 15749,
+        "tokenSubtotal": {
+          "inputTokens": 186904,
+          "outputTokens": 2109,
+          "totalTokens": 189013,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 17.695639097015373,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.504229933023453,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11472,
+        "tokenSubtotal": {
+          "inputTokens": 153583,
+          "outputTokens": 1146,
+          "totalTokens": 154729,
+          "cachedInputTokens": 40192,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.740961776929908,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "baseline",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-quote",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "workflow_failure",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 15.308800576953217,
+      "task_completed": false,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": false,
+      "source_blocks_omitted": false,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 13274,
+        "tokenSubtotal": {
+          "inputTokens": 141930,
+          "outputTokens": 2050,
+          "totalTokens": 143980,
+          "cachedInputTokens": 41088,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "diagnostic_codes": [
+        "model_rejected.output_truncated"
+      ],
+      "elapsed_seconds": 15.526924725039862,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "quote",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 14.174119728035294,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 12239,
+        "tokenSubtotal": {
+          "inputTokens": 142058,
+          "outputTokens": 1152,
+          "totalTokens": 143210,
+          "cachedInputTokens": 41344,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 14.407312481082045,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.410909201018512,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11505,
+        "tokenSubtotal": {
+          "inputTokens": 140943,
+          "outputTokens": 1150,
+          "totalTokens": 142093,
+          "cachedInputTokens": 40448,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.63686884904746,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 14.148252520011738,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": true
+      },
+      "final_source_observed_after_execution": true,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 12450,
+        "tokenSubtotal": {
+          "inputTokens": 187012,
+          "outputTokens": 1171,
+          "totalTokens": 188183,
+          "cachedInputTokens": 46208,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 14.386048111016862,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 1
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 9,
+      "tool_effects": 8,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 13.508906573988497,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 8,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 9,
+        "observedCalls": 9,
+        "callsWithTokenUsage": 9,
+        "callsWithCacheUsage": 9,
+        "elapsedMillisSubtotal": 11580,
+        "tokenSubtotal": {
+          "inputTokens": 142154,
+          "outputTokens": 1145,
+          "totalTokens": 143299,
+          "cachedInputTokens": 41344,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 13.745833462104201,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "quote_only",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 10,
+      "tool_effects": 9,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 14.968624052009545,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": true,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 9,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 10,
+        "observedCalls": 10,
+        "callsWithTokenUsage": 10,
+        "callsWithCacheUsage": 10,
+        "elapsedMillisSubtotal": 12987,
+        "tokenSubtotal": {
+          "inputTokens": 172474,
+          "outputTokens": 1228,
+          "totalTokens": 173702,
+          "cachedInputTokens": 46080,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 15.208500411943533,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "always",
+      "attempt": 2
+    },
+    {
+      "case": "node-pair-large-summary",
+      "split": "held_out",
+      "language": "node",
+      "mode": "run-resume",
+      "outcome": "pass",
+      "model_calls": 8,
+      "tool_effects": 7,
+      "runner_automatic_retries": 0,
+      "initial_tests_failed": true,
+      "execute_approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "driver_elapsed_seconds": 12.68063222093042,
+      "task_completed": true,
+      "tests_preserved": true,
+      "independent_tests_passed": true,
+      "independent_build_passed": true,
+      "hidden_tests_passed": true,
+      "source_quotes": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "exact_final_source_quote": null,
+      "source_blocks_omitted": true,
+      "source_readbacks": {
+        "flatten.mjs": false,
+        "repeat.mjs": false
+      },
+      "final_source_observed_after_execution": false,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipt_count": 7,
+      "observed_failed_process": true,
+      "evidence_contract_valid": false,
+      "command_claims_match": false,
+      "changed_file_claims_match": false,
+      "observed_commands": [
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 1
+        },
+        {
+          "argv": [
+            "node",
+            "--test",
+            "visible.test.mjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "argv": [
+            "node",
+            "--check",
+            "flatten.mjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "observed_changed_files": [
+        "flatten.mjs",
+        "repeat.mjs"
+      ],
+      "usage": {
+        "reservedCalls": 8,
+        "observedCalls": 8,
+        "callsWithTokenUsage": 8,
+        "callsWithCacheUsage": 8,
+        "elapsedMillisSubtotal": 10776,
+        "tokenSubtotal": {
+          "inputTokens": 132632,
+          "outputTokens": 1049,
+          "totalTokens": 133681,
+          "cachedInputTokens": 35712,
+          "reasoningTokens": null
+        },
+        "completeTokenUsage": true
+      },
+      "model": "deepseek-flash",
+      "request_profile_digest": "sha256:88ad9b51caffd4a28280d64207873ff5d51b23ed0e2e8fab6b7e87115de169e0",
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true,
+      "diagnostic_codes": [],
+      "elapsed_seconds": 12.907708664075471,
+      "family": "node-pair",
+      "size": "large",
+      "response_mode": "summary",
+      "variant": "baseline",
+      "attempt": 2
+    }
+  ],
+  "summary": {
+    "python-pair/small/quote": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 59448,
+        "mean_driver_seconds": 10.515361813479103,
+        "mean_provider_millis": 9738.5
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 2,
+        "all_sources_read_back": 2,
+        "mean_calls": 11,
+        "mean_total_tokens": 78047,
+        "mean_driver_seconds": 13.075061919516884,
+        "mean_provider_millis": 12145.5
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 2,
+        "all_sources_read_back": 0,
+        "mean_calls": 10,
+        "mean_total_tokens": 69219.5,
+        "mean_driver_seconds": 12.505141910514794,
+        "mean_provider_millis": 11660.5
+      }
+    },
+    "python-pair/small/summary": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 59306.5,
+        "mean_driver_seconds": 10.8652635110775,
+        "mean_provider_millis": 10032.5
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 10,
+        "mean_total_tokens": 68702,
+        "mean_driver_seconds": 12.46281260997057,
+        "mean_provider_millis": 11585.5
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 60583.5,
+        "mean_driver_seconds": 10.897003086050972,
+        "mean_provider_millis": 10106.5
+      }
+    },
+    "python-pair/large/quote": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 0,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 146641,
+        "mean_driver_seconds": 14.689847669971641,
+        "mean_provider_millis": 13894.5
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 0,
+        "response_passes": 0,
+        "all_sources_read_back": 2,
+        "mean_calls": 11,
+        "mean_total_tokens": 208856,
+        "mean_driver_seconds": 16.46118300955277,
+        "mean_provider_millis": 15516.5
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 8.5,
+        "mean_total_tokens": 135723.5,
+        "mean_driver_seconds": 11.706799785548355,
+        "mean_provider_millis": 10950
+      }
+    },
+    "python-pair/large/summary": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 145695.5,
+        "mean_driver_seconds": 12.169174915004987,
+        "mean_provider_millis": 11322
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9.5,
+        "mean_total_tokens": 154997.5,
+        "mean_driver_seconds": 12.732406963012181,
+        "mean_provider_millis": 11930
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 139951.5,
+        "mean_driver_seconds": 11.970309560012538,
+        "mean_provider_millis": 11139.5
+      }
+    },
+    "node-pair/small/quote": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 61672.5,
+        "mean_driver_seconds": 12.075291094486602,
+        "mean_provider_millis": 10068.5
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 2,
+        "all_sources_read_back": 2,
+        "mean_calls": 10,
+        "mean_total_tokens": 71655,
+        "mean_driver_seconds": 12.497994010976981,
+        "mean_provider_millis": 10807
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 62561.5,
+        "mean_driver_seconds": 12.763334430055693,
+        "mean_provider_millis": 10811.5
+      }
+    },
+    "node-pair/small/summary": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 8,
+        "mean_total_tokens": 54702.5,
+        "mean_driver_seconds": 10.331549142487347,
+        "mean_provider_millis": 8420
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 1,
+        "mean_calls": 10,
+        "mean_total_tokens": 72289,
+        "mean_driver_seconds": 12.355904631491285,
+        "mean_provider_millis": 10497.5
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 62422.5,
+        "mean_driver_seconds": 11.808852733985987,
+        "mean_provider_millis": 9867
+      }
+    },
+    "node-pair/large/quote": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 8.5,
+        "mean_total_tokens": 144216.5,
+        "mean_driver_seconds": 13.004211307503283,
+        "mean_provider_millis": 11070
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 0,
+        "response_passes": 0,
+        "all_sources_read_back": 2,
+        "mean_calls": 10,
+        "mean_total_tokens": 195555.5,
+        "mean_driver_seconds": 16.816949471540283,
+        "mean_provider_millis": 15149
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 1,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9.5,
+        "mean_total_tokens": 158926.5,
+        "mean_driver_seconds": 14.900360430474393,
+        "mean_provider_millis": 12867
+      }
+    },
+    "node-pair/large/summary": {
+      "baseline": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 8.5,
+        "mean_total_tokens": 137887,
+        "mean_driver_seconds": 13.045770710974466,
+        "mean_provider_millis": 11140.5
+      },
+      "always": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 1,
+        "mean_calls": 10,
+        "mean_total_tokens": 180942.5,
+        "mean_driver_seconds": 14.558438286010642,
+        "mean_provider_millis": 12718.5
+      },
+      "quote_only": {
+        "trials": 2,
+        "workflow_passes": 2,
+        "response_passes": 0,
+        "all_sources_read_back": 0,
+        "mean_calls": 9,
+        "mean_total_tokens": 143254.5,
+        "mean_driver_seconds": 13.841513151011895,
+        "mean_provider_millis": 11909.5
+      }
+    }
+  },
+  "decision": "do_not_adopt_response_boundary"
+}
