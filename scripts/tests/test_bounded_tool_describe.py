@@ -1,4 +1,5 @@
 """Predeclared, independent large-contract cases; no production calls."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -60,6 +61,7 @@ class ViewTests(unittest.TestCase):
     install = base.WorkerTests.install
     call = base.WorkerTests.call
 
+    @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
     def test_two_fresh_large_sources_preserve_full_contract_binding(self):
         for name, tool in [("books","readBook"),("metrics","readDeviceMetrics")]:
             self.install(name,validation_spec(name))
@@ -74,6 +76,7 @@ class ViewTests(unittest.TestCase):
             self.assertFalse(view["tool"]["parameters"][1]["complete"])
             self.assertTrue(view["tool"]["description"]["omitted"])
 
+    @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
     def test_unsupported_http_keeps_normalized_parameter_types_and_enums(self):
         for name, tool in [("books","readBook"),("metrics","readDeviceMetrics")]:
             source=validation_spec(name)
@@ -102,6 +105,7 @@ class ViewTests(unittest.TestCase):
                 if offset is None: break
             self.assertEqual(count,70)
 
+    @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
     def test_pages_cover_all_inputs_and_reject_invalid_offsets(self):
         source=validation_spec("books")
         operation=source["paths"]["/books/{id}"]["get"]
