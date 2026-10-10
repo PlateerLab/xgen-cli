@@ -12,11 +12,35 @@ use crate::{PROCESS_EXECUTE_CAPABILITY_ID, PROCESS_EXECUTE_CONTRACT_VERSION};
 /// Verifies the exact durable result emitted by one process Instance binding.
 pub struct ProcessExecuteVerifier {
     expected_binding: InstanceBinding,
+    web_search: bool,
+    terminal: Option<crate::TerminalOperation>,
 }
 
 impl ProcessExecuteVerifier {
     pub(crate) const fn new(expected_binding: InstanceBinding) -> Self {
-        Self { expected_binding }
+        Self {
+            expected_binding,
+            web_search: false,
+            terminal: None,
+        }
+    }
+
+    pub(crate) const fn web_search(expected_binding: InstanceBinding) -> Self {
+        Self {
+            expected_binding,
+            web_search: true,
+            terminal: None,
+        }
+    }
+    pub(crate) const fn terminal(
+        expected_binding: InstanceBinding,
+        operation: crate::TerminalOperation,
+    ) -> Self {
+        Self {
+            expected_binding,
+            web_search: false,
+            terminal: Some(operation),
+        }
     }
 }
 
@@ -34,11 +58,31 @@ impl EffectVerifier for ProcessExecuteVerifier {
         &mut self,
         request: VerificationRequest<'_>,
     ) -> Result<VerificationReport, VerificationPortFailure> {
-        verify_contract(&request, &self.expected_binding)?;
+        let (capability, version) = if let Some(operation) = self.terminal {
+            (operation.capability_id(), crate::TERMINAL_VERSION)
+        } else if self.web_search {
+            (
+                crate::WEB_SEARCH_CAPABILITY_ID,
+                crate::WEB_SEARCH_CONTRACT_VERSION,
+            )
+        } else {
+            (
+                PROCESS_EXECUTE_CAPABILITY_ID,
+                PROCESS_EXECUTE_CONTRACT_VERSION,
+            )
+        };
+        verify_contract(&request, &self.expected_binding, capability, version)?;
         let output = request
             .tool_output()
             .ok_or(VerificationPortFailure::EvidenceUnavailable)?;
-        let inspected = inspect_output(
+        let inspect = if self.terminal.is_some() {
+            crate::terminal::inspect_output
+        } else if self.web_search {
+            crate::web_search::inspect_search_output
+        } else {
+            inspect_output
+        };
+        let inspected = inspect(
             output.output(),
             Some(request.outcome_evidence_digest().as_str()),
         )
@@ -65,7 +109,13 @@ impl EffectVerifier for ProcessExecuteVerifier {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let artifact = VerifiedArtifactDescriptor::new(
-            "process-execute-output",
+            if self.terminal.is_some() {
+                "terminal-session-observation"
+            } else if self.web_search {
+                "web-search-results"
+            } else {
+                "process-execute-output"
+            },
             Option::<String>::None,
             "application/json",
             inspected.canonical_size_bytes,
@@ -83,8 +133,8 @@ impl EffectVerifier for ProcessExecuteVerifier {
 }
 
 pub(crate) struct InspectedOutput {
-    digest: String,
-    canonical_size_bytes: u64,
+    pub(crate) digest: String,
+    pub(crate) canonical_size_bytes: u64,
 }
 
 pub(crate) fn inspect_output(
@@ -140,14 +190,16 @@ pub(crate) fn inspect_output(
 fn verify_contract(
     request: &VerificationRequest<'_>,
     expected_binding: &InstanceBinding,
+    capability_id: &str,
+    contract_version: &str,
 ) -> Result<(), VerificationPortFailure> {
     let intent = request.intent();
     let instance = request.instance();
     let rules = &request.definition().spec.verification;
-    if intent.invocation.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
-        || intent.invocation.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
-        || instance.definition.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
-        || instance.definition.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
+    if intent.invocation.capability_id != capability_id
+        || intent.invocation.contract_version != contract_version
+        || instance.definition.capability_id != capability_id
+        || instance.definition.contract_version != contract_version
         || intent.invocation.instance_id != instance.instance_id
         || instance.binding != *expected_binding
         || !supports_instance_features(&instance.features)

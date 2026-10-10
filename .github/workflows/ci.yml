@@ -48,6 +48,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Probe PTY input, output and owned process-group cancellation offline
+        run: cargo run -p xgen-adapter-process --example pty_backend_probe --locked
+
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
 

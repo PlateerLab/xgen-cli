@@ -1,0 +1,200 @@
+{
+  "binary_sha256": "b37ad14a8cf7b53592adbd38c39a109edd4743b9f206ede8ee02e715b9638fbb",
+  "openserp_binary_sha256": "4b7ef41282758bee32a04cd6128fcd17579a60b2c747da47f970448834bacf8e",
+  "production_search_capability_registered": true,
+  "route": "typed xgen.web/search with OpenSERP",
+  "cases": [
+    {
+      "query": "curl CURLOPT_SSL_VERIFYPEER official documentation",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_exit_code": 10,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "process_outputs_after_approval": 1,
+      "receipt_count": 1,
+      "resume_exit_code": 0,
+      "task_completed": true,
+      "generic_process_outputs": 0,
+      "observed_query": "curl CURLOPT_SSL_VERIFYPEER official documentation",
+      "query_matches_request": true,
+      "process_success": true,
+      "output_truncated": false,
+      "observed_sources": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html"
+        },
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER (3) — libcurl4-doc - Debian",
+          "url": "https://manpages.debian.org/unstable/libcurl4-doc/CURLOPT_SSL_VERIFYPEER.3"
+        }
+      ],
+      "claimed_sources": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html"
+        },
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER (3) — libcurl4-doc - Debian",
+          "url": "https://manpages.debian.org/unstable/libcurl4-doc/CURLOPT_SSL_VERIFYPEER.3"
+        }
+      ],
+      "claims_match_observation": true,
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true
+    },
+    {
+      "query": "파이썬 ast 공식 문서",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_exit_code": 10,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "process_outputs_after_approval": 1,
+      "receipt_count": 1,
+      "resume_exit_code": 0,
+      "task_completed": true,
+      "generic_process_outputs": 0,
+      "observed_query": "파이썬 ast 공식 문서",
+      "query_matches_request": true,
+      "process_success": true,
+      "output_truncated": false,
+      "observed_sources": [
+        {
+          "title": "ast — Abstract syntax trees — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/ast.html"
+        },
+        {
+          "title": "3.14.8 Documentation - Python",
+          "url": "https://docs.python.org/ko"
+        }
+      ],
+      "claimed_sources": [
+        {
+          "title": "ast — Abstract syntax trees — Python 3.14.7 문서",
+          "url": "https://docs.python.org/ko/3/library/ast.html"
+        },
+        {
+          "title": "3.14.8 Documentation - Python",
+          "url": "https://docs.python.org/ko"
+        }
+      ],
+      "claims_match_observation": true,
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true
+    },
+    {
+      "query": "SQLite WAL official documentation",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_exit_code": 10,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "process_outputs_after_approval": 1,
+      "receipt_count": 1,
+      "resume_exit_code": 0,
+      "task_completed": true,
+      "generic_process_outputs": 0,
+      "observed_query": "SQLite WAL official documentation",
+      "query_matches_request": true,
+      "process_success": true,
+      "output_truncated": false,
+      "observed_sources": [
+        {
+          "title": "Write-Ahead Logging - SQLite",
+          "url": "https://sqlite.org/wal.html"
+        },
+        {
+          "title": "WAL-mode File Format - SQLite",
+          "url": "https://sqlite.org/walformat.html"
+        }
+      ],
+      "claimed_sources": [
+        {
+          "title": "Write-Ahead Logging - SQLite",
+          "url": "https://sqlite.org/wal.html"
+        },
+        {
+          "title": "WAL-mode File Format - SQLite",
+          "url": "https://sqlite.org/walformat.html"
+        }
+      ],
+      "claims_match_observation": true,
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true
+    },
+    {
+      "query": "Rust 소유권 공식 문서",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_exit_code": 10,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "process_outputs_after_approval": 1,
+      "receipt_count": 1,
+      "resume_exit_code": 0,
+      "task_completed": true,
+      "generic_process_outputs": 0,
+      "observed_query": "Rust 소유권 공식 문서",
+      "query_matches_request": true,
+      "process_success": true,
+      "output_truncated": false,
+      "observed_sources": [
+        {
+          "title": "소유권이 뭔가요? - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch04-01-what-is-ownership.html"
+        },
+        {
+          "title": "The Rust Programming Language - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/"
+        }
+      ],
+      "claimed_sources": [
+        {
+          "title": "소유권이 뭔가요? - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/ch04-01-what-is-ownership.html"
+        },
+        {
+          "title": "The Rust Programming Language - The Rust Programming Language",
+          "url": "https://doc.rust-kr.org/"
+        }
+      ],
+      "claims_match_observation": true,
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true
+    }
+  ]
+}

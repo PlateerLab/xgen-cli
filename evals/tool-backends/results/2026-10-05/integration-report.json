@@ -1,0 +1,87 @@
+{
+  "binary_sha256": "4c06cb56035070002fd226de3ffe1b34b33704fc00933b956961fcb30cb98c57",
+  "openserp_binary_sha256": "4b7ef41282758bee32a04cd6128fcd17579a60b2c747da47f970448834bacf8e",
+  "production_search_capability_registered": false,
+  "route": "existing xgeny.process/execute catalog and approval",
+  "cases": [
+    {
+      "query": "curl CURLOPT_SSL_VERIFYPEER official documentation",
+      "automatic_retries": 0,
+      "passed": true,
+      "initial_exit_code": 10,
+      "initial_diagnostic_codes": [
+        "execute_approval_required"
+      ],
+      "approval_pause": true,
+      "process_outputs_before_approval": 0,
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "process_outputs_after_approval": 1,
+      "receipt_count": 1,
+      "resume_exit_code": 0,
+      "task_completed": true,
+      "observed_commands": [
+        {
+          "argv": [
+            "web-search",
+            "search",
+            "duckduckgo",
+            "curl CURLOPT_SSL_VERIFYPEER official documentation",
+            "--limit",
+            "3",
+            "--timeout",
+            "8",
+            "--search-timeout",
+            "12",
+            "--max_retries",
+            "0",
+            "--format",
+            "json",
+            "--leakless"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "process_success": true,
+      "output_truncated": false,
+      "observed_sources": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html"
+        },
+        {
+          "title": "curl/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md at master · curl/curl ...",
+          "url": "https://github.com/curl/curl/blob/master/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md"
+        }
+      ],
+      "claimed_sources": [
+        {
+          "title": "CURLOPT_SSL_VERIFYPEER",
+          "url": "https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html"
+        },
+        {
+          "title": "curl/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md at master · curl/curl ...",
+          "url": "https://github.com/curl/curl/blob/master/docs/libcurl/opts/CURLOPT_SSL_VERIFYPEER.md"
+        }
+      ],
+      "claims_match_observation": true,
+      "offline_replay": true,
+      "replay_journal_unchanged": true,
+      "replay_usage_unchanged": true
+    },
+    {
+      "query": "파이썬 ast 공식 문서",
+      "automatic_retries": 0,
+      "passed": false,
+      "initial_exit_code": 20,
+      "initial_diagnostic_codes": [
+        "proposal_rejected.invocation_invalid"
+      ],
+      "approval_pause": false,
+      "process_outputs_before_approval": 0,
+      "failure": "approval_boundary_failed"
+    }
+  ]
+}

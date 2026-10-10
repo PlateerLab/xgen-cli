@@ -8,7 +8,7 @@ use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use xgen_adapter_process::{
     ExecutableCatalog, PROCESS_EXECUTE_SCOPE, ProcessEnvironment, ProcessResourceResolver,
-    ProcessWorkspace, ProcessWorkspaceId,
+    ProcessWorkspace, ProcessWorkspaceId, WEB_SEARCH_EXECUTABLE_ID,
 };
 use xgen_policy::ResourceResolver as _;
 
@@ -112,6 +112,13 @@ impl ProcessTooling {
         }))
     }
 
+    pub(crate) fn with_fresh_terminal_sessions(&self) -> Self {
+        Self {
+            workspace: self.workspace.with_fresh_terminal_sessions(),
+            authorization: self.authorization.clone(),
+        }
+    }
+
     pub(crate) const fn workspace(&self) -> &ProcessWorkspace {
         &self.workspace
     }
@@ -136,6 +143,7 @@ pub(crate) struct ProcessExecutionAuthorization {
     canonical_resources: BTreeSet<String>,
     planner_scope_hint: String,
     catalog_digest: String,
+    web_search_enabled: bool,
 }
 
 impl ProcessExecutionAuthorization {
@@ -180,11 +188,16 @@ impl ProcessExecutionAuthorization {
             canonical_resources,
             planner_scope_hint,
             catalog_digest: sha256_digest(&canonical),
+            web_search_enabled: ids.contains(WEB_SEARCH_EXECUTABLE_ID),
         })
     }
 
     pub(crate) fn authorizes_resource(&self, resource: &str) -> bool {
         self.canonical_resources.contains(resource)
+    }
+
+    pub(crate) const fn web_search_enabled(&self) -> bool {
+        self.web_search_enabled
     }
 
     pub(crate) fn planner_scope_hint(&self) -> &str {
@@ -201,6 +214,7 @@ impl fmt::Debug for ProcessExecutionAuthorization {
         formatter
             .debug_struct("ProcessExecutionAuthorization")
             .field("executable_count", &self.canonical_resources.len())
+            .field("web_search_enabled", &self.web_search_enabled)
             .field("resources", &"<redacted>")
             .field("planner_scope_hint", &"<redacted>")
             .field("catalog_digest", &self.catalog_digest)

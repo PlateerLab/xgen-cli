@@ -153,6 +153,12 @@ impl AdapterToolOutput {
         Self(value)
     }
 
+    /// Inspect an observation before deriving another bounded adapter output contract.
+    #[must_use]
+    pub const fn as_value(&self) -> &Value {
+        &self.0
+    }
+
     fn into_value(self) -> Value {
         self.0
     }

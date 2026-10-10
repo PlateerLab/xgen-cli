@@ -1,0 +1,21 @@
+{
+  "ddgs": "9.16.0",
+  "openserp": "0.8.12",
+  "openserp_archive_sha256": "9d1974d885713686d7825cf27c219822bb79445ce30e25ef3f1608652fec781b",
+  "probe_scripts_sha256": {
+    "scripts/experiment-tool-backends.py": "dfdcb90ae1ec3a7209cf3987cf75b897de5c1df4133635e1dd25f86b59c4d30a",
+    "scripts/smoke-search-process.py": "f678b30fc7f28019e8ab51dc3a72556edf8a4a53722c148c784e67540d0f3460",
+    "crates/xgen-adapter-process/examples/pty_backend_probe.rs": "a6bd53923338fa301ab34ce7245218545c93f62a39cfb9891f4b4bee58fd840b"
+  },
+  "result_scripts_match_execution": false,
+  "post_execution_changes": [
+    "smoke: reason= pause detection fixed between invalid and v2 cohorts; diagnostic fields, early safety metrics, failure classification and nonzero exit on failure added",
+    "search: error wording clarified only",
+    "PTY: rustfmt and print-with-newline lint fix only",
+    "PTY: owned group is released after the first signal; final probe rerun produced the same report",
+    "review: waitid/WNOWAIT before group cleanup and reap; Linux-only PTY probe; keep adversarial descendants alive through observation; final PTY report unchanged and separate 4-search lifecycle validation passed"
+  ],
+  "pty_report_matches_final_probe": true,
+  "lifecycle_validation_trials": 4,
+  "lifecycle_validation_successes": 4
+}
