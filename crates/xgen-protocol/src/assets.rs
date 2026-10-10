@@ -92,6 +92,22 @@ pub(crate) const FIXTURES: &[Asset] = &[
         "../../../protocol/fixtures/v1alpha1/valid/capability-definition.web-search.json"
     ),
     asset!(
+        "valid/capability-definition.terminal-start.json",
+        "../../../protocol/fixtures/v1alpha1/valid/capability-definition.terminal-start.json"
+    ),
+    asset!(
+        "valid/capability-definition.terminal-read.json",
+        "../../../protocol/fixtures/v1alpha1/valid/capability-definition.terminal-read.json"
+    ),
+    asset!(
+        "valid/capability-definition.terminal-write.json",
+        "../../../protocol/fixtures/v1alpha1/valid/capability-definition.terminal-write.json"
+    ),
+    asset!(
+        "valid/capability-definition.terminal-terminate.json",
+        "../../../protocol/fixtures/v1alpha1/valid/capability-definition.terminal-terminate.json"
+    ),
+    asset!(
         "valid/capability-instance.local-fs.json",
         "../../../protocol/fixtures/v1alpha1/valid/capability-instance.local-fs.json"
     ),

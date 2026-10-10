@@ -3,8 +3,13 @@
 mod catalog;
 mod execution;
 mod path;
+mod terminal;
 mod verifier;
 mod web_search;
+pub use terminal::{
+    TERMINAL_SCOPE, TERMINAL_VERSION, TerminalAdapter, TerminalOperation, resolve_terminal_session,
+    terminal_supported,
+};
 
 use std::fmt;
 use std::path::Path;
@@ -97,6 +102,8 @@ pub struct ProcessWorkspace {
     pub(crate) catalog: ExecutableCatalog,
     pub(crate) environment: ProcessEnvironment,
     binding: InstanceBinding,
+    #[cfg(target_os = "linux")]
+    pub(crate) terminals: Arc<terminal::sessions::Sessions>,
 }
 
 impl ProcessWorkspace {
@@ -147,6 +154,8 @@ impl ProcessWorkspace {
             catalog,
             environment,
             binding,
+            #[cfg(target_os = "linux")]
+            terminals: Arc::new(terminal::sessions::Sessions::default()),
         })
     }
 
@@ -174,6 +183,34 @@ impl ProcessWorkspace {
         Some(WebSearchAdapter::new(self.clone()))
     }
 
+    /// Create a command-scoped live registry while preserving the durable workspace binding.
+    #[must_use]
+    pub fn with_fresh_terminal_sessions(&self) -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            let mut workspace = self.clone();
+            workspace.terminals = Arc::new(terminal::sessions::Sessions::default());
+            workspace
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.clone()
+        }
+    }
+
+    /// Offer native PTY operations only on platforms with verified group ownership.
+    #[must_use]
+    pub fn terminal_adapters(&self) -> Vec<TerminalAdapter> {
+        if terminal_supported() {
+            TerminalOperation::ALL
+                .into_iter()
+                .map(|operation| TerminalAdapter::new(self.clone(), operation))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Revalidate normalized process material without starting a process.
     ///
     /// Hosts use this before persisting reconstructable invocation material. The result is closed
@@ -194,7 +231,7 @@ impl fmt::Debug for ProcessWorkspace {
             .field("catalog", &self.catalog)
             .field("environment", &self.environment)
             .field("binding", &"<redacted>")
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

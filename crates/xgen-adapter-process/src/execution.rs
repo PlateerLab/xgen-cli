@@ -50,7 +50,7 @@ pub(crate) fn accepts_normalized_material(arguments: &Value, workspace: &Process
     parse_arguments(arguments, workspace).is_ok()
 }
 
-fn parse_arguments(
+pub(crate) fn parse_arguments(
     arguments: &Value,
     workspace: &ProcessWorkspace,
 ) -> Result<PreparedProcess, AdapterPrepareFailure> {
@@ -174,13 +174,13 @@ fn protected_environment_key(key: &str) -> bool {
         || upper.starts_with("DYLD_")
 }
 
-struct PreparedProcess {
-    executable: PathBuf,
-    args: Vec<String>,
-    cwd: PathBuf,
-    environment: BTreeMap<String, String>,
-    timeout: Duration,
-    max_output_bytes: usize,
+pub(crate) struct PreparedProcess {
+    pub(crate) executable: PathBuf,
+    pub(crate) args: Vec<String>,
+    pub(crate) cwd: PathBuf,
+    pub(crate) environment: BTreeMap<String, String>,
+    pub(crate) timeout: Duration,
+    pub(crate) max_output_bytes: usize,
 }
 
 impl std::fmt::Debug for PreparedProcess {
