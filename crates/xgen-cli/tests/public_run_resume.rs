@@ -1703,7 +1703,7 @@ fn pty_sessions_do_not_outlive_a_host_ended_by_sigterm() {
     let helper = workspace.join("terminal-helper");
     fs::write(
         &helper,
-        "#!/bin/sh\ntrap '' HUP TERM\ngrep SigBlk /proc/$$/status > helper.sigblk\nprintf '%s' $$ > helper.pid\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\ntrap '' HUP TERM\nwhile read -r key value; do case $key in SigBlk:) printf '%s' \"$value\" > helper.sigblk;; esac; done < /proc/$$/status\nprintf '%s' $$ > helper.pid\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
@@ -1749,6 +1749,7 @@ fn pty_sessions_do_not_outlive_a_host_ended_by_sigterm() {
     };
     assert_eq!(status.code(), Some(128 + 15));
     // The host blocks exit signals for its watcher; commands must still start with a clear mask.
+    // The helper reads its own status with builtins: a forked reader can catch the shell mid-vfork.
     assert_eq!(
         fs::read_to_string(workspace.join("helper.sigblk"))
             .unwrap()
