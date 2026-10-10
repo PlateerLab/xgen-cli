@@ -62,7 +62,7 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "backend_version": {
-          "const": "0.46.0"
+          "const": "0.47.0"
         },
         "execution_enabled": {
           "const": false

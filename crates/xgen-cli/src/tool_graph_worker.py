@@ -13,7 +13,7 @@ import tempfile
 import unicodedata
 import warnings
 
-VERSION = "0.46.0"
+VERSION = "0.47.0"
 LIMIT = 256 * 1024 * 1024
 COMPRESSED_LIMIT = 64 * 1024 * 1024
 
@@ -104,9 +104,11 @@ def load(root, name):
         raise WorkerError("collection_not_found") from None
     if (envelope.get("format_version") != 1 or envelope.get("collection") != name
             or envelope.get("backend") != "graph-tool-call"
-            or envelope.get("backend_version") != VERSION
             or envelope.get("artifact_digest") != digest(envelope.get("artifact"))):
         raise WorkerError("collection_integrity_failure")
+    if envelope.get("backend_version") != VERSION:
+        # The artifact was built by another backend version; importing the sources again rebuilds it.
+        raise WorkerError("collection_backend_version_mismatch")
     return envelope
 
 

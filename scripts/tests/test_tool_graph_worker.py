@@ -127,6 +127,16 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(WORKER.WorkerError, "integrity_failure"):
             self.call("search", name="assets", query="inventory", top_k=2)
 
+    def test_collection_built_by_another_backend_version_is_reported_as_such(self):
+        self.install()
+        path = self.root / "assets.json.gz"
+        saved = json.loads(gzip.decompress(path.read_bytes()))
+        saved["backend_version"] = "0.0.1"
+        path.write_bytes(gzip.compress(WORKER.canonical(saved)))
+        for operation, fields in [("list", {}), ("search", {"name": "assets", "query": "inventory", "top_k": 2})]:
+            with self.assertRaisesRegex(WORKER.WorkerError, "collection_backend_version_mismatch"):
+                self.call(operation, **fields)
+
     def test_host_pinned_snapshot_rejects_valid_replacement(self):
         for name, spec, target in [("assets", asset_spec(), "getAssetDetail"), ("calendar", calendar_spec(), "readEventDetails")]:
             built = self.install(name, spec)

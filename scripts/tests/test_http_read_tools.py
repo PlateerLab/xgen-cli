@@ -1,6 +1,7 @@
 """Real loopback HTTP + compiled harness tests. No production API or paid LLM calls."""
 import copy
 import http.server
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -32,6 +33,7 @@ def held_out_spec(name):
             "responses":{"200":{"description":"Measurement","schema":{"type":"object","required":["values"],"properties":{"values":{"type":"array","items":{"type":"number"}}},"additionalProperties":False}}}}}}}
 
 
+@unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
 class ContractTests(unittest.TestCase):
     setUp = base.WorkerTests.setUp
     call = base.WorkerTests.call

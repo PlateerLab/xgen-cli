@@ -2987,7 +2987,7 @@ fn execution_profile_with_discovery(
         "domain":"xgen.cli.local-and-tool-discovery-execution-profile/v1",
         "local_profile_digest":local_digest,
         "discovery_specs":discovery_specs(&discovery)?,
-        "backend":"graph-tool-call", "backend_version":"0.46.0", "offline":true,
+        "backend":"graph-tool-call", "backend_version":"0.47.0", "offline":true,
         "max_output_bytes":graph_discovery::MAX_OUTPUT,
         "material_provider":graph_discovery::PROVIDER,
         "material_recipe_domain":"xgen.cli.tool-discovery-recipe/v1",

@@ -449,7 +449,7 @@ struct PreparedRead {
 }
 impl PreparedAdapterInvocation for PreparedRead {
     fn execute(self: Box<Self>) -> AdapterExecutionObservation {
-        let mut output = json!({"ok":false,"error":"http_request_failed","collection":self.input["collection"],"tool":self.input["tool"],"contractDigest":self.input["contractDigest"],"artifact_digest":self.catalog.snapshot(self.input["collection"].as_str().expect("validated collection")),"backend_version":"0.46.0","execution_enabled":true,"request":self.input,"method":"GET","target":self.url.as_str(),"status":null,"body":null});
+        let mut output = json!({"ok":false,"error":"http_request_failed","collection":self.input["collection"],"tool":self.input["tool"],"contractDigest":self.input["contractDigest"],"artifact_digest":self.catalog.snapshot(self.input["collection"].as_str().expect("validated collection")),"backend_version":"0.47.0","execution_enabled":true,"request":self.input,"method":"GET","target":self.url.as_str(),"status":null,"body":null});
         let agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(30)))
             .max_redirects(0)

@@ -199,7 +199,7 @@ fn runtime_command(offline: bool) -> Command {
             "--python",
             "3.12",
             "--with",
-            "graph-tool-call==0.46.0",
+            "graph-tool-call==0.47.0",
             "--",
             "python",
             "-I",
