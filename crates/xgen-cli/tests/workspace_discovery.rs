@@ -1338,9 +1338,9 @@ from pathlib import Path
 r=json.load(sys.stdin)
 root=Path(r['root'])
 def summary(name,row):
- return dict(collection=name,artifact_digest=row['digest'],backend_version='0.47.0',execution_enabled=False,tool_count=1,source_count=1)
+ return dict(collection=name,artifact_digest=row['digest'],backend_version=row.get('backend_version','0.47.0'),execution_enabled=False,tool_count=1,source_count=1)
 if r['operation']=='list':
- out=dict(ok=True,collections=[summary(p.name[:-8],json.loads(p.read_text())) for p in sorted(root.glob('*.json.gz'))])
+ out=dict(ok=True,collections=[dict(summary(p.name[:-8],json.loads(p.read_text())),status=json.loads(p.read_text()).get('status','ready')) for p in sorted(root.glob('*.json.gz'))])
 elif r['operation']=='language_hints':
  assert '--offline' in sys.argv
  rows={n:json.loads((root/(n+'.json.gz')).read_text()) for n in r['snapshots']}
@@ -1537,6 +1537,52 @@ fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
         server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
         server.handle.join().unwrap();
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn run_names_collections_that_must_be_rebuilt_and_does_not_start() {
+    let fixture = tempdir().unwrap();
+    let state = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    let runtime = fixture.path().join("runtime");
+    fs::create_dir(&workspace).unwrap();
+    discovery_runtime(&state, &runtime);
+    fs::write(
+        state.join("tool-collections/assets.json.gz"),
+        json!({"tool":"readAsset","parameter":"asset_id","digest":"a".repeat(64),
+            "status":"rebuild_required","backend_version":"0.46.0"})
+        .to_string(),
+    )
+    .unwrap();
+    let server = SequentialServer::spawn_responses(vec![completion_response()]);
+    let result = bounded_output(xgen(&state).env("PATH", runtime).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "Inspect the tool.",
+    ]))
+    .unwrap();
+    assert!(!result.status.success(), "{}", stderr(&result));
+    let errors = stderr(&result);
+    assert!(errors.contains("XGEN_TOOLS error=collection_rebuild_required collection=assets"));
+    assert!(!errors.contains("collection=calendar"));
+    assert!(
+        server
+            .requests
+            .recv_timeout(Duration::from_millis(200))
+            .is_err()
+    );
+    assert!(!state.join("tool-collections/invocations").exists());
 }
 
 #[test]

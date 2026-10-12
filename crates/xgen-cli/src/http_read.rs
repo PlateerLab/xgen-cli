@@ -214,6 +214,66 @@ fn private_file_or_directory(path: &std::path::Path, directory: bool) -> Result<
     Ok(())
 }
 
+/// Whether a connection is saved under this collection name.
+pub(crate) fn connection_exists(name: &str) -> Result<bool, &'static str> {
+    if !graph_discovery::valid_name(name) {
+        return Err("invalid_collection_name");
+    }
+    match fs::symlink_metadata(connection_root()?.join(format!("{name}.json"))) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err("http_connection_store_unavailable"),
+    }
+}
+
+/// Remove one connection and its stored credential. `None` when there is no connection.
+pub(crate) fn disconnect(
+    name: &str,
+) -> Result<Option<serde_json::Map<String, Value>>, &'static str> {
+    if !graph_discovery::valid_name(name) {
+        return Err("invalid_collection_name");
+    }
+    disconnect_in(&connection_root()?, name, &OsModelCredentialStore)
+}
+
+/// The credential goes first, so a failure leaves the connection that still names it and
+/// the command can be repeated; deleting an absent credential succeeds.
+fn disconnect_in(
+    root: &std::path::Path,
+    name: &str,
+    store: &dyn ModelCredentialStore,
+) -> Result<Option<serde_json::Map<String, Value>>, &'static str> {
+    let path = root.join(format!("{name}.json"));
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("http_connection_store_unavailable"),
+    }
+    private_file_or_directory(root, true)?;
+    private_file_or_directory(&path, false)?;
+    let mut bytes = Vec::new();
+    // An unreadable connection is still removed; its credential reference is then unknown.
+    let connection = fs::File::open(&path)
+        .and_then(|file| file.take(4097).read_to_end(&mut bytes))
+        .ok()
+        .and_then(|_| serde_json::from_slice::<Connection>(&bytes).ok());
+    let credential = match connection.map(|connection| connection.credential_ref) {
+        None => "unknown",
+        Some(None) => "none",
+        Some(Some(reference)) => {
+            store
+                .delete(&reference)
+                .map_err(|_| "http_credential_store_unavailable")?;
+            "removed"
+        }
+    };
+    fs::remove_file(&path).map_err(|_| "http_connection_store_unavailable")?;
+    let mut removed = serde_json::Map::new();
+    removed.insert("connection_removed".into(), json!(true));
+    removed.insert("stored_credential".into(), json!(credential));
+    Ok(Some(removed))
+}
+
 pub(crate) fn discover(snapshots: &graph_discovery::Snapshots) -> Result<Connections, ()> {
     let root = connection_root().map_err(|_| ())?;
     if !root.exists() {
@@ -619,6 +679,164 @@ fn digest(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_profile::ModelProfileError;
+    use std::cell::RefCell;
+
+    #[derive(Default)]
+    struct Credentials(RefCell<BTreeMap<String, String>>);
+    impl ModelCredentialStore for Credentials {
+        fn put(&self, reference: &str, secret: &str) -> Result<(), ModelProfileError> {
+            self.0
+                .borrow_mut()
+                .insert(reference.to_owned(), secret.to_owned());
+            Ok(())
+        }
+        fn get(&self, reference: &str) -> Result<Zeroizing<String>, ModelProfileError> {
+            self.0
+                .borrow()
+                .get(reference)
+                .cloned()
+                .map(Zeroizing::new)
+                .ok_or(ModelProfileError::CredentialNotFound)
+        }
+        fn delete(&self, reference: &str) -> Result<(), ModelProfileError> {
+            self.0.borrow_mut().remove(reference);
+            Ok(())
+        }
+    }
+
+    fn private_directory() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        directory
+    }
+
+    fn save(root: &std::path::Path, name: &str, bytes: &[u8]) {
+        let path = root.join(format!("{name}.json"));
+        fs::write(&path, bytes).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+
+    #[test]
+    fn disconnect_removes_the_connection_then_only_its_own_credential() {
+        let root = private_directory();
+        let store = Credentials::default();
+        let own = format!("cred-{}", "a".repeat(32));
+        let other = format!("cred-{}", "b".repeat(32));
+        store.put(&own, "token-a").unwrap();
+        store.put(&other, "token-b").unwrap();
+        let stored = Connection {
+            credential_ref: Some(own.clone()),
+            ..connection()
+        };
+        save(root.path(), "bo", &serde_jcs::to_vec(&stored).unwrap());
+        save(
+            root.path(),
+            "env",
+            &serde_jcs::to_vec(&connection()).unwrap(),
+        );
+        save(root.path(), "broken", b"{");
+        let removed = disconnect_in(root.path(), "bo", &store).unwrap().unwrap();
+        assert_eq!(removed["stored_credential"], "removed");
+        assert!(!root.path().join("bo.json").exists());
+        assert!(store.get(&own).is_err());
+        assert_eq!(*store.get(&other).unwrap(), "token-b");
+        let removed = disconnect_in(root.path(), "env", &store).unwrap().unwrap();
+        assert_eq!(removed["stored_credential"], "none");
+        let removed = disconnect_in(root.path(), "broken", &store)
+            .unwrap()
+            .unwrap();
+        assert_eq!(removed["stored_credential"], "unknown");
+        assert!(!root.path().join("broken.json").exists());
+        assert_eq!(disconnect_in(root.path(), "bo", &store), Ok(None));
+    }
+
+    struct LockedCredentials;
+    impl ModelCredentialStore for LockedCredentials {
+        fn put(&self, _: &str, _: &str) -> Result<(), ModelProfileError> {
+            Err(ModelProfileError::CredentialStoreUnavailable)
+        }
+        fn get(&self, _: &str) -> Result<Zeroizing<String>, ModelProfileError> {
+            Err(ModelProfileError::CredentialStoreUnavailable)
+        }
+        fn delete(&self, _: &str) -> Result<(), ModelProfileError> {
+            Err(ModelProfileError::CredentialStoreUnavailable)
+        }
+    }
+
+    #[test]
+    fn disconnect_keeps_the_connection_when_its_credential_cannot_be_deleted() {
+        let root = private_directory();
+        let stored = Connection {
+            credential_ref: Some(format!("cred-{}", "c".repeat(32))),
+            ..connection()
+        };
+        save(root.path(), "bo", &serde_jcs::to_vec(&stored).unwrap());
+        assert_eq!(
+            disconnect_in(root.path(), "bo", &LockedCredentials),
+            Err("http_credential_store_unavailable")
+        );
+        assert!(root.path().join("bo.json").exists());
+        let removed = disconnect_in(root.path(), "bo", &Credentials::default())
+            .unwrap()
+            .unwrap();
+        assert_eq!(removed["stored_credential"], "removed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn disconnect_does_not_follow_links_or_touch_shared_files() {
+        let root = private_directory();
+        let outside = private_directory();
+        save(outside.path(), "target", b"{}");
+        std::os::unix::fs::symlink(
+            outside.path().join("target.json"),
+            root.path().join("linked.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            disconnect_in(root.path(), "linked", &Credentials::default()),
+            Err("http_connection_store_invalid")
+        );
+        assert!(outside.path().join("target.json").exists());
+        save(root.path(), "shared", b"{}");
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(
+                root.path().join("shared.json"),
+                fs::Permissions::from_mode(0o644),
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            disconnect_in(root.path(), "shared", &Credentials::default()),
+            Err("http_connection_store_not_private")
+        );
+        assert!(root.path().join("shared.json").exists());
+        // An unreadable store is not mistaken for a missing connection.
+        let closed = root.path().join("closed");
+        fs::create_dir(&closed).unwrap();
+        save(&closed, "bo", b"{}");
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(&closed, fs::Permissions::from_mode(0o000)).unwrap();
+        }
+        let result = disconnect_in(&closed, "bo", &Credentials::default());
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(&closed, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        assert_eq!(result, Err("http_connection_store_unavailable"));
+        assert!(closed.join("bo.json").exists());
+    }
 
     fn connection() -> Connection {
         Connection {

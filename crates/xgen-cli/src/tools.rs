@@ -49,8 +49,27 @@ pub enum ToolsCommand {
         #[arg(long)]
         token_stdin: bool,
     },
-    /// List saved collections.
+    /// List saved collections and whether each one can be used.
     List,
+    /// Rebuild collections saved by another backend version from the sources kept at import.
+    /// Runs pinned to the previous snapshot fail closed when they resume.
+    Rebuild {
+        #[arg(long, required_unless_present = "all", conflicts_with = "all")]
+        name: Option<String>,
+        /// Rebuild every saved collection that needs it.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Remove an HTTP connection and its stored credential; the collection stays searchable.
+    Disconnect {
+        #[arg(long)]
+        name: String,
+    },
+    /// Remove a collection together with its HTTP connection and stored credential.
+    Remove {
+        #[arg(long)]
+        name: String,
+    },
     /// Retrieve candidates and possible prerequisite producers; never executes them.
     Search {
         #[arg(long)]
@@ -96,6 +115,17 @@ pub fn run(command: ToolsCommand) -> ExitCode {
                 Err("http_get_consent_required")
             }
         }
+        ToolsCommand::Disconnect { name } => {
+            crate::http_read::disconnect(&name).and_then(|removed| {
+                let mut result = json!({"ok": true, "collection": name});
+                let fields = removed.ok_or("http_connection_not_found")?;
+                result.as_object_mut().expect("object").extend(fields);
+                Ok(result)
+            })
+        }
+        ToolsCommand::Remove { name } => remove(&name),
+        ToolsCommand::Import { name, source } => import(&name, source),
+        ToolsCommand::Rebuild { name, all } => rebuild(name, all),
         command => request(command).and_then(|request| invoke(&request)),
     };
     match result {
@@ -148,8 +178,14 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
                 .collect();
             json!({"operation": "import", "name": name, "sources": sources?})
         }
-        ToolsCommand::Connect { .. } => return Err("unsupported_transport_operation"),
+        ToolsCommand::Connect { .. } | ToolsCommand::Disconnect { .. } => {
+            return Err("unsupported_transport_operation");
+        }
         ToolsCommand::List => json!({"operation": "list"}),
+        ToolsCommand::Rebuild { name, .. } => {
+            json!({"operation": "rebuild", "name": name.ok_or("invalid_collection_name")?})
+        }
+        ToolsCommand::Remove { name } => json!({"operation": "remove", "name": name}),
         ToolsCommand::Search { name, query, top_k } => {
             if query.trim().is_empty() || query.len() > 4096 {
                 return Err("invalid_query");
@@ -182,6 +218,83 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
     let root = state_root.join("tool-collections");
     value["root"] = json!(root.to_str().ok_or("invalid_state_home")?);
     Ok(value)
+}
+
+/// A connection whose collection file was deleted by hand would attach its base URL and
+/// credential to a different API imported under the same name.
+fn import(name: &str, source: Vec<String>) -> Result<Value, &'static str> {
+    let request = request(ToolsCommand::Import {
+        name: name.to_owned(),
+        source,
+    })?;
+    let collection = crate::tool_catalog_directory()?.join(format!("{name}.json.gz"));
+    if crate::http_read::connection_exists(name)? && std::fs::symlink_metadata(collection).is_err()
+    {
+        return Err("http_connection_without_collection");
+    }
+    invoke(&request)
+}
+
+/// The connection goes first: a connection left without its collection would attach its
+/// base URL and credential to a different API later imported under the same name.
+fn remove(name: &str) -> Result<Value, &'static str> {
+    let request = request(ToolsCommand::Remove {
+        name: name.to_owned(),
+    })?;
+    let connection = crate::http_read::disconnect(name)?;
+    let collection = invoke(&request).unwrap_or_else(|code| json!({"ok": false, "error": code}));
+    let missing = collection.get("error") == Some(&json!("collection_not_found"));
+    if collection.get("ok") != Some(&Value::Bool(true)) && !(missing && connection.is_some()) {
+        let mut failure = collection;
+        match connection {
+            Some(removed) => failure.as_object_mut().expect("object").extend(removed),
+            None => failure["connection_removed"] = json!(false),
+        }
+        return Ok(failure);
+    }
+    let mut result = json!({"ok": true, "collection": name, "collection_removed": !missing});
+    match connection {
+        Some(removed) => result.as_object_mut().expect("object").extend(removed),
+        None => result["connection_removed"] = json!(false),
+    }
+    Ok(result)
+}
+
+fn rebuild(name: Option<String>, all: bool) -> Result<Value, &'static str> {
+    let one = |name: String| {
+        request(ToolsCommand::Rebuild {
+            name: Some(name),
+            all: false,
+        })
+        .and_then(|request| invoke(&request))
+    };
+    if !all {
+        return one(name.ok_or("invalid_collection_name")?);
+    }
+    let root = crate::tool_catalog_directory()?;
+    let mut names = Vec::new();
+    if root.exists() {
+        for entry in std::fs::read_dir(&root).map_err(|_| "collection_directory_unavailable")? {
+            let file = entry
+                .map_err(|_| "collection_directory_unavailable")?
+                .file_name();
+            if let Some(name) = file.to_str().and_then(|file| file.strip_suffix(".json.gz")) {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    names.sort();
+    let mut ok = true;
+    let mut results = Vec::new();
+    for name in names {
+        let result = one(name.clone()).unwrap_or_else(|code| json!({"ok": false, "error": code}));
+        ok &= result.get("ok") == Some(&Value::Bool(true));
+        results.push(json!({"collection": name, "result": result}));
+        if INTERRUPTED.load(Ordering::Relaxed) {
+            break;
+        }
+    }
+    Ok(json!({"ok": ok, "collections": results}))
 }
 
 fn runtime_command(offline: bool) -> Command {

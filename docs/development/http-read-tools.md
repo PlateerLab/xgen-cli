@@ -24,7 +24,18 @@ xgen run --workspace . --allow-dir . --allow-read \
   --allow-remote-model-egress "연결한 시스템의 정보를 조회해줘"
 ```
 
-OpenAPI 3의 서버 prefix는 `--base-url`에 넣는다. Swagger 2의 `basePath`는 원본 계약에서 가져와 주소 뒤에 붙이므로 같은 prefix를 두 번 넣지 않는다. 연결은 이름별 불변 파일로 저장한다. 변경하려면 새 collection 이름으로 가져와 연결한다. 연결 수정·삭제 UI는 후속이다.
+OpenAPI 3의 서버 prefix는 `--base-url`에 넣는다. Swagger 2의 `basePath`는 원본 계약에서 가져와 주소 뒤에 붙이므로 같은 prefix를 두 번 넣지 않는다. 연결은 이름별 불변 파일로 저장하고 `connect`는 기존 연결을 덮어쓰지 않는다(`http_connection_already_exists`).
+
+```bash
+xgen tools disconnect --name my-system   # 연결과 OS secret store의 토큰만 삭제, collection은 유지
+xgen tools connect --name my-system --base-url https://api.example.com --allow-get --bearer
+xgen tools remove --name my-system       # collection, 연결, 저장된 토큰을 함께 삭제
+```
+
+- `disconnect`·`remove`는 그 연결이 참조한 OS secret store 항목을 먼저 지우고 연결 파일을 지운다. 토큰 삭제가 실패하면 연결을 남긴 채 `http_credential_store_unavailable`로 멈추므로 같은 명령을 다시 실행하면 된다(이미 없는 항목 삭제는 성공으로 본다). 결과의 `stored_credential`은 `removed`, `none`(환경변수 이름 연결·인증 없음), `unknown`(손상된 연결 파일이라 참조를 알 수 없음)이다. 다른 연결의 토큰은 건드리지 않는다.
+- `remove`는 연결을 collection보다 먼저 지운다. 연결이 남은 채 collection만 지워지면, 나중에 같은 이름으로 가져온 다른 API에 이전 주소와 토큰이 붙기 때문이다. 같은 이유로 `import`는 collection 없이 연결만 남은 이름(collection 파일을 손으로 지운 경우)을 `http_connection_without_collection`으로 거절한다. `disconnect` 후 다시 가져온다.
+- 연결 저장소가 사용자 전용이 아니거나, 연결 파일이 symlink거나, 저장소를 읽을 수 없으면(권한 오류를 "연결 없음"으로 보지 않는다) 아무것도 지우지 않고 실패한다.
+- 연결을 바꾸면 그 연결로 시작한 Run은 재개 시 기존처럼 거절된다.
 
 ## 실행 계약
 
