@@ -1,0 +1,137 @@
+{
+  "id": "validation-observed",
+  "split": "validation",
+  "plan": {
+    "initial": [
+      {
+        "key": "catalog",
+        "resource": "probe:catalog",
+        "value": {
+          "next": [
+            {
+              "key": "branch",
+              "resource": "probe:branch",
+              "value": {
+                "next": [
+                  {
+                    "key": "end",
+                    "resource": "probe:end",
+                    "value": [
+                      "a",
+                      false
+                    ],
+                    "depends_on": [
+                      "branch"
+                    ]
+                  }
+                ]
+              },
+              "depends_on": [
+                "catalog"
+              ]
+            },
+            {
+              "key": "sibling",
+              "resource": "probe:sibling",
+              "value": 42,
+              "depends_on": [
+                "catalog"
+              ]
+            }
+          ]
+        },
+        "depends_on": []
+      }
+    ]
+  },
+  "oracle": {
+    "applied": [
+      {
+        "operation": "catalog",
+        "resource": "probe:catalog",
+        "value": {
+          "next": [
+            {
+              "key": "branch",
+              "resource": "probe:branch",
+              "value": {
+                "next": [
+                  {
+                    "key": "end",
+                    "resource": "probe:end",
+                    "value": [
+                      "a",
+                      false
+                    ],
+                    "depends_on": [
+                      "branch"
+                    ]
+                  }
+                ]
+              },
+              "depends_on": [
+                "catalog"
+              ]
+            },
+            {
+              "key": "sibling",
+              "resource": "probe:sibling",
+              "value": 42,
+              "depends_on": [
+                "catalog"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "operation": "branch",
+        "resource": "probe:branch",
+        "value": {
+          "next": [
+            {
+              "key": "end",
+              "resource": "probe:end",
+              "value": [
+                "a",
+                false
+              ],
+              "depends_on": [
+                "branch"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "operation": "sibling",
+        "resource": "probe:sibling",
+        "value": 42
+      },
+      {
+        "operation": "end",
+        "resource": "probe:end",
+        "value": [
+          "a",
+          false
+        ]
+      }
+    ],
+    "planner_calls": {
+      "1": 5,
+      "4": 4
+    },
+    "dependencies": {
+      "catalog": [],
+      "branch": [
+        "catalog"
+      ],
+      "sibling": [
+        "catalog"
+      ],
+      "end": [
+        "branch"
+      ]
+    }
+  }
+}
