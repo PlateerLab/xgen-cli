@@ -1,0 +1,84 @@
+{
+  "searched_at": "2026-10-05",
+  "project_commit": "f6576aa2aceabdcbd9c63648346f189a92e719f3",
+  "papers": [
+    {
+      "name": "rewoo",
+      "url": "https://arxiv.org/pdf/2305.18323v1",
+      "version": "arXiv 2305.18323v1, 2023-05-23",
+      "sha256": "1847bb42b9efb3a2860ca48edc962ee9c9b7d3e0359887ea596e1b23084de9ff",
+      "bytes": 2552313
+    },
+    {
+      "name": "llmcompiler",
+      "url": "https://raw.githubusercontent.com/mlresearch/v235/main/assets/kim24y/kim24y.pdf",
+      "version": "ICML 2024, PMLR 235:24370–24391, camera-ready PDF",
+      "sha256": "36dde899ed8abe0df728215e054aab21d1699add719afeb0ddadbb4e4eb23263",
+      "bytes": 887109
+    },
+    {
+      "name": "agents-that-matter",
+      "url": "https://arxiv.org/pdf/2407.01502v1",
+      "version": "arXiv 2407.01502v1, 2024-07-01; OpenReview final PDF inaccessible (403)",
+      "sha256": "1681013e0421f9d193ca5bb556b566f50d1e5eaa43d7a9700a31ca3dd0e2ff7a",
+      "bytes": 1235369
+    }
+  ],
+  "public_code_heads": [
+    {
+      "repo": "billxbf/ReWOO",
+      "sha": "9cd0283043ff4be0c9d614fda2789d143ca6ffd1",
+      "date": "2023-07-28T16:30:54Z",
+      "license": "MIT"
+    },
+    {
+      "repo": "SqueezeAILab/LLMCompiler",
+      "sha": "a00c9d35507507da70e8c637eee64efc8c1857ae",
+      "date": "2024-07-10T04:39:31Z",
+      "license": "MIT"
+    },
+    {
+      "repo": "benediktstroebl/agent-evals",
+      "sha": "5ce7c0c5f988d5c8b5453bf26d3d8831232ca037",
+      "date": "2025-05-28T08:12:16Z",
+      "license": "MIT"
+    }
+  ],
+  "pricing": {
+    "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "fetched_via": "direct HTTPS GET; web reader failed",
+    "html_sha256": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2",
+    "model_alias": "deepseek-flash",
+    "advertised_version": "DeepSeek-V4.1-Flash",
+    "per_1m_usd": {
+      "peak": {
+        "cached_input": 0.006,
+        "uncached_input": 0.3,
+        "output": 1.2
+      },
+      "off_peak": {
+        "cached_input": 0.003,
+        "uncached_input": 0.15,
+        "output": 0.6
+      }
+    }
+  },
+  "executions": {
+    "model_inference": "NOT_RUN",
+    "paper_code": "NOT_RUN",
+    "paper_metrics": "ARITHMETIC_ONLY"
+  },
+  "recalculated": {
+    "rewoo_hotpot_token_ratio": 4.93157788742322,
+    "rewoo_hotpot_acc_percentage_points": 1.6,
+    "rewoo_hotpot_em_percentage_points": -1.8,
+    "llmcompiler_movie_cost_ratio": 6.730263157894737,
+    "llmcompiler_parallelqa_streaming_ratio": 1.3013780707010183
+  },
+  "limits": [
+    "Public code HEADs were inspected, not confirmed as exact experimental commits.",
+    "Agent-evals repository metadata only; no executed-path audit.",
+    "AI Agents That Matter audit uses arXiv v1, not the blocked OpenReview final version.",
+    "Combined initial extraction was truncated and was replaced by per-paper untruncated extraction; material claims checked locally."
+  ]
+}

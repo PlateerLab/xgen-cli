@@ -12,7 +12,10 @@ use xgen_local_store::{
     Commit, ExpectedHead, MemoryRunStore, RunPlanningSnapshot, RunSnapshot, RunStore, StoreError,
 };
 use xgen_policy::{ResourceResolutionFailure, ResourceResolver};
-use xgen_provider_openai::{OpenAiPlanner, OpenAiPlannerConfig, ResponseFormat, ThinkingMode};
+use xgen_provider_openai::{
+    EvaluationProposalStepLimit, ModelCallOutcome, OpenAiPlanner, OpenAiPlannerConfig,
+    ResponseFormat, ThinkingMode,
+};
 use xgen_runtime::{
     AgentLoop, AgentLoopTick, CapabilityRegistry, EventFactory, EventFactoryError, EventMetadata,
     PlanMaterializationRequest, PlanMaterializer, PlanMaterializerFailure, PlannerPortFailure,
@@ -494,6 +497,220 @@ fn json_object_planner(base_url: &str, timeout: Duration) -> OpenAiPlanner {
     .with_timeout(timeout)
     .unwrap();
     OpenAiPlanner::new(config, None).unwrap()
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // Keep HTTP capture, Core admission, and usage settlement in one contract.
+fn evaluation_http_limit_preserves_core_dependencies_and_rejected_call_usage() {
+    for (limit, count) in [
+        (EvaluationProposalStepLimit::One, 1),
+        (EvaluationProposalStepLimit::One, 2),
+        (EvaluationProposalStepLimit::Four, 4),
+        (EvaluationProposalStepLimit::Four, 5),
+    ] {
+        let accepted = count <= limit.max_steps();
+        let steps: Vec<_> = (0..count).map(|index| json!({
+            "key":format!("inspect_{index}"), "objective":"Inspect an independently specified input",
+            "dependsOn": if index == 0 { json!([]) } else { json!([{
+                "kind":"proposed_step", "key":format!("inspect_{}", index - 1), "stepId":""
+            }]) },
+            "capability":{"capabilityId":"xgeny.test/record-path","contractVersion":"1.0.0"},
+            "arguments":{"path":format!("/workspace/inputs/input-{index}.txt")}
+        })).collect();
+        let mut envelope: Value = serde_json::from_slice(&provider_response(&json!({
+            "formatVersion":1,"kind":"plan","steps":steps,"summary":""
+        })))
+        .unwrap();
+        envelope["usage"] = json!({"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,
+            "prompt_cache_hit_tokens":40,"prompt_cache_miss_tokens":60});
+        let server = TestServer::spawn("200 OK", serde_json::to_vec(&envelope).unwrap());
+        let config = OpenAiPlannerConfig::new(
+            &server.base_url,
+            "xgen.test.eval",
+            "qwen3.8-27b",
+            "test-tokenizer",
+        )
+        .unwrap()
+        .with_response_format(ResponseFormat::JsonObject)
+        .unwrap()
+        .with_evaluation_proposal_step_limit(limit)
+        .unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let mut planner = OpenAiPlanner::new(config, None)
+            .unwrap()
+            .with_usage_observer(move |observation| sender.send(observation).unwrap());
+        let mut store = seed_store();
+        let runtime = configured_loop(&mut store, &mut planner);
+        let resolver = IdentityResolver::default();
+        let tick = runtime
+            .tick(
+                &mut store,
+                &mut DeterministicEvents,
+                &FixedLease,
+                &synthetic_registry(),
+                &resolver,
+                &mut planner,
+                &mut EphemeralMaterializer,
+            )
+            .unwrap();
+        let request = server.finish();
+        let body: Value =
+            serde_json::from_slice(&request[find_header_end(&request).unwrap() + 4..]).unwrap();
+        assert!(
+            body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("maxProposalSteps={}", limit.max_steps()))
+        );
+        let observation = receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            observation.outcome,
+            if accepted {
+                ModelCallOutcome::ProposalDecoded
+            } else {
+                ModelCallOutcome::ResponseRejected
+            }
+        );
+        assert_eq!(observation.usage.as_ref().unwrap().total_tokens, 120);
+        assert_eq!(
+            observation.usage.as_ref().unwrap().cached_input_tokens,
+            Some(40)
+        );
+        let snapshot = store.load().unwrap().unwrap();
+        let lifecycle = snapshot
+            .state
+            .agent_loop
+            .as_ref()
+            .unwrap()
+            .model_calls
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            (
+                lifecycle.reserved_calls,
+                lifecycle.settled_calls,
+                lifecycle.unknown_calls
+            ),
+            (1, 1, 0)
+        );
+        if accepted {
+            let AgentLoopTick::PlanAccepted { step_ids, .. } = tick else {
+                panic!("expected accepted plan: {tick:?}")
+            };
+            assert_eq!(step_ids.len(), count);
+            for (index, id) in step_ids.iter().enumerate() {
+                assert_eq!(
+                    snapshot.state.steps[id].depends_on,
+                    if index == 0 {
+                        vec![]
+                    } else {
+                        vec![step_ids[index - 1].clone()]
+                    }
+                );
+            }
+            // Existing ready work must be returned without another model request.
+            assert!(matches!(
+                runtime
+                    .tick(
+                        &mut store,
+                        &mut DeterministicEvents,
+                        &FixedLease,
+                        &synthetic_registry(),
+                        &resolver,
+                        &mut planner,
+                        &mut EphemeralMaterializer
+                    )
+                    .unwrap(),
+                AgentLoopTick::ActionRequired { .. }
+            ));
+            assert!(receiver.try_recv().is_err());
+        } else {
+            assert!(matches!(
+                tick,
+                AgentLoopTick::PlannerUnavailable {
+                    failure: PlannerPortFailure::InvalidResponse,
+                    ..
+                }
+            ));
+            assert!(snapshot.state.steps.is_empty());
+            assert_eq!(
+                resolver.0.get(),
+                0,
+                "rejected proposals never enter materialization"
+            );
+        }
+    }
+}
+
+#[test]
+fn evaluation_next_plan_uses_receipt_completed_context_with_existing_dependencies() {
+    struct StopBeforeCommit(String);
+    impl PlanMaterializer for StopBeforeCommit {
+        fn materialize(
+            &mut self,
+            request: PlanMaterializationRequest<'_>,
+        ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
+            assert_eq!(request.normalized_arguments()["path"], self.0);
+            Err(PlanMaterializerFailure::Rejected)
+        }
+    }
+    let (mut store, budget, expected_output) = completed_output_store();
+    let observed_name = expected_output["nested"][2]["a"].as_str().unwrap();
+    let path = format!("/workspace/{observed_name}.txt");
+    let proposal = json!({"formatVersion":1,"kind":"plan","steps":[{
+        "key":"inspect_observed", "objective":"Inspect a path selected by the completed observation",
+        "dependsOn":[{"kind":"existing_step","stepId":"step-completed-output","key":""}],
+        "capability":{"capabilityId":"xgeny.test/record-path","contractVersion":"1.0.0"},
+        "arguments":{"path":path}
+    }],"summary":""});
+    let server = TestServer::spawn("200 OK", provider_response(&proposal));
+    let config = OpenAiPlannerConfig::new(
+        &server.base_url,
+        "xgen.test.eval-observed",
+        "qwen3.8-27b",
+        "test-tokenizer",
+    )
+    .unwrap()
+    .with_evaluation_proposal_step_limit(EvaluationProposalStepLimit::Four)
+    .unwrap();
+    let mut planner = OpenAiPlanner::new(config, None).unwrap();
+    let tick = AgentLoop::new(budget)
+        .tick(
+            &mut store,
+            &mut DeterministicEvents,
+            &FixedLease,
+            &synthetic_registry(),
+            &IdentityResolver::default(),
+            &mut planner,
+            &mut StopBeforeCommit(path),
+        )
+        .unwrap();
+    assert!(matches!(
+        tick,
+        AgentLoopTick::MaterializerUnavailable {
+            failure: PlanMaterializerFailure::Rejected,
+            ..
+        }
+    ));
+    assert_eq!(
+        store.state.steps.len(),
+        1,
+        "snapshot fixture intentionally stops before plan commit"
+    );
+    let request = server.finish();
+    let body: Value =
+        serde_json::from_slice(&request[find_header_end(&request).unwrap() + 4..]).unwrap();
+    let prompt: Value =
+        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+    let outputs = prompt["planningContext"]["toolOutputs"].as_array().unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0]["output"], expected_output);
+    assert!(
+        body["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("wait for a receipt-completed toolOutput in a later turn")
+    );
 }
 
 #[test]

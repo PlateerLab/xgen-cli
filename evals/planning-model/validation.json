@@ -1,0 +1,80 @@
+[
+  {
+    "id": "validation-tsv-manifest",
+    "split": "validation",
+    "family": "manifest-artifact",
+    "goal": "inventory.tsv의 header와 모든 row를 읽어 item별 quantity 합계를 계산해 totals.json으로 저장해줘. 빈 줄은 무시하고 중복 item은 합쳐. 출력은 item 사전순으로 정렬한 {\"totals\":[{\"item\":이름,\"quantity\":정수},...]}이며 0과 음수 quantity도 포함해. 입력 파일은 바꾸지 마.",
+    "files": {
+      "inventory.tsv": "item\tquantity\npear\t4\napple\t0\npear\t-1\n\napple\t2\nlime\t-3\n"
+    },
+    "writable": [
+      "totals.json"
+    ],
+    "generated_dirs": [],
+    "executables": [],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile\np=Path(sys.argv[1])\nimport csv,collections\ntotals=collections.Counter()\nfor row in csv.DictReader((p/'inventory.tsv').read_text().splitlines(),delimiter='\\t'):\n totals[row['item']]+=int(row['quantity'])\nexpected={'totals':[{'item':k,'quantity':totals[k]} for k in sorted(totals)]}\nactual=json.loads((p/'totals.json').read_text())\nassert actual==expected\nassert all(type(r['quantity']) is int for r in actual['totals'])\n"
+    }
+  },
+  {
+    "id": "validation-routed-manifest",
+    "split": "validation",
+    "family": "manifest-artifact",
+    "goal": "jobs/manifest.json에서 enabled=true인 모든 job을 읽어 각각의 payload 상대 경로를 관찰한 뒤 해당 파일을 읽어줘. payload의 name과 score를 묶어 score 내림차순, 동점이면 name 오름차순으로 정렬한 {\"entries\":[{\"name\":문자열,\"score\":정수},...]}을 report.json에 저장해. disabled payload는 읽을 필요 없어. 원본 파일은 변경하지 마.",
+    "files": {
+      "jobs/manifest.json": "{\"jobs\":[{\"enabled\":true,\"payload\":\"payloads/east.json\"},{\"enabled\":false,\"payload\":\"payloads/disabled.json\"},{\"enabled\":true,\"payload\":\"payloads/west.json\"}]}\n",
+      "payloads/east.json": "{\"name\":\"east\",\"score\":11}\n",
+      "payloads/west.json": "{\"name\":\"west\",\"score\":11}\n",
+      "payloads/disabled.json": "{\"name\":\"disabled\",\"score\":999}\n"
+    },
+    "writable": [
+      "report.json"
+    ],
+    "generated_dirs": [],
+    "executables": [],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile\np=Path(sys.argv[1])\nmanifest=json.loads((p/'jobs/manifest.json').read_text())\nentries=[json.loads((p/j['payload']).read_text()) for j in manifest['jobs'] if j['enabled']]\nexpected={'entries':sorted(entries,key=lambda r:(-r['score'],r['name']))}\nactual=json.loads((p/'report.json').read_text())\nassert actual==expected\nassert all(type(r['score']) is int for r in actual['entries'])\n"
+    }
+  },
+  {
+    "id": "validation-numeric-cli",
+    "split": "validation",
+    "family": "python-cli",
+    "goal": "main.py는 --values=쉼표로 구분된 정수 목록을 받아 count·sum·mean만 갖는 JSON object를 출력해야 해. 0도 하나의 값으로 세고 중복과 음수를 유지해. 공백과 빈 토큰은 무시해. 빈 목록은 count=0, sum=0, mean=null이고 그 외 mean은 합계/개수야. 먼저 python3 -B test_visible.py의 실패를 관찰하고 main.py만 고쳐줘. test_visible.py와 입력 데이터는 바꾸지 마. 수정 후 python3 -B test_visible.py를 다시 실행해.",
+    "files": {
+      "main.py": "import argparse,json\np=argparse.ArgumentParser()\np.add_argument(\"--values\",required=True)\na=p.parse_args()\nvalues=[int(s) for s in a.values.split(\",\") if s.strip() and int(s)!=0]\nprint(json.dumps({\"count\":len(values),\"sum\":sum(values),\"mean\":sum(values)/len(values) if values else None}))\n",
+      "test_visible.py": "import subprocess,sys,json\nr=subprocess.run([sys.executable,\"-B\",\"main.py\",\"--values=0,2,4\"],capture_output=True,text=True)\nassert r.returncode==0\nassert json.loads(r.stdout)=={\"count\":3,\"sum\":6,\"mean\":2.0}\n"
+    },
+    "writable": [
+      "main.py"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile\np=Path(sys.argv[1])\nfor values in [[0],[0,0],[-2,0,2],[7,-1,7],[]]:\n arg='--values='+','.join(map(str,values))\n r=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),arg],cwd=p,capture_output=True,text=True)\n assert r.returncode==0\n actual=json.loads(r.stdout)\n assert actual=={'count':len(values),'sum':sum(values),'mean':sum(values)/len(values) if values else None}\n assert type(actual['count']) is int and type(actual['sum']) is int\n"
+    }
+  },
+  {
+    "id": "validation-log-cli",
+    "split": "validation",
+    "family": "python-cli",
+    "goal": "main.py는 --input NDJSON 파일과 --min-level을 받아 threshold 이상인 record를 원본 순서와 모든 field 그대로 NDJSON으로 출력해야 해. 심각도는 DEBUG < INFO < WARN < ERROR이며 문자열 사전순이 아니야. 빈 줄은 무시하고 unknown level이 있으면 stdout 없이 stderr를 쓰고 exit code 2로 끝내야 해. 먼저 python3 -B test_visible.py의 실패를 관찰하고 main.py만 고쳐줘. test_visible.py와 입력 데이터는 바꾸지 마. 수정 후 python3 -B test_visible.py를 다시 실행해.",
+    "files": {
+      "main.py": "import argparse,json,sys\np=argparse.ArgumentParser()\np.add_argument(\"--input\",required=True)\np.add_argument(\"--min-level\",choices=[\"DEBUG\",\"INFO\",\"WARN\",\"ERROR\"],required=True)\na=p.parse_args()\nrows=[json.loads(line) for line in open(a.input) if line.strip()]\nif any(r[\"level\"] not in [\"DEBUG\",\"INFO\",\"WARN\",\"ERROR\"] for r in rows):\n print(\"unknown level\",file=sys.stderr);sys.exit(2)\nfor row in rows:\n if row[\"level\"]>=a.min_level:print(json.dumps(row))\n",
+      "test_visible.py": "import subprocess,sys,json\nr=subprocess.run([sys.executable,\"-B\",\"main.py\",\"--input\",\"logs.ndjson\",\"--min-level\",\"WARN\"],capture_output=True,text=True)\nassert r.returncode==0\nassert [json.loads(s)[\"level\"] for s in r.stdout.splitlines()]==[\"ERROR\",\"WARN\"]\n",
+      "logs.ndjson": "{\"level\":\"INFO\",\"message\":\"start\"}\n{\"level\":\"ERROR\",\"message\":\"failed\"}\n\n{\"level\":\"WARN\",\"message\":\"slow\"}\n{\"level\":\"DEBUG\",\"message\":\"detail\"}\n"
+    },
+    "writable": [
+      "main.py"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile\np=Path(sys.argv[1])\nlevels=['DEBUG','INFO','WARN','ERROR']\nrows=[{'level':level,'message':str(index)} for index,level in enumerate(['WARN','DEBUG','ERROR','INFO','ERROR'])]\nfixture=p/'hidden-log.ndjson'\nfixture.write_text('\\n'.join(json.dumps(row) for row in rows)+'\\n')\nfor minimum in levels:\n r=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--input',str(fixture),'--min-level',minimum],cwd=p,capture_output=True,text=True)\n assert r.returncode==0\n assert [json.loads(s) for s in r.stdout.splitlines()]==[row for row in rows if levels.index(row['level'])>=levels.index(minimum)]\nfixture.write_text('{\"level\":\"TRACE\",\"message\":\"unknown\"}\\n')\nr=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--input',str(fixture),'--min-level','DEBUG'],cwd=p,capture_output=True,text=True)\nassert r.returncode==2 and r.stderr and not r.stdout\n"
+    }
+  }
+]

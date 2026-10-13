@@ -1,0 +1,77 @@
+[
+  {
+    "id": "design-text-metadata",
+    "split": "design",
+    "family": "artifact",
+    "goal": "input.txt를 읽어 공백을 제외한 내용이 있는 line 개수 nonempty_lines와 UTF-8 byte 길이 utf8_bytes를 metadata.json object로 저장해줘. input.txt는 바꾸지 마.",
+    "files": {
+      "input.txt": "first line\n\n한글 second line\n  \n"
+    },
+    "writable": [
+      "metadata.json"
+    ],
+    "generated_dirs": [],
+    "executables": [],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile,statistics,base64\np=Path(sys.argv[1])\ns=(p/'input.txt').read_text()\nexpected={'nonempty_lines':sum(bool(x.strip()) for x in s.splitlines()),'utf8_bytes':len(s.encode('utf-8'))}\nassert json.loads((p/'metadata.json').read_text())==expected\n"
+    }
+  },
+  {
+    "id": "design-median-cli",
+    "split": "design",
+    "family": "cli-repair",
+    "goal": "main.py의 --values comma-separated 실수 목록에서 median을 구하도록 수정해줘. 짝수 개는 가운데 두 값 평균이며 홀수 개는 중앙값이야. 빈 입력은 stdout 없이 stderr와 exit 2여야 해. python3 -B test_visible.py로 먼저 실패를 관찰하고 수정 뒤 같은 명령을 실행해줘. main.py만 수정해.",
+    "files": {
+      "main.py": "import argparse,json,sys\np=argparse.ArgumentParser();p.add_argument('--values',required=True);a=p.parse_args()\ntry:\n values=sorted(float(x) for x in a.values.split(','))\n if not values: raise ValueError('empty')\nexcept ValueError:\n print('invalid values',file=sys.stderr);sys.exit(2)\nprint(json.dumps({'median':values[len(values)//2]}))\n",
+      "test_visible.py": "import subprocess,sys,json\nr=subprocess.run([sys.executable,'-B','main.py','--values=1,2,3,4'],capture_output=True,text=True)\nassert r.returncode==0,r.stderr\nassert json.loads(r.stdout)=={'median':2.5}\n"
+    },
+    "writable": [
+      "main.py"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile,statistics,base64\np=Path(sys.argv[1])\nfor values in ([1,2,3,4],[-8,-2],[-3,2,7],[4,4,9,9],[0]):\n r=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--values='+','.join(map(str,values))],cwd=p,capture_output=True,text=True)\n assert r.returncode==0,r.stderr\n assert json.loads(r.stdout)=={'median':statistics.median(values)}\nr=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--values='],cwd=p,capture_output=True,text=True)\nassert r.returncode==2 and not r.stdout.strip() and r.stderr.strip()\n"
+    }
+  },
+  {
+    "id": "validation-chunk-decoding",
+    "split": "validation",
+    "family": "artifact",
+    "goal": "chunks.json의 chunks 배열의 각 Base64 string을 순서대로 decode해서 합쳐줘. decoded.json에 소문자 hex 문자열 hex와 전체 byte 길이 bytes를 저장해줘. 빈 chunk도 허용하고 input 파일은 바꾸지 마.",
+    "files": {
+      "chunks.json": "{\"chunks\": [\"YQ==\", \"\", \"AP8=\", \"aGVsbG8=\"]}\n"
+    },
+    "writable": [
+      "decoded.json"
+    ],
+    "generated_dirs": [],
+    "executables": [],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile,statistics,base64\np=Path(sys.argv[1])\ndoc=json.loads((p/'chunks.json').read_text())\nraw=b''.join(base64.b64decode(x,validate=True) for x in doc['chunks'])\nassert json.loads((p/'decoded.json').read_text())=={'hex':raw.hex(),'bytes':len(raw)}\n"
+    }
+  },
+  {
+    "id": "validation-stable-unique-cli",
+    "split": "validation",
+    "family": "cli-repair",
+    "goal": "main.py의 --input JSON string 배열에서 첫 등장 순서를 보존해 중복을 제거하도록 수정해줘. stdout은 {\"values\":배열,\"count\":길이} object야. 빈 문자열과 Unicode는 보존하고 string 배열이 아닌 입력은 stdout 없이 stderr와 exit 2여야 해. 먼저 python3 -B test_visible.py 실패를 관찰한 뒤 main.py만 수정하고 같은 명령을 다시 실행해줘.",
+    "files": {
+      "main.py": "import argparse,json,sys\np=argparse.ArgumentParser();p.add_argument('--input',required=True);a=p.parse_args()\ntry:\n values=json.load(open(a.input,encoding='utf-8'))\n if not isinstance(values,list) or any(not isinstance(x,str) for x in values): raise ValueError('strings required')\nexcept (ValueError,OSError):\n print('invalid input',file=sys.stderr);sys.exit(2)\nresult=sorted(set(values))\nprint(json.dumps({'values':result,'count':len(result)},ensure_ascii=False))\n",
+      "test_visible.py": "import subprocess,sys,json\nr=subprocess.run([sys.executable,'-B','main.py','--input','values.json'],capture_output=True,text=True)\nassert r.returncode==0,r.stderr\nassert json.loads(r.stdout)=={'values':['b','a','c'],'count':3}\n",
+      "values.json": "[\"b\", \"a\", \"b\", \"c\"]\n"
+    },
+    "writable": [
+      "main.py"
+    ],
+    "generated_dirs": [],
+    "executables": [
+      "python3"
+    ],
+    "oracle": {
+      "python": "from pathlib import Path\nimport json,sys,subprocess,tempfile,statistics,base64\np=Path(sys.argv[1])\nfor values in (['b','a','b','c'],['가','나','가'],[],['','x',''],['z','z','y','z']):\n path=p/'oracle-input.json';path.write_text(json.dumps(values,ensure_ascii=False))\n r=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--input',str(path)],cwd=p,capture_output=True,text=True)\n assert r.returncode==0,r.stderr\n expected=list(dict.fromkeys(values))\n assert json.loads(r.stdout)=={'values':expected,'count':len(expected)}\npath=p/'oracle-input.json';path.write_text('[1,\"text\"]')\nr=subprocess.run([sys.executable,'-I','-B',str(p/'main.py'),'--input',str(path)],cwd=p,capture_output=True,text=True)\nassert r.returncode==2 and not r.stdout.strip() and r.stderr.strip()\n"
+    }
+  }
+]

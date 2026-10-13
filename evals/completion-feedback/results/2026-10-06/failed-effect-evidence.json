@@ -1,0 +1,22 @@
+[
+  {
+    "trial": "0002-validation-codepoint-reverse-1-F1",
+    "effect_id": "effect-04092b0274a79b78fd8b6ae5639049b63a84bf206bdbe01e16ec352e20aeaa0a",
+    "arguments": {
+      "content": "{\"reversed\":[\"́e\",\"나가\",\"b a\",\"\",\"x𠮷\"]}\n",
+      "expectedDigest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  },
+  {
+    "trial": "0010-validation-codepoint-reverse-0-F1",
+    "effect_id": "effect-b957b9e0cf284c3d34cfd349e8239dc2f22c606932bc6a7b1086f024aa8195e2",
+    "arguments": {
+      "content": "{\"reversed\":[\"́e\",\"나가\",\"b a\",\"\",\"x𠮷\"]}\n",
+      "expectedDigest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+      "path": "workspace:primary/result.json"
+    },
+    "receipt_digest": "sha256:c29d13c32f75610b4bc4e9ce2b848a8d7ffcfdd4280a9e2805ea28f4229b2197"
+  }
+]

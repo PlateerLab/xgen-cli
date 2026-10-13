@@ -1,0 +1,297 @@
+{
+  "paired_blocks": [
+    {
+      "case": "design-unicode-ordinals",
+      "repeat": 0,
+      "D0_accepted": false,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 2,
+      "cost_comparison_minus_baseline_nano_usd": 589890
+    },
+    {
+      "case": "design-unicode-ordinals",
+      "repeat": 1,
+      "D0_accepted": false,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 2,
+      "cost_comparison_minus_baseline_nano_usd": 629238
+    },
+    {
+      "case": "design-window-extrema",
+      "repeat": 0,
+      "D0_accepted": true,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": -1,
+      "cost_comparison_minus_baseline_nano_usd": -330252
+    },
+    {
+      "case": "design-window-extrema",
+      "repeat": 1,
+      "D0_accepted": true,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": -1,
+      "cost_comparison_minus_baseline_nano_usd": -419700
+    },
+    {
+      "case": "validation-ascii-case-flip",
+      "repeat": 0,
+      "D0_accepted": true,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 0,
+      "cost_comparison_minus_baseline_nano_usd": 5802
+    },
+    {
+      "case": "validation-ascii-case-flip",
+      "repeat": 1,
+      "D0_accepted": true,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 0,
+      "cost_comparison_minus_baseline_nano_usd": 43800
+    },
+    {
+      "case": "validation-integer-runs",
+      "repeat": 0,
+      "D0_accepted": false,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 2,
+      "cost_comparison_minus_baseline_nano_usd": 694086
+    },
+    {
+      "case": "validation-integer-runs",
+      "repeat": 1,
+      "D0_accepted": false,
+      "D1_accepted": true,
+      "calls_comparison_minus_baseline": 2,
+      "cost_comparison_minus_baseline_nano_usd": 646788
+    }
+  ],
+  "checks": {
+    "registered_sources_match": true,
+    "registered_inputs_match": true,
+    "schedule_matches_registration": true,
+    "source_unchanged": true,
+    "binary_matches_registration": true,
+    "independent_cost_audit": true,
+    "no_duplicate_effect_starts": true,
+    "relational_authorization_and_receipts": true,
+    "no_evidence_errors": true
+  },
+  "audit_passed": true,
+  "groups": {
+    "all/D0": {
+      "trials": 8,
+      "task_success": 4,
+      "accepted": 4,
+      "reported_completion": 4,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 4,
+      "gate_rejections": {},
+      "model_calls": 35,
+      "cost_nano_usd": 8741124,
+      "median_elapsed_seconds": 4.949177558009978
+    },
+    "design/D0": {
+      "trials": 4,
+      "task_success": 2,
+      "accepted": 2,
+      "reported_completion": 2,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 2,
+      "gate_rejections": {},
+      "model_calls": 18,
+      "cost_nano_usd": 4523970,
+      "median_elapsed_seconds": 5.800391590513755
+    },
+    "validation/D0": {
+      "trials": 4,
+      "task_success": 2,
+      "accepted": 2,
+      "reported_completion": 2,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 2,
+      "gate_rejections": {},
+      "model_calls": 17,
+      "cost_nano_usd": 4217154,
+      "median_elapsed_seconds": 4.872809739026707
+    },
+    "all/D1": {
+      "trials": 8,
+      "task_success": 8,
+      "accepted": 8,
+      "reported_completion": 8,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 8,
+      "gate_rejections": {},
+      "model_calls": 41,
+      "cost_nano_usd": 10600776,
+      "median_elapsed_seconds": 6.340125085029285
+    },
+    "design/D1": {
+      "trials": 4,
+      "task_success": 4,
+      "accepted": 4,
+      "reported_completion": 4,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 4,
+      "gate_rejections": {},
+      "model_calls": 20,
+      "cost_nano_usd": 4993146,
+      "median_elapsed_seconds": 6.053783144976478
+    },
+    "validation/D1": {
+      "trials": 4,
+      "task_success": 4,
+      "accepted": 4,
+      "reported_completion": 4,
+      "false_completion": 0,
+      "verified_recovery_and_task_success": 4,
+      "gate_rejections": {},
+      "model_calls": 21,
+      "cost_nano_usd": 5607630,
+      "median_elapsed_seconds": 6.62914370658109
+    }
+  },
+  "cost_audit": {
+    "passed": true,
+    "errors": [],
+    "upstream_attempts": 76,
+    "settlements": 76,
+    "known_cost_nano_usd": 19341900,
+    "all_miss_nano_usd": 93665100,
+    "http_statuses": {
+      "200": 76
+    },
+    "scope": "recomputed registered quote from retained usage; no provider invoice reconciliation"
+  },
+  "journal_audits": [
+    {
+      "trial": "0000-design-unicode-ordinals-0-D0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0001-design-unicode-ordinals-0-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0002-validation-integer-runs-0-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0003-validation-integer-runs-0-D0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0004-validation-ascii-case-flip-0-D0",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0005-validation-ascii-case-flip-0-D1",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0006-validation-ascii-case-flip-1-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0007-validation-ascii-case-flip-1-D0",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0008-design-window-extrema-1-D0",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0009-design-window-extrema-1-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0010-validation-integer-runs-1-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0011-validation-integer-runs-1-D0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0012-design-unicode-ordinals-1-D0",
+      "passed": true,
+      "effect_starts": 3,
+      "failed_effects": 1,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0013-design-unicode-ordinals-1-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0014-design-window-extrema-0-D1",
+      "passed": true,
+      "effect_starts": 4,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    },
+    {
+      "trial": "0015-design-window-extrema-0-D0",
+      "passed": true,
+      "effect_starts": 5,
+      "failed_effects": 0,
+      "errors": [],
+      "scope": "relational journal and sidecar bindings; no independent digest/signature recomputation or OS sandbox proof"
+    }
+  ],
+  "interpretation": "Descriptive paired pilot; treatment is defined by the frozen registration. Failed effects require prior authorization and retained material, durable failure with matching step, and absence of successful output/Receipt. Failure evidence digest contents and journal hashes are not independently recomputed. No default-adoption or statistical-significance claim."
+}

@@ -33,9 +33,27 @@ struct RunManifestRecord {
     local_execution_profile_digest: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     process_fingerprints: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    tool_discovery_snapshots: crate::graph_discovery::Snapshots,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    http_read_connections: crate::http_read::Connections,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    final_response_schema: Option<SavedFinalResponseSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completion_checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+struct SavedFinalResponseSchema(serde_json::Value);
+
+impl std::fmt::Debug for SavedFinalResponseSchema {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("<redacted final response schema>")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,8 +162,12 @@ impl RunManifest {
             allow_file_catalog_digest: allow_file_catalog_digest.to_owned(),
             local_execution_profile_digest: local_execution_profile_digest.to_owned(),
             process_fingerprints: None,
+            tool_discovery_snapshots: crate::graph_discovery::Snapshots::new(),
+            http_read_connections: crate::http_read::Connections::new(),
             budget,
             conversation_responses: false,
+            final_response_schema: None,
+            completion_checks: None,
         };
         validate_record(&record)?;
         let record_digest = digest_record(&record)?;
@@ -153,6 +175,64 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_http_read_connections(
+        mut self,
+        connections: crate::http_read::Connections,
+    ) -> Result<Self, ManifestError> {
+        self.record.http_read_connections = connections;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+    pub(crate) fn http_read_connections(&self) -> &crate::http_read::Connections {
+        &self.record.http_read_connections
+    }
+
+    pub(crate) fn with_tool_discovery_snapshots(
+        mut self,
+        snapshots: crate::graph_discovery::Snapshots,
+    ) -> Result<Self, ManifestError> {
+        self.record.tool_discovery_snapshots = snapshots;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn tool_discovery_snapshots(&self) -> &crate::graph_discovery::Snapshots {
+        &self.record.tool_discovery_snapshots
+    }
+
+    pub(crate) fn with_final_response_schema(
+        mut self,
+        schema: Option<serde_json::Value>,
+    ) -> Result<Self, ManifestError> {
+        self.record.final_response_schema = schema.map(SavedFinalResponseSchema);
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn with_completion_checks(
+        mut self,
+        checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
+    ) -> Result<Self, ManifestError> {
+        self.record.completion_checks = checks;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn completion_checks(&self) -> Option<&[xgen_provider_openai::CompletionCheck]> {
+        self.record.completion_checks.as_deref()
+    }
+
+    pub(crate) fn final_response_schema(&self) -> Option<&serde_json::Value> {
+        self.record
+            .final_response_schema
+            .as_ref()
+            .map(|schema| &schema.0)
     }
 
     pub(crate) fn with_conversation_responses(mut self) -> Result<Self, ManifestError> {
@@ -275,6 +355,20 @@ pub(crate) enum ManifestError {
 }
 
 fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
+    if let Some(schema) = &record.final_response_schema {
+        let encoded = serde_jcs::to_string(schema).map_err(|_| ManifestError::Invalid)?;
+        xgen_provider_openai::parse_completion_schema(&encoded)
+            .map_err(|_| ManifestError::Invalid)?;
+    }
+    if let Some(checks) = &record.completion_checks {
+        let schema = record
+            .final_response_schema
+            .as_ref()
+            .ok_or(ManifestError::Invalid)?;
+        let contract = serde_json::json!({"response_schema":schema.0,"checks":checks});
+        xgen_provider_openai::parse_completion_contract(&contract.to_string())
+            .map_err(|_| ManifestError::Invalid)?;
+    }
     if record.process_fingerprints.as_ref().is_some_and(|items| {
         items.len() > 128
             || items.iter().any(|(key, value)| {
@@ -286,7 +380,13 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     }) {
         return Err(ManifestError::Invalid);
     }
-    if record.format_version != MANIFEST_FORMAT_VERSION
+    if !crate::http_read::valid_connections(&record.http_read_connections)
+        || record
+            .http_read_connections
+            .keys()
+            .any(|name| !record.tool_discovery_snapshots.contains_key(name))
+        || !crate::graph_discovery::valid_snapshots(&record.tool_discovery_snapshots)
+        || record.format_version != MANIFEST_FORMAT_VERSION
         || !valid_run_id(&record.run_id)
         || WorkspaceId::new(&record.workspace_id).is_err()
         || !valid_identifier(&record.workspace_root_identity_profile, 128)
@@ -398,6 +498,66 @@ mod tests {
     }
 
     #[test]
+    fn discovery_snapshots_are_durable_and_manifest_bound() {
+        let legacy = fixture();
+        assert!(legacy.tool_discovery_snapshots().is_empty());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("toolDiscoverySnapshots")
+        );
+        let bound = legacy
+            .clone()
+            .with_tool_discovery_snapshots(crate::graph_discovery::Snapshots::from([
+                ("assets".into(), "a".repeat(64)),
+                ("calendar".into(), "b".repeat(64)),
+            ]))
+            .unwrap();
+        assert_ne!(legacy.authority(), bound.authority());
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap()).unwrap(),
+            bound
+        );
+        for collection in ["assets", "calendar"] {
+            let mut tampered: Value = serde_json::from_slice(&bound.to_bytes().unwrap()).unwrap();
+            tampered["record"]["toolDiscoverySnapshots"][collection] =
+                Value::String("c".repeat(64));
+            assert!(RunManifest::from_bytes(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        }
+    }
+
+    #[test]
+    fn http_connections_are_optional_pinned_and_not_credentials() {
+        let legacy = fixture();
+        assert!(legacy.http_read_connections().is_empty());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("httpReadConnections")
+        );
+        let connection = serde_json::from_value(serde_json::json!({"format_version":1,"base_url":"https://example.test/api","allow_get":true,"bearer_env":"FIXTURE_TOKEN","credential_ref":null})).unwrap();
+        let bound = legacy
+            .with_tool_discovery_snapshots(crate::graph_discovery::Snapshots::from([(
+                "sample".into(),
+                "a".repeat(64),
+            )]))
+            .unwrap()
+            .with_http_read_connections(crate::http_read::Connections::from([(
+                "sample".into(),
+                connection,
+            )]))
+            .unwrap();
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap()).unwrap(),
+            bound
+        );
+        let mut value: Value = serde_json::from_slice(&bound.to_bytes().unwrap()).unwrap();
+        value["record"]["httpReadConnections"]["sample"]["base_url"] =
+            Value::String("https://example.test/changed".into());
+        assert!(RunManifest::from_bytes(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+
+    #[test]
     fn optional_diagnostics_keep_legacy_manifests_and_bind_new_hashes() {
         let legacy = fixture();
         assert!(legacy.process_fingerprints().is_none());
@@ -427,6 +587,68 @@ mod tests {
         assert_eq!(loaded, manifest);
         assert!(loaded.authority().starts_with(AUTHORITY_PREFIX));
         assert_eq!(loaded.authority().len(), AUTHORITY_PREFIX.len() + 64);
+    }
+
+    #[test]
+    fn final_response_schema_is_bound_redacted_and_omitted_for_legacy_records() {
+        let original = fixture();
+        assert!(
+            !String::from_utf8(original.to_bytes().unwrap())
+                .unwrap()
+                .contains("finalResponseSchema")
+        );
+        let schema = serde_json::json!({"type":"object","properties":{"label":{"type":"string","enum":["SCHEMA-SENTINEL"]}},"required":["label"],"additionalProperties":false});
+        let bound = original
+            .clone()
+            .with_final_response_schema(Some(schema.clone()))
+            .unwrap();
+        assert_ne!(bound.authority(), original.authority());
+        assert!(!format!("{bound:?}").contains("SCHEMA-SENTINEL"));
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap())
+                .unwrap()
+                .final_response_schema(),
+            Some(&schema)
+        );
+        assert!(
+            original
+                .with_final_response_schema(Some(serde_json::json!({"type":"array"})))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn completion_checks_are_manifest_bound_and_require_a_saved_schema() {
+        use xgen_provider_openai::CompletionCheck;
+        let check = CompletionCheck {
+            id: "result".into(),
+            argv: vec!["verify".into()],
+        };
+        assert!(
+            fixture()
+                .with_completion_checks(Some(vec![check.clone()]))
+                .is_err()
+        );
+        let base = fixture()
+            .with_final_response_schema(Some(serde_json::json!({"type":"object"})))
+            .unwrap();
+        assert!(
+            !String::from_utf8(base.to_bytes().unwrap())
+                .unwrap()
+                .contains("completionChecks")
+        );
+        let bound = base
+            .clone()
+            .with_completion_checks(Some(vec![check.clone()]))
+            .unwrap();
+        assert_ne!(base.authority(), bound.authority());
+        assert_eq!(
+            RunManifest::from_bytes(&bound.to_bytes().unwrap())
+                .unwrap()
+                .completion_checks(),
+            Some([check].as_slice())
+        );
+        assert!(base.with_completion_checks(Some(Vec::new())).is_err());
     }
 
     #[test]

@@ -121,3 +121,7 @@ Runner는 실행 전에 fixture/config/binary/source hash를 freeze하고 각 tr
 ## 단계 1 실행 결과
 
 [구현·결과 기록](../development/planning-boundary-probe-2026-10-05.md)을 참고해. Design 400회와 동일 코드·binary의 validation 400회에서 contract는 통과했어. 자동 완료 240회와 명시적 model-call abandon 뒤 완료 80회를 구분했고, 나머지 미완료 조건을 완료 성공에 넣지 않았어. 실제 모델 비용 gate는 UNKNOWN이며 planner policy·engine 구조를 변경하지 않아.
+
+## 단계 2 구현 전 조사
+
+[실제 모델 pilot 조사](2026-10-05-planning-size-model-pilot-research.md)에서 constrained provider prompt의 한 Step 제한과 cache·시간대 단가의 측정 문제를 확인했어. X1/XN 공통 평가 prompt·schema·상한을 먼저 profile에 결합해야 해. X0는 기존 profile reference로 유지해. Fixture·전체 비용 한도와 config는 아직 고정하지 않았고 실제 모델 pilot은 NOT_RUN이야.

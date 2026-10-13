@@ -34,6 +34,12 @@ pub(crate) const TERMINAL_RECIPE_DOMAIN: &str = "xgen.cli.terminal-recipe/v1";
 pub(crate) const TERMINAL_RECIPE_FORMAT_VERSION: u32 = 1;
 pub(crate) const MAX_RECIPE_BYTES: usize = 512 * 1024;
 
+const DISCOVERY_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
+    domain: "xgen.cli.tool-discovery-recipe/v1",
+    format_version: 1,
+    provider_id: crate::graph_discovery::PROVIDER,
+};
+
 const WORKSPACE_RECIPE_PROFILE: RecipeProfile = RecipeProfile {
     domain: WORKSPACE_READ_RECIPE_DOMAIN,
     format_version: WORKSPACE_READ_RECIPE_FORMAT_VERSION,
@@ -97,9 +103,32 @@ impl RunMaterialCatalog {
         path: &Path,
         run_id: &str,
     ) -> Result<Self, RunMaterialCatalogError> {
+        Self::open_existing_mode(path, run_id, false)
+    }
+
+    pub(crate) fn open_existing_read_only(
+        path: &Path,
+        run_id: &str,
+    ) -> Result<Self, RunMaterialCatalogError> {
+        Self::open_existing_mode(path, run_id, true)
+    }
+
+    fn open_existing_mode(
+        path: &Path,
+        run_id: &str,
+        read_only: bool,
+    ) -> Result<Self, RunMaterialCatalogError> {
         validate_run_id(run_id)?;
         validate_existing_file(path)?;
-        let connection = open_connection(path)?;
+        let connection = if read_only {
+            Connection::open_with_flags(
+                path,
+                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )
+            .map_err(|_| RunMaterialCatalogError::Unavailable)?
+        } else {
+            open_connection(path)?
+        };
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| RunMaterialCatalogError::Integrity)?;
@@ -208,6 +237,30 @@ impl RunMaterialCatalog {
             .map_err(|_| PlanMaterializerFailure::PersistenceFailed)?;
         ReconstructableMaterialReference::new(profile.provider_id, reference_id, revision)
             .map_err(|_| PlanMaterializerFailure::PersistenceFailed)
+    }
+
+    pub(crate) fn process_arguments(
+        &self,
+        reference: &ReconstructableMaterialReference,
+        step_id: &str,
+        material_digest: &str,
+    ) -> Result<Value, MaterialProviderFailure> {
+        if reference.provider_id() != PROCESS_MATERIAL_PROVIDER_ID {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        let record = self.reconstruct_record_with_profile(
+            reference.reference_id(),
+            reference.revision(),
+            PROCESS_RECIPE_PROFILE,
+        )?;
+        if record.step_id != step_id
+            || record.material_digest != material_digest
+            || record.capability.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
+            || record.capability.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
+        {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        Ok(record.arguments)
     }
 
     fn reconstruct_record(
@@ -342,6 +395,48 @@ impl InvocationMaterialProvider for WorkspaceReadMaterialProvider {
         if !self
             .authorization
             .authorizes_material(&record.capability, &record.arguments)
+        {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        Ok(record.arguments)
+    }
+}
+
+pub(crate) struct DiscoveryMaterial {
+    pub(crate) discovery: crate::graph_discovery::DiscoveryCatalog,
+    pub(crate) catalog: RunMaterialCatalog,
+}
+
+impl PlanMaterializer for DiscoveryMaterial {
+    fn materialize(
+        &mut self,
+        request: PlanMaterializationRequest<'_>,
+    ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure> {
+        if !self
+            .discovery
+            .accepts(request.capability(), request.normalized_arguments())
+        {
+            return Err(PlanMaterializerFailure::Rejected);
+        }
+        self.catalog
+            .persist_request_with_profile(&request, DISCOVERY_RECIPE_PROFILE)
+    }
+}
+
+impl InvocationMaterialProvider for DiscoveryMaterial {
+    fn reconstruct(
+        &mut self,
+        reference_id: &str,
+        revision: &str,
+    ) -> Result<Value, MaterialProviderFailure> {
+        let record = self.catalog.reconstruct_record_with_profile(
+            reference_id,
+            revision,
+            DISCOVERY_RECIPE_PROFILE,
+        )?;
+        if !self
+            .discovery
+            .accepts(&record.capability, &record.arguments)
         {
             return Err(MaterialProviderFailure::RevisionChanged);
         }
@@ -720,6 +815,64 @@ mod tests {
                 .unwrap_err(),
             MaterialProviderFailure::RevisionChanged
         );
+    }
+
+    #[test]
+    fn receipt_projection_rejects_missing_or_differently_bound_process_recipes() {
+        for arguments in [
+            serde_json::json!({"executable":"process:primary/executables/python3","args":["-B","check.py"]}),
+            serde_json::json!({"executable":"process:primary/executables/helper","args":["7","Unicode 日本語"]}),
+        ] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("materials.sqlite3");
+            RunMaterialCatalog::create(&path, RUN_ID).unwrap();
+            let mut writable = RunMaterialCatalog::open_existing(&path, RUN_ID).unwrap();
+            let input = process_record(arguments);
+            let reference = writable
+                .persist_record_with_profile(&input, PROCESS_RECIPE_PROFILE)
+                .unwrap();
+            let readonly = RunMaterialCatalog::open_existing_read_only(&path, RUN_ID).unwrap();
+            assert_eq!(
+                readonly
+                    .process_arguments(&reference, &input.step_id, &input.material_digest)
+                    .unwrap(),
+                input.arguments
+            );
+            assert!(
+                readonly
+                    .process_arguments(&reference, "wrong-step", &input.material_digest)
+                    .is_err()
+            );
+            assert!(
+                readonly
+                    .process_arguments(&reference, &input.step_id, "wrong-digest")
+                    .is_err()
+            );
+            writable
+                .connection
+                .execute(
+                    "UPDATE material_recipe SET record=?1 WHERE reference_id=?2",
+                    params![b"{}".as_slice(), reference.reference_id()],
+                )
+                .unwrap();
+            assert!(
+                readonly
+                    .process_arguments(&reference, &input.step_id, &input.material_digest)
+                    .is_err()
+            );
+            writable
+                .connection
+                .execute(
+                    "DELETE FROM material_recipe WHERE reference_id=?1",
+                    params![reference.reference_id()],
+                )
+                .unwrap();
+            assert!(
+                readonly
+                    .process_arguments(&reference, &input.step_id, &input.material_digest)
+                    .is_err()
+            );
+        }
     }
 
     #[test]

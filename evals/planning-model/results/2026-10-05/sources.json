@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-05",
+  "official_snapshots": [
+    {
+      "name": "pricing",
+      "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "sha256": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2",
+      "bytes": 23982
+    },
+    {
+      "name": "chat",
+      "url": "https://api-docs.deepseek.com/api/create-chat-completion/",
+      "sha256": "e7133a7c2a7c2662567cca2e2392b503f97c2fb583009ff85f878744e0a36ba7",
+      "bytes": 142966
+    },
+    {
+      "name": "models",
+      "url": "https://api-docs.deepseek.com/api/list-models/",
+      "sha256": "41551c3c498a93b6e6459eaeee89829940ca8acf999b24436a38a2231c7e091b",
+      "bytes": 39323
+    }
+  ],
+  "advertised_models": [
+    "deepseek-flash",
+    "deepseek-v4-pro"
+  ],
+  "quote_window_basis": "UTC 10:00-24:00 is outside weekday peak windows; no holiday inference needed"
+}

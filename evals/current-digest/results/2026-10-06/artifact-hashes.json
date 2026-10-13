@@ -1,0 +1,16 @@
+{
+  "analysis.json": "48db819ff667211709a6f05bcb7321e7c52cae7d89c01655f6cb043852497399",
+  "analyze-completion-gate.py": "8c992d6b0f9c3ea351b9ba38c68efd829bc27bb1605ee0a6ae7212f38bc8db76",
+  "analyze-planning-pilot.py": "f446f051871bab3434c498194ca74ce77969d7434bead4bd9cbc9b2fa7d7e81d",
+  "audit-current-digest.py": "52909267c97a34bf59ebb67cb9cfbba680a03b5c26ffac9bb57b8ffdd38da422",
+  "check-json-result.py": "0cad6fcd17236567ba668ed84aa01e7c03cf83cb0b2a1956866ab38af3358911",
+  "cost-ledger.jsonl": "d99c9405181820c511e24df27b15707236e64246fb61727f649f10460a5c81d5",
+  "diagnostic-evidence.json": "2c2c950317db4be9d1e5c1bce576a07a07920310021c674b50854056c4e1b185",
+  "evaluate-planning-model.py": "830274e988087ab030be8cec5526900930a92eab825958a4632d4dbbcd2e3674",
+  "failed-effect-evidence.json": "9c36386af43adfb08ed7ed5710748807d066136f3140694c8f0100bb0606c725",
+  "manifest.json": "69a550f95dc0acd5dcf6b9c7271483853f5989f3a8e8ccf25cef8a57031c4e93",
+  "pricing.html": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2",
+  "snapshot-audit.json": "662e9b549fe90db8bf598399a2170adce7a95197497865fa804a4b8c6c0fb103",
+  "summary.json": "68df8e5d2d06522a5e60124ed6eb4aec7a07c90bdb21e7280f3ce4c90bbce458",
+  "trials.jsonl": "32762ea365133d1b2ba076b2791a0d14d3a75ecaa54ea20afc8add9afebea5e1"
+}

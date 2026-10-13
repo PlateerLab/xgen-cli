@@ -1,0 +1,10 @@
+{
+  "analysis.json": "6fdf9598e417520a4f98524eee0d4f7a1c65cfafa93ac6cbebf0f1bbccbc2c26",
+  "analyze-completion-gate.py": "3c584fec0ab8964a7bd960569af1bf08ca2de0ad64155318db17282743494662",
+  "analyze-planning-pilot.py": "f446f051871bab3434c498194ca74ce77969d7434bead4bd9cbc9b2fa7d7e81d",
+  "cost-ledger.jsonl": "55f6bfe72c37e8cf1ab6e0503a7ec6d987900b99db537e4c0d0914665fb59b8f",
+  "manifest.json": "dac3612877b75236ac23cefef33ad856e303b33d9b4470a9eacd3df71b2a965e",
+  "runner.py": "7cf6e73af2f26fcd297df44c39067810fcd044289c8f5d3fcd0ae95cfaf09c8d",
+  "summary.json": "622252ca26f9e8d4809c3463ce8ead477e434103ad4b79dd0e42217ebc711dc3",
+  "trials.jsonl": "b936a89d216c291065db2a8e900fd13227481da6549b96fb4ac31064d6cca76f"
+}

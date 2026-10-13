@@ -1,0 +1,122 @@
+[
+  {
+    "case": "design-observed-settings",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 799398
+  },
+  {
+    "case": "design-observed-settings",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 809514
+  },
+  {
+    "case": "design-observed-settings",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 821298
+  },
+  {
+    "case": "design-half-open-range",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 6,
+    "cost_nano_usd": 2025180
+  },
+  {
+    "case": "design-half-open-range",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 6,
+    "cost_nano_usd": 1991466
+  },
+  {
+    "case": "design-half-open-range",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 3,
+    "cost_nano_usd": 1280262
+  },
+  {
+    "case": "design-adjacent-runs",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 6,
+    "cost_nano_usd": 2061900
+  },
+  {
+    "case": "design-adjacent-runs",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": false,
+    "false_claim": true,
+    "model_calls": 3,
+    "cost_nano_usd": 1334880
+  },
+  {
+    "case": "design-adjacent-runs",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 6,
+    "cost_nano_usd": 2121264
+  },
+  {
+    "case": "design-literal-bundle",
+    "condition": "XN",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 2,
+    "cost_nano_usd": 520014
+  },
+  {
+    "case": "design-literal-bundle",
+    "condition": "X1",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 832914
+  },
+  {
+    "case": "design-literal-bundle",
+    "condition": "X0",
+    "task_completed": true,
+    "oracle_passed": true,
+    "accepted": true,
+    "false_claim": false,
+    "model_calls": 4,
+    "cost_nano_usd": 841998
+  }
+]

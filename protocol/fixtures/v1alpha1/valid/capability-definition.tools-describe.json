@@ -1,0 +1,141 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgen.tools/describe",
+    "contractVersion": "2.0.0",
+    "displayName": "Inspect saved tool contract",
+    "labels": {
+      "xgeny.io/pack": "core-os"
+    }
+  },
+  "spec": {
+    "summary": "Retrieve a bounded discovery view with full-tool and HTTP contract digests. Omitted schemas remain host-validated; parameterOffset retrieves further input pages. This view is not a complete or executable contract.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "collection",
+        "tool"
+      ],
+      "properties": {
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "parameterOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "ok",
+        "collection",
+        "artifact_digest",
+        "backend_version",
+        "execution_enabled",
+        "request"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "backend_version": {
+          "const": "0.47.0"
+        },
+        "execution_enabled": {
+          "const": false
+        },
+        "request": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "required": [
+            "collection",
+            "tool"
+          ],
+          "properties": {
+            "collection": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "parameterOffset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "effect": {
+      "class": "read_only",
+      "resourceSelectors": [
+        {
+          "scope": "tools.discover",
+          "argumentPointer": "/collection"
+        }
+      ],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": [
+        "sync"
+      ],
+      "cancellable": false,
+      "idempotencyKeySupported": false,
+      "defaultTimeoutMs": 120000,
+      "maxTimeoutMs": 120000
+    },
+    "verification": [
+      {
+        "strategy": "output_schema",
+        "required": true
+      },
+      {
+        "strategy": "postcondition",
+        "required": true,
+        "description": "Output digest and immutable collection snapshot match the host binding."
+      }
+    ],
+    "discovery": {
+      "keywords": [
+        "tools",
+        "discovery",
+        "describe"
+      ],
+      "examples": [
+        "Find available candidate tools in a saved collection."
+      ]
+    }
+  }
+}

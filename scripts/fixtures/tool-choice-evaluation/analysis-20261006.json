@@ -1,0 +1,228 @@
+{
+  "statistics": {
+    "fixed": {
+      "positive_n": 32,
+      "primary_top5": 18,
+      "accepted_top5": 18,
+      "primary_correct": 16,
+      "accepted_correct": 16,
+      "conditional_n": 18,
+      "conditional_correct": 16,
+      "negative_n": 8,
+      "null_correct": 8,
+      "invalid": 0
+    },
+    "generated": {
+      "positive_n": 32,
+      "primary_top5": 26,
+      "accepted_top5": 26,
+      "primary_correct": 26,
+      "accepted_correct": 26,
+      "conditional_n": 26,
+      "conditional_correct": 26,
+      "negative_n": 8,
+      "null_correct": 8,
+      "invalid": 0
+    }
+  },
+  "paired": {
+    "regressed_recall": 2,
+    "recovered_recall": 10,
+    "same_query": 15,
+    "same_generated_candidates": 18,
+    "pairs": 20
+  },
+  "failures": [
+    {
+      "id": "gitea-branch-tip-en",
+      "repeat": 1,
+      "expected": "repoGetBranch",
+      "fixed_present": true,
+      "fixed_choice": null,
+      "generated_present": false,
+      "generated_choice": null,
+      "query": "get latest commit details for branch main in repository acme/notes"
+    },
+    {
+      "id": "wiremock-unused-stubs-en",
+      "repeat": 0,
+      "expected": "findUnmatchedStubMappings",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "findUnmatchedStubMappings",
+      "query": "wiremock find unmatched stub mappings no requests"
+    },
+    {
+      "id": "wiremock-near-misses-en",
+      "repeat": 0,
+      "expected": "retrieveNearMissesForUnmatchedRequests",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": false,
+      "generated_choice": null,
+      "query": "wiremock closest stub match received requests failed match"
+    },
+    {
+      "id": "wiremock-unused-stubs-en",
+      "repeat": 1,
+      "expected": "findUnmatchedStubMappings",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "findUnmatchedStubMappings",
+      "query": "wiremock find unmatched stub mappings no requests"
+    },
+    {
+      "id": "wiremock-unused-stubs-ko",
+      "repeat": 1,
+      "expected": "findUnmatchedStubMappings",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": true,
+      "generated_choice": "findUnmatchedStubMappings",
+      "query": "wiremock find stub mappings never matched requests"
+    },
+    {
+      "id": "wiremock-near-misses-en",
+      "repeat": 1,
+      "expected": "retrieveNearMissesForUnmatchedRequests",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": false,
+      "generated_choice": null,
+      "query": "wiremock closest stub match received requests failed match"
+    },
+    {
+      "id": "wiremock-near-misses-ko",
+      "repeat": 0,
+      "expected": "retrieveNearMissesForUnmatchedRequests",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": true,
+      "generated_choice": "retrieveNearMissesForUnmatchedRequests",
+      "query": "WireMock find nearest stub match for unmatched requests"
+    },
+    {
+      "id": "gitea-public-user-ko",
+      "repeat": 1,
+      "expected": "userGet",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "userGet",
+      "query": "get user public profile by username"
+    },
+    {
+      "id": "gitea-public-user-en",
+      "repeat": 1,
+      "expected": "userGet",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "userGet",
+      "query": "get user by username public profile"
+    },
+    {
+      "id": "wiremock-near-misses-ko",
+      "repeat": 1,
+      "expected": "retrieveNearMissesForUnmatchedRequests",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": true,
+      "generated_choice": "retrieveNearMissesForUnmatchedRequests",
+      "query": "WireMock find nearest stub match for unmatched requests"
+    },
+    {
+      "id": "gitea-branch-tip-ko",
+      "repeat": 1,
+      "expected": "repoGetBranch",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": false,
+      "generated_choice": "repoGetSingleCommit",
+      "query": "get latest commit on branch main repository acme/notes"
+    },
+    {
+      "id": "gitea-branch-tip-en",
+      "repeat": 0,
+      "expected": "repoGetBranch",
+      "fixed_present": true,
+      "fixed_choice": null,
+      "generated_present": false,
+      "generated_choice": null,
+      "query": "get latest commit details for branch main in repository acme/notes"
+    },
+    {
+      "id": "gitea-branch-tip-ko",
+      "repeat": 0,
+      "expected": "repoGetBranch",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": false,
+      "generated_choice": "repoGetSingleCommit",
+      "query": "get latest commit on branch main repository acme/notes"
+    },
+    {
+      "id": "gitea-public-user-ko",
+      "repeat": 0,
+      "expected": "userGet",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "userGet",
+      "query": "user profile riverdev"
+    },
+    {
+      "id": "gitea-public-user-en",
+      "repeat": 0,
+      "expected": "userGet",
+      "fixed_present": false,
+      "fixed_choice": null,
+      "generated_present": true,
+      "generated_choice": "userGet",
+      "query": "get user public profile by username"
+    },
+    {
+      "id": "wiremock-unused-stubs-ko",
+      "repeat": 0,
+      "expected": "findUnmatchedStubMappings",
+      "fixed_present": false,
+      "fixed_choice": "findUnmatchedRequests",
+      "generated_present": true,
+      "generated_choice": "findUnmatchedStubMappings",
+      "query": "wiremock find stub mappings never matched requests"
+    }
+  ],
+  "transport_receipts": {
+    "succeeded": 39
+  },
+  "median_call_seconds": {
+    "query": 0.5919034610269591,
+    "fixed": 0.6119450114783831,
+    "generated": 0.6241738185053691
+  },
+  "posthoc_sensitivity": {
+    "reason": "Branch-tip oracle omits repoGetSingleCommit accepting a git ref; frozen scores are unchanged. Exclude entire bilingual repeated intent from defect attribution only.",
+    "excluded_trials": 4,
+    "remaining_positive_trials": 28,
+    "distinct_positive_intents": 7,
+    "conditions": {
+      "fixed": {
+        "top5": 16,
+        "correct": 16,
+        "conditional_correct": 16,
+        "conditional_n": 16
+      },
+      "generated": {
+        "top5": 26,
+        "correct": 26,
+        "conditional_correct": 26,
+        "conditional_n": 26
+      }
+    }
+  },
+  "empty_candidate_cases": [
+    "gitea-unsupported-air-ko"
+  ]
+}

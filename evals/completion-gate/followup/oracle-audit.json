@@ -1,0 +1,22 @@
+[
+  {
+    "case": "design-parity-partition",
+    "missing_rejected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-bounded-clamp",
+    "missing_rejected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "design-utf8-prefix-offsets",
+    "missing_rejected": true,
+    "reference_checker_and_oracle_passed": true
+  },
+  {
+    "case": "validation-ascii-edge-trim",
+    "missing_rejected": true,
+    "reference_checker_and_oracle_passed": true
+  }
+]

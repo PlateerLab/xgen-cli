@@ -1,0 +1,213 @@
+{
+  "passed": true,
+  "trials": [
+    {
+      "trial": "0000-design-unicode-ordinals-0-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-fc7caabaa5c6f660fa11e4ea299045d947fa01f97757596940a244d9881364f1",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0001-design-unicode-ordinals-0-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-94b5ab9bb9793831611aacd4e7ebd13b4a4359477ba355b776ec127ce9c73f31",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0002-validation-integer-runs-0-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-d038a7ded666e907717b19d0f3540f3d04f93d011bba610ebeefd402bf22ed04",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0003-validation-integer-runs-0-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-22e993cbc527cab3afab8e05a3080947ede2368fe115e310398032bc17b11912",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0004-validation-ascii-case-flip-0-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-55637ecad7764e298fb4cdb5d8d9e7d77f52101186d681504fe896931dbe79a4",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0005-validation-ascii-case-flip-0-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-c5438549caf121db5ec72064a33ef6ef1686f916e56469ec225a1fdbd8c5723a",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0006-validation-ascii-case-flip-1-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-bc9da067e7c01913afe9056ccf181f5ac5883360effcd9118768c83ac10a067d",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0007-validation-ascii-case-flip-1-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-e62536bce407bffe4028ce525bb48bf3a5336afcf1965786be0cbe1db3a5fa91",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0008-design-window-extrema-1-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-9a9089e3f0b607c1fdc9cbef01ccbcb08e24af0a6aeba8db62909a55e760bba4",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0009-design-window-extrema-1-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-294bc5d10999e8df142fd6ead1f27d0abf784f9236be09705905dc05836b37d6",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0010-validation-integer-runs-1-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-ae37daf95d0ac52d3284dc41a7f6d642514779c824efc5b226f861a581095c0e",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0011-validation-integer-runs-1-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-8e20b25baeb5b9ec4db41134fa667b010e07f37d0fbe51bc4b6e50a10a2ebf81",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0012-design-unicode-ordinals-1-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-79e71660a5d86f3719cd3269e09d227f6f148b0e2b8cc973ea7b45366fdf0817",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0013-design-unicode-ordinals-1-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-6e7fb5d2ca6ab49a3d761d0f30f4b114cc1c78baf178751a8758faf3f5233651",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0014-design-window-extrema-0-D1",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-bc1b8b6396c03eeb2fe06aa2f87082cb3348dcfa995bc3087b1537c2ef9a8271",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": true
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    },
+    {
+      "trial": "0015-design-window-extrema-0-D0",
+      "passed": true,
+      "errors": [],
+      "observations": [
+        {
+          "effect_id": "effect-f06e4351fd3689d9866ccd3370b4a345b38f6fe70ad9d0c32a9aa4da03f8707f",
+          "raw_digest": "sha256:90bdcb9a203b1d69b9397a26d957cca01bee70ac9d9d1d07997a1addef86e5aa",
+          "digest_exposed": false
+        }
+      ],
+      "scope": "Raw SHA-256 recomputation using registered initial bytes and verified write recipes. Assumes only modeled writes; rejects other process effects. Separate relational journal audit is required; not full journal cryptographic verification."
+    }
+  ]
+}
