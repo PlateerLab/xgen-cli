@@ -10,7 +10,7 @@
 
 ## 결정
 
-`xgen.web/search@1.0.0` 입력은 `query`, `maxResults` 두 필드다. query는 비어 있거나 control character가 있으면 거절하며 최대 512 Unicode 문자·1024 UTF-8 bytes다. 결과 개수는 1–5다. host가 `openserp` 실행 파일을 catalogued한 경우만 capability를 제공한다. 대화형 `xgen`은 PATH에서 발견하고, headless는 기존 `--allow-executable openserp=/absolute/path`를 사용한다.
+`xgen.web/search@1.0.0` 입력은 `query`, `maxResults` 두 필드다. query는 비어 있거나 control character가 있으면 거절하며 최대 256 Unicode 문자다(문자당 최대 4 bytes라 1024 UTF-8 bytes를 넘지 않는다. 공개 schema의 `maxLength`가 실제 한도와 같아 모델이 schema만 보고 맞출 수 있다). 결과 개수는 1–5다. host가 `openserp` 실행 파일을 catalogued한 경우만 capability를 제공한다. 대화형 `xgen`은 PATH에서 발견하고, headless는 기존 `--allow-executable openserp=/absolute/path`를 사용한다.
 
 OpenSERP는 기존 shell-free process adapter로 실행한다. backend argv·30초 timeout·32768-byte 출력 한도는 host가 정한다. host가 private 임시 YAML 설정을 전달해 workspace 설정 파일을 읽지 않게 한다. 옵션 다음의 `--` 뒤에 provider와 query를 배치한다. 검색어를 shell이나 CLI 옵션으로 해석하지 않는다.
 

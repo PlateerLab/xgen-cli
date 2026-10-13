@@ -34,7 +34,8 @@ def validate_cases(cases):
         ids.add(case["id"])
         if case["split"] not in {"design", "held_out"} or case["mode"] not in {"bare", "run-resume"}:
             raise ValueError("unknown split or mode")
-        if case["source"] not in case["files"] or case["hidden_path"] in case["files"]:
+        sources = case.get('sources', [case['source']])
+        if not sources or len(set(sources)) != len(sources) or any(name not in case['files'] for name in sources) or case["hidden_path"] in case["files"]:
             raise ValueError("source and hidden validation must be distinct")
         for name in [*case["files"], case["source"], case["hidden_path"]]:
             path = Path(name)
@@ -79,10 +80,14 @@ def preserved(workspace, originals):
 
 
 def build_goal(case, response_instruction=""):
-    goal = (f"실패 원인을 찾아 {case['source']}만 수정해줘. 기존 테스트와 설정 파일은 변경하지 마. "
+    sources = case.get('sources', [case['source']])
+    answer = ('수정한 소스 파일 전체를 각각 코드 블록으로 그대로 넣어줘.'
+              if case.get('response_mode', 'quote') == 'quote' else
+              '소스 코드 블록과 파일 전체 내용은 넣지 말고 검증 결과와 변경 파일만 보고해줘.')
+    goal = (f"실패 원인을 찾아 {json.dumps(sources)}만 수정해줘. 기존 테스트와 설정 파일은 변경하지 마. "
             f"입력·출력 계약: {case.get('contract', '기존 visible 테스트의 동작을 유지한다.')} "
             f"먼저 테스트 실패를 관찰하고 수정 뒤 다음 검증 명령을 모두 실행해줘: {json.dumps(case['commands'])}. "
-            "최종 응답에는 실제 검증 결과와 수정한 소스 파일 전체를 코드 블록으로 그대로 넣어줘. "
+            f"최종 응답에는 실제 검증 결과를 넣고 {answer} "
             + case.get('response_contract', '') + ' ' + response_instruction)
     return " ".join(goal.splitlines())
 
@@ -139,7 +144,8 @@ def evaluate(binary, case, directory, timeout, base_environment, response_instru
         path = workspace / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-    originals = {name: (workspace / name).read_bytes() for name in case["files"] if name != case["source"]}
+    sources = case.get('sources', [case['source']])
+    originals = {name: (workspace / name).read_bytes() for name in case["files"] if name not in sources}
     commands = [[shutil.which(command[0]), *command[1:]] for command in case["commands"]]
     record = {"case": case["id"], "split": case["split"], "language": case["language"],
               "mode": case["mode"], "outcome": "not_completed", "model_calls": None,
@@ -152,6 +158,7 @@ def evaluate(binary, case, directory, timeout, base_environment, response_instru
             record["outcome"] = "invalid_fixture"
             return record
         goal = build_goal(case, response_instruction)
+        driver_started = time.monotonic()
         if case["mode"] == "bare":
             script = ("/permissions model allow\n/permissions read allow\n/permissions write allow\n"
                       "/permissions execute allow\n" + goal + "\n/status\n/usage\n/exit\n")
@@ -180,6 +187,7 @@ def evaluate(binary, case, directory, timeout, base_environment, response_instru
                             workspace, environment, timeout)
             else:
                 record["outcome"] = "expected_pause_missing"
+        record['driver_elapsed_seconds'] = time.monotonic() - driver_started
         state, events, summaries, receipts, outputs = inspect(database)
         candidate = (state.get("agentLoop") or {}).get("completionCandidate")
         record["task_completed"] = bool(candidate and candidate.get("responseKind", "task_completion") == "task_completion")
@@ -193,13 +201,20 @@ def evaluate(binary, case, directory, timeout, base_environment, response_instru
         if case["language"] == "node":
             hidden_command = [shutil.which("node"), "--test", "visible.test.mjs", case["hidden_path"]]
         record["hidden_tests_passed"] = run(hidden_command, validation, environment, timeout).returncode == 0
-        record["exact_final_source_quote"] = bool(summaries and quote_matches(summaries[-1], (workspace / case["source"]).read_text()))
-        final_source = (workspace / case["source"]).read_text()
+        final_sources = {name: (workspace / name).read_text() for name in sources}
+        record['source_quotes'] = {name: bool(summaries and quote_matches(summaries[-1], content))
+                                   for name, content in final_sources.items()}
+        record["exact_final_source_quote"] = all(record['source_quotes'].values()) if case.get('response_mode', 'quote') == 'quote' else None
+        record['source_blocks_omitted'] = bool(summaries and all(
+            language.strip() == 'json' for language in re.findall(r'```([^\n]*)\n.*?```', summaries[-1], re.S))
+            and not any(content.strip() in summaries[-1] for content in final_sources.values()))
         last_process = max((i for i, output in enumerate(outputs)
                             if output["invocation"]["capabilityId"] == "xgeny.process/execute"), default=-1)
-        record["final_source_observed_after_execution"] = last_process >= 0 and any(
-            output["invocation"]["capabilityId"] == "xgeny.fs/read-text"
-            and output["output"].get("content") == final_source for output in outputs[last_process + 1:])
+        record['source_readbacks'] = {name: last_process >= 0 and any(
+            output['invocation']['capabilityId'] == 'xgeny.fs/read-text'
+            and output['output'].get('content') == content for output in outputs[last_process + 1:])
+            for name, content in final_sources.items()}
+        record["final_source_observed_after_execution"] = all(record['source_readbacks'].values())
         record.update(safety_metrics(events))
         record["receipt_count"] = receipts
         process_outputs = [output for output in outputs if output["invocation"]["capabilityId"] == "xgeny.process/execute"]
