@@ -13,13 +13,13 @@
 | `xgen.terminal/start@1.0.0` | 기존 process의 executable, args, cwd, env, timeoutMs, maxOutputBytes | catalogued executable을 shell 없이 PTY에서 시작하고 opaque handle 반환 |
 | `xgen.terminal/read@1.0.0` | sessionId, offset, maxBytes, waitMs | stdout/stderr가 합쳐진 PTY ring의 비소비 snapshot |
 | `xgen.terminal/write@1.0.0` | sessionId, input | literal 입력 전송, 전송한 prefix의 acceptedBytes 반환 |
-| `xgen.terminal/terminate@1.0.0` | sessionId | 소유한 process group에 SIGKILL을 보내고 leader 회수 |
+| `xgen.terminal/terminate@1.0.0` | sessionId | 소유한 session의 process group들에 SIGKILL을 보내고 leader 회수 |
 
-Linux의 `portable-pty 0.9.0`과 `nix 0.28`을 사용한다. 이전 probe에서 library의 `Child::kill()`만으로는 서로 다른 두 process tree의 descendant가 남았다. production은 unreaped leader를 `waitid/WNOWAIT`로 확인한 다음 owned group에만 신호를 보낸다. group 소유권을 해제한 뒤에는 PID를 다시 신호 대상으로 쓰지 않는다. macOS/Windows에서는 이 session capability를 제공하지 않는다. 일반 process 도구는 계속 제공한다.
+Linux의 `portable-pty 0.9.0`과 `nix 0.28`을 사용한다. 이전 probe에서 library의 `Child::kill()`만으로는 서로 다른 두 process tree의 descendant가 남았다. production은 unreaped leader를 `waitid/WNOWAIT`로 확인한 다음 owned group에만 신호를 보낸다. group 소유권을 해제한 뒤에는 PID를 다시 신호 대상으로 쓰지 않는다. 대화형 shell의 job control은 `cmd &`를 같은 session 안의 별도 group에 두므로, 정리할 때 leader group에 더해 session id가 leader PID인 process도 SIGKILL한다. leader가 회수되기 전에는 그 PID가 session id로 예약돼 있어 다른 process를 가리키지 않는다. macOS/Windows에서는 이 session capability를 제공하지 않는다. 일반 process 도구는 계속 제공한다.
 
 ## Lifetime와 복구
 
-Registry는 한 `run`/`resume` 호출의 실행 구간에 묶인다. 대화형 host가 executable/environment snapshot을 재사용하더라도 호출마다 live registry를 새로 만든다. 작업 완료, pause, interrupt, 오류 또는 host 종료 시 소유 group을 정리한다. PTY를 계속 실행하는 daemon이나 OS 재시작 후 재접속 기능은 없다. 이 도구로 시작한 서비스가 최종 응답 후에도 실행된다고 주장하면 안 된다.
+Registry는 한 `run`/`resume` 호출의 실행 구간에 묶인다. 대화형 host가 executable/environment snapshot을 재사용하더라도 호출마다 live registry를 새로 만든다. 작업 완료, pause, interrupt, 오류 또는 host 종료 시 소유 group을 정리한다. 신호로 끝나는 host는 destructor가 돌지 않으므로, `run`/`resume`은 SIGINT·SIGTERM·SIGHUP, 대화형 host는 SIGTERM·SIGHUP(Ctrl-C는 기존 취소 처리)을 전용 thread가 받아 회수 전 leader의 session을 모두 정리한 뒤 128+신호 번호로 종료한다. 이 신호들은 다른 thread에서 막아 두며, 실행하는 명령은 비워진 signal mask로 시작한다. SIGKILL로 끝난 host는 정리하지 못한다. PTY를 계속 실행하는 daemon이나 OS 재시작 후 재접속 기능은 없다. 이 도구로 시작한 서비스가 최종 응답 후에도 실행된다고 주장하면 안 된다.
 
 한 registry에 생성 가능한 session은 최대 8개다. session lifetime은 100–600000ms, terminal 크기는 80×24다. 시간 제한은 별도 watchdog이 감시하므로 모델 호출이 대기 중이어도 적용한다. 종료된 session의 관측 자료는 registry lifetime 동안 유지하며 동일 start handle은 다시 spawn하지 않는다.
 
@@ -41,6 +41,6 @@ Process group은 sandbox가 아니다. 새 session/group으로 탈출한 process
 
 ## 검증
 
-영어·한국어 input/output, literal argv, byte cursor, ring overflow, control bytes, write deadline, nonzero exit, timeout, session loss, 반복 start, session 한도를 offline 검증한다. 명시적 종료·leader 정상 종료·host drop에서 descendant 정리를 각각 확인한다. 공개 CLI fixture는 execute 승인 전 시작 0회, 승인 후 Receipt, 정확한 최종 응답과 offline replay 불변성을 검사한다.
+영어·한국어 input/output, literal argv, byte cursor, ring overflow, control bytes, write deadline, nonzero exit, timeout, session loss, 반복 start, session 한도를 offline 검증한다. 명시적 종료·leader 정상 종료·host drop에서 descendant 정리를 각각 확인한다. 별도 group의 job이 terminal을 붙잡은 경우(명시적 종료, leader 종료)와 HUP·TERM을 무시하는 명령을 띄운 `xgen run`이 SIGTERM을 받은 경우도 정리와 종료 코드 143을 확인한다. 공개 CLI fixture는 execute 승인 전 시작 0회, 승인 후 Receipt, 정확한 최종 응답과 offline replay 불변성을 검사한다.
 
 실제 모델 평가와 한계는 [개발 기록](../development/pty-terminal-sessions-2026-10-05.md)에 남긴다.
