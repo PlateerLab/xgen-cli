@@ -22,6 +22,10 @@ jobs:
   quality:
     name: Release quality gate
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      checks: read
+      contents: read
     steps:
       - name: Validate trusted release request
         env:
@@ -59,6 +63,31 @@ jobs:
               .head_branch == $tag and
               .head_sha == $sha
             ' "$source_run" >/dev/null
+
+      - name: Require the full main CI to have passed on the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pull requests only run the fast gate; the full quality and platform jobs run on main.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/check-runs?per_page=100" \
+            --jq '.check_runs[] | select(.app.slug == "github-actions") | [.name, .conclusion // "pending"] | @tsv' \
+            > "$RUNNER_TEMP/release-check-runs.tsv"
+          for check in \
+            "Quality / Linux" \
+            "Platform / x86_64-unknown-linux-musl" \
+            "Platform / aarch64-unknown-linux-musl" \
+            "Platform / x86_64-apple-darwin" \
+            "Platform / aarch64-apple-darwin" \
+            "Platform / x86_64-pc-windows-msvc"; do
+            if ! awk -F '\t' -v name="$check" '$1 == name && $2 == "success" { found = 1 } END { exit !found }' \
+              "$RUNNER_TEMP/release-check-runs.tsv"; then
+              printf 'main CI check did not pass on %s: %s\n' "$RELEASE_SHA" "$check" >&2
+              exit 1
+            fi
+          done
 
       - name: Checkout exact release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -549,14 +578,7 @@ jobs:
                 [.required_status_checks[] |
                   select(.integration_id == $github_actions_integration_id) |
                   .context]] |
-                any(
-                  (index("Quality / Linux") != null) and
-                  (index("Platform / x86_64-unknown-linux-musl") != null) and
-                  (index("Platform / aarch64-unknown-linux-musl") != null) and
-                  (index("Platform / x86_64-apple-darwin") != null) and
-                  (index("Platform / aarch64-apple-darwin") != null) and
-                  (index("Platform / x86_64-pc-windows-msvc") != null)
-                ))
+                any(index("Fast / Linux") != null))
             ' >/dev/null; then
               main_ruleset_ok=true
               break
