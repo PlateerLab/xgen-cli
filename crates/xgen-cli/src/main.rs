@@ -331,6 +331,14 @@ struct RequestOptionArgs {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // Hosts of PTY sessions must clean them up on SIGTERM/SIGHUP too; the REPL keeps its own Ctrl-C.
+    let interrupt = matches!(cli.command, Some(Command::Run(_) | Command::Resume(_)));
+    if (interrupt || cli.command.is_none())
+        && xgen_adapter_process::install_host_exit_cleanup(interrupt).is_err()
+    {
+        eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
+        return ExitCode::from(PublicRunError::Internal.exit_code());
+    }
     match cli.command {
         None => interactive_command(cli.debug),
         Some(Command::Licenses) => print_licenses(),
