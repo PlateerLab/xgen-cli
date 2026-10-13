@@ -20,7 +20,8 @@ pub const WEB_SEARCH_CONTRACT_VERSION: &str = "1.0.0";
 pub const WEB_SEARCH_EXECUTABLE_ID: &str = "openserp";
 pub const WEB_SEARCH_SCOPE: &str = "web.search";
 const MAX_QUERY_BYTES: usize = 1024;
-const MAX_QUERY_CHARS: usize = 512;
+// 256 four-byte characters fit MAX_QUERY_BYTES, so the published maxLength is the only limit a model meets.
+const MAX_QUERY_CHARS: usize = 256;
 const MAX_RESULTS: u64 = 5;
 const MAX_OUTPUT_BYTES: usize = 32768;
 
@@ -340,6 +341,22 @@ mod tests {
             json!({"query":"한".repeat(400),"maxResults":1}),
         ] {
             assert!(parse_input(&input).is_none());
+        }
+    }
+
+    #[test]
+    fn published_max_length_is_the_effective_query_limit() {
+        let definition: Value = serde_json::from_str(include_str!(
+            "../../../protocol/fixtures/v1alpha1/valid/capability-definition.web-search.json"
+        ))
+        .unwrap();
+        let published = definition["spec"]["inputSchema"]["properties"]["query"]["maxLength"]
+            .as_u64()
+            .unwrap();
+        assert_eq!(usize::try_from(published).unwrap(), MAX_QUERY_CHARS);
+        for widest in ["😀", "한"] {
+            assert!(resolve_web_search_query(&widest.repeat(MAX_QUERY_CHARS)).is_ok());
+            assert!(resolve_web_search_query(&widest.repeat(MAX_QUERY_CHARS + 1)).is_err());
         }
     }
 

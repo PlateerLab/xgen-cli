@@ -12,6 +12,40 @@ use xgen_runtime::{
     AdapterReconciliationObservation, AdapterToolOutput, EffectAdapter, PreparedAdapterInvocation,
 };
 
+/// Kill owned PTY sessions when the host ends on a signal, because destructors do not run then.
+///
+/// Call before the host starts any other thread: later threads inherit the blocked mask, so only
+/// the watcher receives these signals. Commands still start with a cleared mask because both
+/// `std::process` and portable-pty reset it in the child. `interrupt` also covers SIGINT for hosts
+/// without their own Ctrl-C handling.
+///
+/// # Errors
+/// Returns an error if the signal mask or the watcher thread cannot be set up.
+pub fn install_host_exit_cleanup(interrupt: bool) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use nix::sys::signal::{SigSet, Signal};
+        let mut signals = SigSet::empty();
+        signals.add(Signal::SIGTERM);
+        signals.add(Signal::SIGHUP);
+        if interrupt {
+            signals.add(Signal::SIGINT);
+        }
+        signals.thread_block().map_err(std::io::Error::from)?;
+        std::thread::Builder::new()
+            .name("xgen-terminal-exit".to_owned())
+            .spawn(move || {
+                if let Ok(signal) = signals.wait() {
+                    sessions::kill_owned_sessions();
+                    std::process::exit(128 + signal as i32);
+                }
+            })?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = interrupt;
+    Ok(())
+}
+
 pub const TERMINAL_VERSION: &str = "1.0.0";
 pub const TERMINAL_SCOPE: &str = "terminal.session";
 
