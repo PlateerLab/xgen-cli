@@ -209,6 +209,8 @@ Bare 명령의 입력, 승인, 진행 event와 Ctrl+C 의미는 [대화형 REPL]
 
 ## Research
 
+- [하네스 실행 책임 비교와 아키텍처 선택](docs/research/2026-10-05-harness-architecture-comparison.md)
+- [계획 크기·모델 판단 경계 비교 평가](docs/research/2026-10-05-planning-boundary-evaluation.md)
 - [XGEN 로컬 CLI 하네스 조사 메모](docs/research/2026-08-26-xgen-local-cli-harness.md)
 - [Durable Agent Runtime 근거 검토](docs/research/2026-08-28-durable-agent-runtime-evidence.md)
 - [Durable Agent Runtime 평가 프로토콜](docs/research/2026-08-28-runtime-evaluation-protocol.md)
