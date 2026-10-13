@@ -98,7 +98,8 @@ fn interrupt_stops_a_running_worker() {
         .spawn()
         .unwrap();
     let started = directory.path().join("started");
-    let deadline = Instant::now() + Duration::from_secs(3);
+    // The first python3 launch on a hosted macOS runner can take several seconds.
+    let deadline = Instant::now() + Duration::from_secs(20);
     while !started.exists() {
         if Instant::now() >= deadline {
             let _ = child.kill();
