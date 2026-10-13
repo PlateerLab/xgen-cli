@@ -127,15 +127,112 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(WORKER.WorkerError, "integrity_failure"):
             self.call("search", name="assets", query="inventory", top_k=2)
 
+    def rewrite(self, name, change):
+        path = self.root / (name + ".json.gz")
+        saved = json.loads(gzip.decompress(path.read_bytes()))
+        change(saved)
+        path.write_bytes(gzip.compress(WORKER.canonical(saved)))
+        return path
+
     def test_collection_built_by_another_backend_version_is_reported_as_such(self):
         self.install()
+        self.rewrite("assets", lambda saved: saved.update(backend_version="0.0.1"))
+        with self.assertRaisesRegex(WORKER.WorkerError, "collection_backend_version_mismatch"):
+            self.call("search", name="assets", query="inventory", top_k=2)
+        self.assertEqual(self.call("list")["collections"],
+                         [{"collection": "assets", "status": "rebuild_required", "backend_version": "0.0.1"}])
+
+    def test_rebuild_restores_old_backend_collections_from_retained_sources(self):
+        built = {}
+        for name, spec in [("assets", asset_spec()), ("calendar", calendar_spec())]:
+            self.install(name, spec)
+            built[name] = WORKER.load(self.root, name)["artifact"]
+        for name in built:
+            self.rewrite(name, lambda saved: saved.update(backend_version="0.0.1"))
+        listed = self.call("list")["collections"]
+        self.assertEqual([row["status"] for row in listed], ["rebuild_required", "rebuild_required"])
+        for name, original in built.items():
+            with self.subTest(collection=name):
+                result = self.call("rebuild", name=name)
+                self.assertTrue(result["rebuilt"])
+                self.assertEqual(result["previous"]["backend_version"], "0.0.1")
+                self.assertEqual(result["previous"]["tool_count"], 2)
+                self.assertEqual(result["refetched_https_sources"], 0)
+                self.assertEqual(result["backend_version"], WORKER.VERSION)
+                self.assertEqual(result["tool_count"], 2)
+                # Same retained inputs and labels give the same tools and source records as the
+                # original import; only the build times recorded by the backend differ.
+                rebuilt = WORKER.load(self.root, name)["artifact"]
+                self.assertEqual(rebuilt["tools"], original["tools"])
+                for key in ("xgen_source_inputs", "xgen_http_sources"):
+                    self.assertEqual(rebuilt["metadata"][key], original["metadata"][key])
+        self.assertEqual([row["status"] for row in self.call("list")["collections"]], ["ready", "ready"])
+        self.assertEqual(self.call("search", name="calendar", query="read event details", top_k=1)["candidates"][0]["tool"], "readEventDetails")
+
+    def test_rebuild_of_current_collection_keeps_the_file(self):
+        built = self.install()
         path = self.root / "assets.json.gz"
-        saved = json.loads(gzip.decompress(path.read_bytes()))
-        saved["backend_version"] = "0.0.1"
-        path.write_bytes(gzip.compress(WORKER.canonical(saved)))
-        for operation, fields in [("list", {}), ("search", {"name": "assets", "query": "inventory", "top_k": 2})]:
-            with self.assertRaisesRegex(WORKER.WorkerError, "collection_backend_version_mismatch"):
-                self.call(operation, **fields)
+        original = path.read_bytes()
+        result = self.call("rebuild", name="assets")
+        self.assertFalse(result["rebuilt"])
+        self.assertEqual(result["artifact_digest"], built["artifact_digest"])
+        self.assertEqual(original, path.read_bytes())
+
+    def test_rebuild_replaces_only_the_snapshot_it_read(self):
+        built = self.install()
+        path = self.root / "assets.json.gz"
+        original = path.read_bytes()
+        artifact = WORKER.read_stored(self.root, "assets")["artifact"]
+        with self.assertRaisesRegex(WORKER.WorkerError, "collection_changed_during_rebuild"):
+            WORKER.store(self.root, "assets", artifact, replaces="0" * 64)
+        self.assertEqual(original, path.read_bytes())
+        path.unlink()
+        with self.assertRaisesRegex(WORKER.WorkerError, "collection_changed_during_rebuild"):
+            WORKER.store(self.root, "assets", artifact, replaces=built["artifact_digest"])
+        self.assertFalse(path.exists())
+        self.assertEqual([p.name for p in self.root.iterdir()], [])
+
+    def test_rebuild_needs_verified_retained_sources(self):
+        def drop_copy(saved):
+            saved["artifact"]["metadata"]["xgen_http_sources"] = {}
+            saved.update(backend_version="0.0.1", artifact_digest=WORKER.digest(saved["artifact"]))
+        def alter_copy(saved):
+            saved["artifact"]["metadata"]["xgen_http_sources"]["inline:1"]["info"]["title"] = "altered"
+            saved.update(backend_version="0.0.1", artifact_digest=WORKER.digest(saved["artifact"]))
+        for change in (drop_copy, alter_copy):
+            with self.subTest(change=change.__name__):
+                self.install()
+                self.rewrite("assets", change)
+                with self.assertRaisesRegex(WORKER.WorkerError, "collection_sources_unavailable"):
+                    self.call("rebuild", name="assets")
+                self.call("remove", name="assets")
+        rows = [{"kind": "https", "label": "https://example.test/openapi.json", "document_digest": None}]
+        self.assertEqual(WORKER.retained_inputs({"metadata": {"xgen_source_inputs": rows, "xgen_http_sources": {}}}),
+                         (["https://example.test/openapi.json"], ["https://example.test/openapi.json"]))
+        with self.assertRaisesRegex(WORKER.WorkerError, "collection_not_found"):
+            self.call("rebuild", name="missing")
+
+    def test_remove_frees_the_name_even_for_unusable_collections(self):
+        self.install()
+        self.install("calendar", calendar_spec())
+        # Damaged deflate data raises zlib.error, which is not an OSError.
+        for damaged in [b"not a collection", b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x07" + b"\x00" * 8,
+                        gzip.compress(WORKER.canonical({"format_version": 1}))]:
+            (self.root / "assets.json.gz").write_bytes(damaged)
+            listed = self.call("list")["collections"]
+            self.assertEqual(listed[0], {"collection": "assets", "status": "unreadable", "error": "collection_integrity_failure"})
+            self.assertEqual(listed[1]["status"], "ready")
+        self.assertEqual(self.call("remove", name="assets"), {"ok": True, "collection": "assets", "removed": True})
+        with self.assertRaisesRegex(WORKER.WorkerError, "collection_not_found"):
+            self.call("remove", name="assets")
+        self.assertEqual(self.install()["tool_count"], 2)
+        if os.name == "posix":
+            target = self.directory / "outside.json.gz"
+            target.write_bytes(b"kept")
+            (self.root / "linked.json.gz").symlink_to(target)
+            with self.assertRaisesRegex(WORKER.WorkerError, "invalid_collection_file"):
+                self.call("remove", name="linked")
+            self.assertEqual(target.read_bytes(), b"kept")
 
     def test_host_pinned_snapshot_rejects_valid_replacement(self):
         for name, spec, target in [("assets", asset_spec(), "getAssetDetail"), ("calendar", calendar_spec(), "readEventDetails")]:

@@ -9,6 +9,8 @@ xgen tools import --name inventory --source ./openapi.json
 xgen tools search --name inventory "read asset detail"
 xgen tools describe --name inventory getAssetDetail
 xgen tools list
+xgen tools rebuild --all            # backend 버전을 올린 뒤 기존 collection 다시 빌드
+xgen tools remove --name inventory  # collection과 연결·저장된 인증을 함께 삭제
 ```
 
 `--source`는 여러 JSON 명세 파일 또는 공개 HTTPS OpenAPI/Swagger UI 주소를 받는다. 로컬 JSON은 문서당 5 MB, 입력은 최대 16개다. URL에 인증값을 넣지 않도록 userinfo·query·fragment는 거절한다. 인증이 필요한 명세 수집은 아직 제공하지 않는다. 원격 명세 수집은 graph-tool-call의 기본 네트워크 검증을 사용하며 private-host 허용 옵션을 제공하지 않는다.
@@ -19,11 +21,17 @@ CLI가 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 자동
 
 ## 저장과 공통 도구 계약
 
-Run과 같은 OS별·legacy 호환 state root 아래 `tool-collections`에 저장한다. `XGEN_STATE_HOME`도 기존 규칙을 따른다. Unix collection 디렉터리는 사용자 소유·0700이어야 한다. 완성된 임시 파일을 hard link로 공개하고 같은 이름은 덮어쓰지 않는다. 현재는 갱신·삭제 명령을 제공하지 않으며 새 이름으로 새 snapshot을 저장한다.
+Run과 같은 OS별·legacy 호환 state root 아래 `tool-collections`에 저장한다. `XGEN_STATE_HOME`도 기존 규칙을 따른다. Unix collection 디렉터리는 사용자 소유·0700이어야 한다. 완성된 임시 파일을 hard link로 공개하고 import는 같은 이름을 덮어쓰지 않는다. 내용을 바꾸려면 `tools remove`로 이름을 비운 뒤 다시 import한다. 덮어쓰는 경로는 `tools rebuild` 하나이며, 교체 직전에 파일이 읽었던 snapshot digest 그대로인지 확인한다. 그 사이 삭제되거나 바뀌었으면 `collection_changed_during_rebuild`로 멈춘다. 파일 잠금은 아니어서 확인과 교체 사이의 아주 짧은 경합까지 막지는 않는다.
 
 저장 envelope는 `format_version=1`, collection 이름, backend·version, artifact digest, upstream artifact로 구성한다. digest는 worker의 정렬된 ASCII JSON 직렬화에 대한 SHA-256이며 JCS나 서명된 Receipt는 아니다. 로드 시 검증해 손상된 artifact의 사용을 거절한다. 원본 snapshot manifest와 로컬 명세의 내용 digest·파일명도 보존한다.
 
-artifact는 이를 만든 graph-tool-call 버전에서만 연다. 고정 버전을 올린 바이너리는 이전 버전 collection을 `collection_backend_version_mismatch`로 거절하며, 하나라도 남아 있으면 `tools list`와 collection을 쓰는 새 Run이 실패한다. 0.46.0 → 0.47.0은 import 시 만드는 도구 설명 자체가 바뀌었으므로(path 유도 scope 문구 제거) 기존 artifact를 그대로 읽으면 수정이 반영되지 않는다. 삭제 명령이 아직 없어 `tool-collections/<이름>.json.gz`를 지우고 같은 이름으로 다시 import한다. `tools connect` 설정은 collection 이름 기준이라 유지된다. 실행 프로필 digest에 backend 버전이 포함되므로 이전 버전에서 시작한 Run은 재개 시 프로필 불일치로 거절된다.
+artifact는 이를 만든 graph-tool-call 버전에서만 연다. 고정 버전을 올린 바이너리는 이전 버전 collection의 검색·조회를 `collection_backend_version_mismatch`로 거절한다. 0.46.0 → 0.47.0처럼 import 시 만드는 도구 설명 자체가 바뀌는 경우가 있어(path 유도 scope 문구 제거) 기존 artifact를 그대로 읽지 않는다.
+
+- `tools list`는 collection마다 `status`를 낸다. `ready`, `rebuild_required`(다른 backend 버전, `backend_version` 표시), `unreadable`(손상·digest 불일치, `error` 표시). 쓸 수 없는 collection이 있어도 나머지를 숨기지 않는다.
+- 새 Run은 `ready`가 아닌 collection이 하나라도 있으면 시작하지 않고 stderr에 `XGEN_TOOLS error=collection_rebuild_required collection=<이름>`(또는 `collection_unreadable`)을 남긴다. 어떤 collection을 빼고 진행할지는 사용자가 정한다.
+- `tools rebuild --name <이름>`/`--all`은 import 때 보존한 입력으로 현재 backend에서 다시 빌드한다. 로컬 JSON은 artifact 안의 원본 사본을 내용 digest로 확인해 쓰고, HTTPS 입력은 그 주소에서 다시 받는다(`refetched_https_sources`). 로컬 JSON과 HTTPS를 섞은 collection과 원본 사본 보존 이전에 만든 collection은 사본이 없어 `collection_sources_unavailable`이며 다시 import해야 한다. 이미 현재 backend로 만든 collection은 건드리지 않는다(`rebuilt=false`). artifact에 빌드 시각이 들어가 같은 입력이라도 digest가 바뀌기 때문이다.
+- 다시 빌드하면 artifact digest가 바뀐다. 이전 snapshot에 고정된 Run은 재개 시 `collection_snapshot_changed`로 거절된다. 실행 프로필 digest에도 backend 버전이 포함되므로 이전 버전에서 시작한 Run은 프로필 불일치로도 거절된다.
+- `tools connect` 설정은 collection 이름 기준이라 rebuild 후에도 유지된다.
 
 저장 파일은 `.json.gz`다. 명세 입력의 5 MB 제한과 별개로, 그래프는 압축 전 256 MiB·압축 후 64 MiB 한도를 둔다. 압축 해제도 한도 이상 읽지 않는다. 실제 대규모 명세에서 반복되는 계약 정보 때문에 64 MiB 저장 제한을 넘는 사례가 있어 이 경계를 분리했다. hard link를 지원하지 않는 저장소는 `collection_publish_unavailable`로 실패한다.
 

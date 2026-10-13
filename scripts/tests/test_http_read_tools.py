@@ -1,5 +1,6 @@
 """Real loopback HTTP + compiled harness tests. No production API or paid LLM calls."""
 import copy
+import gzip
 import http.server
 import importlib.util
 import json
@@ -264,6 +265,52 @@ class HttpCliTests(unittest.TestCase):
             result=self.run_cli()
             self.assertNotEqual(result.returncode,0)
             self.assertEqual(self.calls,[])
+
+    def test_rebuild_disconnect_and_remove_keep_connections_tied_to_their_collection(self):
+        self.install()
+        collection=self.state/"tool-collections/shipments.json.gz"
+        connection=self.state/"http-connections/shipments.json"
+        saved=json.loads(gzip.decompress(collection.read_bytes()));saved["backend_version"]="0.0.1"
+        collection.write_bytes(gzip.compress(WORKER.canonical(saved)))
+        listed=json.loads(self.cli("tools","list").stdout)["collections"]
+        self.assertEqual(listed,[{"collection":"shipments","status":"rebuild_required","backend_version":"0.0.1"}])
+        blocked=self.run_cli()
+        self.assertNotEqual(blocked.returncode,0)
+        self.assertIn(b"XGEN_TOOLS error=collection_rebuild_required collection=shipments",blocked.stderr)
+        self.assertEqual(self.calls,[])
+        rebuilt=json.loads(self.cli("tools","rebuild","--all").stdout)
+        self.assertTrue(rebuilt["ok"]);self.assertTrue(rebuilt["collections"][0]["result"]["rebuilt"])
+        self.assertEqual(json.loads(self.cli("tools","rebuild","--name","shipments").stdout)["rebuilt"],False)
+        # The rebuilt collection keeps its connection and executable contract.
+        self.assertTrue(connection.exists())
+        self.assertTrue(json.loads(self.cli("tools","describe","--name","shipments","readShipment").stdout)["http_read"]["supported"])
+        again=self.cli("tools","connect","--name","shipments","--base-url",f"http://127.0.0.1:{self.api.server_port}/v2","--allow-get",check=False)
+        self.assertIn(b"http_connection_already_exists",again.stderr)
+        removed=json.loads(self.cli("tools","disconnect","--name","shipments").stdout)
+        self.assertEqual(removed,{"ok":True,"collection":"shipments","connection_removed":True,"stored_credential":"none"})
+        self.assertTrue(collection.exists())
+        self.assertIn(b"http_connection_not_found",self.cli("tools","disconnect","--name","shipments",check=False).stderr)
+        self.cli("tools","connect","--name","shipments","--base-url",f"http://127.0.0.1:{self.api.server_port}","--allow-get","--bearer-env","XGEN_FIXTURE_BEARER")
+        removed=json.loads(self.cli("tools","remove","--name","shipments").stdout)
+        self.assertEqual(removed,{"ok":True,"collection":"shipments","collection_removed":True,"connection_removed":True,"stored_credential":"none"})
+        self.assertFalse(collection.exists());self.assertFalse(connection.exists())
+        missing=self.cli("tools","remove","--name","shipments",check=False)
+        self.assertNotEqual(missing.returncode,0)
+        self.assertEqual(json.loads(missing.stdout),{"ok":False,"error":"collection_not_found","connection_removed":False})
+        # A different API imported under the freed name does not inherit the old connection.
+        source=self.directory/"other.json";source.write_text(json.dumps(held_out_spec("sensors")))
+        self.cli("tools","import","--name","shipments","--source",str(source))
+        self.assertFalse(connection.exists())
+        # Deleting only the collection file by hand leaves a connection that import refuses to reuse.
+        self.cli("tools","connect","--name","shipments","--base-url",f"http://127.0.0.1:{self.api.server_port}","--allow-get")
+        collection.unlink()
+        refused=self.cli("tools","import","--name","shipments","--source",str(source),check=False)
+        self.assertNotEqual(refused.returncode,0)
+        self.assertIn(b"http_connection_without_collection",refused.stderr)
+        self.assertFalse(collection.exists())
+        self.cli("tools","disconnect","--name","shipments")
+        self.cli("tools","import","--name","shipments","--source",str(source))
+        self.assertEqual(self.calls,[])
 
     def test_approval_resume_connection_drift_and_no_duplicate_get(self):
         args=self.install();self.proposals=[self.plan("read","xgen.http/read",args)]

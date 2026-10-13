@@ -66,7 +66,9 @@ def root_directory(root):
     return path
 
 
-def store(root, name, artifact):
+def store(root, name, artifact, replaces=None):
+    """Publish a complete envelope. Import never replaces a collection; rebuild checks just
+    before replacing that the file still holds the snapshot it read."""
     envelope = {"format_version": 1, "collection": name, "backend": "graph-tool-call",
                 "backend_version": VERSION, "artifact_digest": digest(artifact), "artifact": artifact}
     encoded = canonical(envelope)
@@ -82,6 +84,15 @@ def store(root, name, artifact):
             stream.write(compressed)
             stream.flush()
             os.fsync(stream.fileno())
+        if replaces is not None:
+            try:
+                current = read_stored(root, name)["artifact_digest"]
+            except Exception:
+                current = None
+            if current != replaces:
+                raise WorkerError("collection_changed_during_rebuild")
+            os.replace(temporary, target)
+            return envelope
         try:
             # Publish only complete bytes, and never replace an existing collection.
             os.link(temporary, target)
@@ -90,11 +101,15 @@ def store(root, name, artifact):
         except OSError:
             raise WorkerError("collection_publish_unavailable") from None
     finally:
-        os.unlink(temporary)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
     return envelope
 
 
-def load(root, name):
+def read_stored(root, name):
+    """Envelope of any backend version whose recorded digest matches its artifact."""
     path = root / (name + ".json.gz")
     if path.is_symlink():
         raise WorkerError("invalid_collection_file")
@@ -102,14 +117,59 @@ def load(root, name):
         envelope = read_json(path)
     except FileNotFoundError:
         raise WorkerError("collection_not_found") from None
-    if (envelope.get("format_version") != 1 or envelope.get("collection") != name
-            or envelope.get("backend") != "graph-tool-call"
+    if (not isinstance(envelope, dict) or envelope.get("format_version") != 1
+            or envelope.get("collection") != name or envelope.get("backend") != "graph-tool-call"
+            or not isinstance(envelope.get("artifact"), dict)
             or envelope.get("artifact_digest") != digest(envelope.get("artifact"))):
         raise WorkerError("collection_integrity_failure")
+    return envelope
+
+
+def load(root, name):
+    envelope = read_stored(root, name)
     if envelope.get("backend_version") != VERSION:
-        # The artifact was built by another backend version; importing the sources again rebuilds it.
+        # Built by another backend version; `xgen tools rebuild` rebuilds it from the retained sources.
         raise WorkerError("collection_backend_version_mismatch")
     return envelope
+
+
+def build_artifact(inputs, labels):
+    from graph_tool_call.graphify import build_openapi_collection_artifact
+    artifact = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
+    artifact["metadata"]["xgen_http_sources"] = {f"inline:{index}": copy.deepcopy(value) for index, value in enumerate(inputs, 1)} if all(isinstance(value, dict) for value in inputs) else {}
+    artifact["metadata"]["xgen_source_inputs"] = [
+        {"kind": "https" if isinstance(value, str) else "json", "label": label,
+         "document_digest": None if isinstance(value, str) else digest(value)}
+        for label, value in zip(labels, inputs)
+    ]
+    return artifact
+
+
+def retained_inputs(artifact):
+    """Import inputs recorded in an artifact: local JSON copies verified by digest and HTTPS
+    URLs. A collection that mixed both kinds kept no JSON copies and must be imported again."""
+    metadata = artifact.get("metadata")
+    rows = metadata.get("xgen_source_inputs") if isinstance(metadata, dict) else None
+    copies = metadata.get("xgen_http_sources") if isinstance(metadata, dict) else None
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 16 or not isinstance(copies, dict):
+        raise WorkerError("collection_sources_unavailable")
+    inputs, labels = [], []
+    for index, row in enumerate(rows, 1):
+        kind = row.get("kind") if isinstance(row, dict) else None
+        label = row.get("label") if isinstance(row, dict) else None
+        if not isinstance(label, str):
+            raise WorkerError("collection_sources_unavailable")
+        if kind == "json":
+            document = copies.get(f"inline:{index}")
+            if not isinstance(document, dict) or digest(document) != row.get("document_digest"):
+                raise WorkerError("collection_sources_unavailable")
+            inputs.append(document)
+        elif kind == "https" and label.startswith("https://"):
+            inputs.append(label)
+        else:
+            raise WorkerError("collection_sources_unavailable")
+        labels.append(label)
+    return inputs, labels
 
 
 def graph_from_artifact(artifact):
@@ -189,9 +249,24 @@ def summarize(envelope):
             "execution_enabled": False}
 
 
+def listed(root, name):
+    """List entry; a collection that cannot be used is reported instead of hiding the others."""
+    try:
+        envelope = read_stored(root, name)
+        if envelope.get("backend_version") != VERSION:
+            return {"collection": name, "status": "rebuild_required",
+                    "backend_version": envelope.get("backend_version")}
+        return {**summarize(envelope), "status": "ready"}
+    except WorkerError as error:
+        return {"collection": name, "status": "unreadable", "error": str(error)}
+    except Exception:
+        # Damaged compression, nesting or envelope fields; the detail stays private.
+        return {"collection": name, "status": "unreadable", "error": "collection_integrity_failure"}
+
+
 def dispatch(request):
     from graph_tool_call import __version__
-    from graph_tool_call.graphify import build_openapi_collection_artifact, expand_candidates_with_producers
+    from graph_tool_call.graphify import expand_candidates_with_producers
     if __version__ != VERSION:
         raise WorkerError("backend_version_mismatch")
     name = request.get("name")
@@ -201,7 +276,7 @@ def dispatch(request):
     root = root_directory(request["root"])
     operation = request["operation"]
     if operation == "list":
-        return {"ok": True, "collections": [summarize(load(root, path.name[:-8]))
+        return {"ok": True, "collections": [listed(root, path.name[:-8])
                                                 for path in sorted(root.glob("*.json.gz"))]}
     if operation == "language_hints":
         return {"ok": True, "collections": language_hints(root, request.get("request"), request.get("snapshots"))}
@@ -214,16 +289,33 @@ def dispatch(request):
         # JSON only for local files; no YAML extra or credentials are needed.
         inputs = [source if source.startswith("https://") else read_json(source, 5_000_000)
                   for source in sources]
-        artifact = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
-        artifact["metadata"]["xgen_http_sources"] = {f"inline:{index}": copy.deepcopy(value) for index, value in enumerate(inputs, 1)} if all(isinstance(value, dict) for value in inputs) else {}
-        artifact["metadata"]["xgen_source_inputs"] = [
-            {"kind": "https" if isinstance(value, str) else "json",
-             "label": source if isinstance(value, str) else Path(source).name,
-             "document_digest": None if isinstance(value, str) else digest(value)}
-            for source, value in zip(sources, inputs)
-        ]
-        envelope = store(root, name, artifact)
+        labels = [source if isinstance(value, str) else Path(source).name
+                  for source, value in zip(sources, inputs)]
+        envelope = store(root, name, build_artifact(inputs, labels))
         return {"ok": True, **summarize(envelope)}
+    if operation == "remove":
+        path = root / (name + ".json.gz")
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            raise WorkerError("collection_not_found") from None
+        if not stat.S_ISREG(info.st_mode):
+            raise WorkerError("invalid_collection_file")
+        path.unlink()
+        return {"ok": True, "collection": name, "removed": True}
+    if operation == "rebuild":
+        previous = read_stored(root, name)
+        if previous.get("backend_version") == VERSION:
+            # Rebuilding is for backend changes, not for refreshing remote sources. The
+            # artifact records build times, so a needless rebuild would change the digest.
+            return {"ok": True, **summarize(previous), "rebuilt": False}
+        inputs, labels = retained_inputs(previous["artifact"])
+        envelope = store(root, name, build_artifact(inputs, labels), replaces=previous["artifact_digest"])
+        return {"ok": True, **summarize(envelope), "rebuilt": True,
+                "previous": {"artifact_digest": previous["artifact_digest"],
+                             "backend_version": previous.get("backend_version"),
+                             "tool_count": len(previous["artifact"].get("tools") or {})},
+                "refetched_https_sources": sum(isinstance(value, str) for value in inputs)}
     envelope = load(root, name)
     if request.get("expected_digest") is not None and request["expected_digest"] != envelope["artifact_digest"]:
         raise WorkerError("collection_snapshot_changed")

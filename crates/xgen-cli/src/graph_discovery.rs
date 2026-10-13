@@ -93,8 +93,24 @@ impl DiscoveryCatalog {
         if response["ok"] != true {
             return Err(());
         }
+        let items = response["collections"].as_array().ok_or(())?;
+        let mut usable = true;
+        for item in items.iter().filter(|item| item["status"] != "ready") {
+            usable = false;
+            // Name what blocks the catalog: `xgen tools rebuild` or `xgen tools remove` fixes it.
+            let name = item["collection"].as_str().filter(|name| valid_name(name));
+            let status = item["status"]
+                .as_str()
+                .filter(|status| matches!(*status, "rebuild_required" | "unreadable"));
+            if let (Some(name), Some(status)) = (name, status) {
+                eprintln!("XGEN_TOOLS error=collection_{status} collection={name}");
+            }
+        }
+        if !usable {
+            return Err(());
+        }
         let mut snapshots = Snapshots::new();
-        for item in response["collections"].as_array().ok_or(())? {
+        for item in items {
             if item["backend_version"] != "0.47.0" || item["execution_enabled"] != false {
                 return Err(());
             }
