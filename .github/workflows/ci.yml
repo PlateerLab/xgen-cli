@@ -1,20 +1,75 @@
 name: CI
 
+# Pull requests run only the fast Linux gate (about a minute with a warm cache). The full
+# quality and five-platform jobs run after merge on main, on manual dispatch, and again in the
+# release workflow before anything is published.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CC_aarch64_unknown_linux_musl: musl-gcc
   CC_x86_64_unknown_linux_musl: musl-gcc
 
 jobs:
+  fast:
+    name: Fast / Linux
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest@0.9.148
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test workspace without slow process tests
+        run: cargo nextest run --profile pr --workspace --locked
+
+      - name: Test Python scripts without API calls
+        run: python3 -m unittest discover -s scripts/tests
+
+      - name: Check release workflows and public documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/check-release-workflow.sh
+          sh scripts/check-npm-distribution-workflow.sh
+          sh scripts/check-rc3-public-docs.sh
+
   quality:
     name: Quality / Linux
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -72,6 +127,7 @@ jobs:
 
   platform:
     name: Platform / ${{ matrix.target }}
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:

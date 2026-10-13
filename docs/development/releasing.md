@@ -16,15 +16,15 @@ binary를 감싸는 선택형 설치 채널이며 제품 runtime을 다시 구�
 - `refs/tags/v*` 또는 모든 tag의 update와 deletion을 막는 active repository ruleset을
   exclude와 bypass actor 없이 활성화한다.
 - `main`에 PR, deletion과 non-fast-forward 차단을 적용하는 active branch ruleset을 exclude와
-  bypass actor 없이 활성화한다. Required status checks의 strict policy를 켜고 아래 여섯 context를
-  모두 필수로 지정한다. 각 check의 expected source는 반드시 `GitHub Actions`로 선택한다. 이름만 같고
-  source가 다르거나 source가 지정되지 않은 check는 release workflow가 거부한다.
-  - `Quality / Linux`
-  - `Platform / x86_64-unknown-linux-musl`
-  - `Platform / aarch64-unknown-linux-musl`
-  - `Platform / x86_64-apple-darwin`
-  - `Platform / aarch64-apple-darwin`
-  - `Platform / x86_64-pc-windows-msvc`
+  bypass actor 없이 활성화한다. Required status checks의 strict policy를 켜고 `Fast / Linux`를
+  필수로 지정한다. expected source는 반드시 `GitHub Actions`로 선택한다. 이름만 같고 source가
+  다르거나 source가 지정되지 않은 check는 release workflow가 거부한다.
+- PR에서는 `Fast / Linux`만 돈다. fmt, clippy, 단독 1초 이상 걸리는 프로세스·PTY·재개 테스트를 뺀
+  nextest `pr` profile, Python 스크립트 테스트, release workflow 계약 검사를 한다. 나머지 여섯 job
+  (`Quality / Linux`, `Platform / x86_64-unknown-linux-musl`, `Platform / aarch64-unknown-linux-musl`,
+  `Platform / x86_64-apple-darwin`, `Platform / aarch64-apple-darwin`,
+  `Platform / x86_64-pc-windows-msvc`)은 main push와 수동 실행에서 전체 테스트로 돈다. release quality
+  gate는 release commit에서 이 여섯 check가 모두 success인지 확인한 뒤에만 진행한다.
   설정 후
   `XGEN_MAIN_PROTECTION_ENABLED=true`를 둔다.
 - Bypass actor가 없음을 관리자가 확인한 뒤 Actions repository variable

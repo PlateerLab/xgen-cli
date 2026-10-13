@@ -1,0 +1,58 @@
+# Test profiles for cargo-nextest.
+#
+# `pr` is the required pull-request gate. It skips the tests below, each of which takes 1 s or
+# more on its own because it drives real child processes, PTYs or a resumed CLI run. The full
+# suite (`default`) still runs on every push to main, on every platform, and in the release
+# quality gate. Regenerate the list with `cargo nextest run --workspace -j 1` and keep tests
+# that report >= 1 s.
+
+[profile.pr]
+default-filter = """
+not (
+  test(=allow_process::tests::executable_specs_are_absolute_deterministic_and_path_redacted) |
+  test(=bare_xgen_streams_durable_progress_prompts_separate_approvals_and_replays_offline) |
+  test(=catalog::tests::executable_alias_is_launch_preserved_digest_bound_and_retarget_checked) |
+  test(=catalog::tests::executable_fingerprints_detect_content_changes_without_exposing_paths) |
+  test(=changed_safe_environment_is_named_and_blocks_resume_until_restored) |
+  test(=completion_checks_require_latest_success_after_changes_on_design_and_held_out_inputs) |
+  test(=composition::tests::execute_flag_approves_only_the_exact_process_catalog_request_shape) |
+  test(=composition::tests::product_registry_is_bound_to_the_exact_workspace) |
+  test(=composition::tests::reusable_process_session_is_bound_to_one_physical_workspace) |
+  test(=composition::tests::search_approval_requires_catalogued_backend_exact_query_and_once_lifetime) |
+  test(=composition::tests::terminal_approval_is_catalogued_exact_once_and_execute_gated) |
+  test(=conversation_only_requests_need_no_tool_approvals_and_replay_offline) |
+  test(=execution::tests::catalogued_symlink_proxy_preserves_argv_zero_alias) |
+  test(=execution::tests::escaped_stdio_never_blocks_past_the_capture_grace) |
+  test(=execution::tests::nonzero_exit_and_bounded_streams_are_durable_result_data) |
+  test(=execution::tests::normal_leader_exit_also_terminates_the_descendant_tree) |
+  test(=execution::tests::prepared_debug_redacts_command_material_and_rejects_protected_env) |
+  test(=execution::tests::relative_cwd_and_explicit_environment_reach_the_child) |
+  test(=execution::tests::shell_metacharacters_are_one_literal_argument) |
+  test(=execution::tests::timeout_terminates_the_descendant_tree) |
+  test(=explicit_recovery_preserves_budget_and_verified_effect_before_separate_resume) |
+  test(=final_contract_projects_process_arguments_exits_and_actual_order_then_replays_offline) |
+  test(=final_contract_rejects_prose_missing_fields_and_model_written_commands_after_read) |
+  test(=invocation_diagnostics_distinguish_schema_and_resource_failures_without_values) |
+  test(=path::tests::cwd_never_follows_a_workspace_symlink) |
+  test(=path::tests::cwd_rejects_an_ambient_root_retargeted_after_preopen) |
+  test(=process_execution_requires_separate_approval_and_resumes_without_replay) |
+  test(=process_outcome_commit_failure_recovers_without_reexecution) |
+  test(=pty_cli_approves_start_commits_input_output_receipts_and_replays_offline) |
+  test(=rejected_final_response_resumes_after_restart_without_replaying_writes_or_failed_command) |
+  test(=sigint_during_model_call_stops_at_a_safe_or_unknown_no_replay_boundary) |
+  test(=slow_provider_becomes_a_durable_timeout_without_retry) |
+  test(=terminal::sessions::tests::literal_input_unicode_output_and_non_consuming_offsets) |
+  test(=terminal::sessions::tests::nonzero_timeout_and_missing_session_remain_observations) |
+  test(=terminal::sessions::tests::output_ring_is_bounded_and_reports_lost_bytes) |
+  test(=terminal::sessions::tests::repeated_start_is_not_respawned_and_session_count_is_bounded) |
+  test(=terminal::sessions::tests::terminal_control_bytes_and_write_deadlines_are_supported) |
+  test(=terminal::sessions::tests::termination_and_leader_exit_reach_jobs_in_their_own_groups) |
+  test(=terminal::sessions::tests::termination_normal_exit_and_host_drop_clean_owned_descendants) |
+  test(=tests::sqlite_cold_audit_indexes_each_event_once_and_warm_append_skips_historical_rows) |
+  test(=tests::sqlite_receipt_heavy_run_uses_one_lookup_per_binding_and_no_warm_history_scan) |
+  test(=tests::sqlite_ten_thousand_event_run_has_bounded_warm_verification_and_linear_cold_audit) |
+  test(=tests::workspace_debug_and_binding_never_expose_ambient_values) |
+  test(=tool_discovery_is_approved_receipted_and_frozen_across_resume) |
+  test(=usage_counts_rejected_responses_and_survives_resume_without_recounting_replay)
+)
+"""
