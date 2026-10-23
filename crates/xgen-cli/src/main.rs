@@ -270,6 +270,13 @@ struct RunArgs {
     /// Bound work performed by this process invocation.
     #[arg(long, default_value_t = 32)]
     max_ticks: u32,
+    /// Answer a goal that plans no steps, instead of requiring receipt-completed steps.
+    ///
+    /// The REPL admits this contract already. Without it a question needing no
+    /// tool closes as `proposal_rejected.completion_without_receipt_completed_plan`,
+    /// so a host that drives `run` per message cannot hold a conversation.
+    #[arg(long)]
+    conversation_responses: bool,
     /// Agent loop budget recorded in the Run manifest for workspace discovery runs.
     #[arg(
         long,
@@ -516,6 +523,9 @@ impl repl::ReplHost for InteractiveHost {
                 max_model_turns: None,
                 final_response_schema: None,
                 completion_checks: None,
+                // The interactive driver admits this contract regardless; said
+                // here so the request describes the Run it actually starts.
+                conversation_responses: true,
             },
             &process_session,
             |run_id| {
@@ -852,6 +862,7 @@ fn run_command(args: RunArgs) -> ExitCode {
             max_model_turns: args.max_model_turns,
             final_response_schema,
             completion_checks,
+            conversation_responses: args.conversation_responses,
         },
         |run_id| eprintln!("XGEN_STARTED run_id={run_id}"),
     ))
