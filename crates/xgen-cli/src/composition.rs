@@ -141,6 +141,14 @@ pub struct LocalRunRequest {
     pub final_response_schema: Option<serde_json::Value>,
     /// Optional exact process checks required before completion. Requires a response schema.
     pub completion_checks: Option<Vec<xgen_provider_openai::CompletionCheck>>,
+    /// Admit `response_candidate` for a goal that plans no steps.
+    ///
+    /// Off, a goal needing only an answer closes as
+    /// `proposal_rejected.completion_without_receipt_completed_plan`: the model
+    /// has nothing to show a receipt for, and `completion_candidate` requires
+    /// one. The REPL has always turned this on; `run` could not, so the same
+    /// question answered interactively failed as a single invocation.
+    pub conversation_responses: bool,
 }
 
 impl LocalRunRequest {
@@ -174,6 +182,7 @@ impl LocalRunRequest {
             max_model_turns: None,
             final_response_schema: None,
             completion_checks: None,
+            conversation_responses: false,
         }
     }
 }
@@ -888,7 +897,8 @@ where
     F: FnOnce(&str),
     O: FnMut(DriverProgress) -> DriverProgressControl,
 {
-    run_local_composed(request, None, false, None, on_started, on_progress)
+    let conversational = request.conversation_responses;
+    run_local_composed(request, None, conversational, None, on_started, on_progress)
 }
 
 /// Start an isolated evaluation Run using the ordinary local tools and driver.
@@ -3897,6 +3907,7 @@ mod tests {
             max_model_turns: None,
             final_response_schema: None,
             completion_checks: None,
+            conversation_responses: false,
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -3955,6 +3966,7 @@ mod tests {
             max_model_turns: None,
             final_response_schema: None,
             completion_checks: None,
+            conversation_responses: false,
         };
         assert!(matches!(
             run_local_with_process_session_progress(
