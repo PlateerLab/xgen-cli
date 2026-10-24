@@ -197,7 +197,7 @@ def evaluate(args, binary):
                 "sources": {str(f.relative_to(ROOT)): sha(f) for f in sources},
                 "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "environment": {"os": platform.system(), "arch": platform.machine(), "python": platform.python_version()},
-                "engine": "xgen-cli 0.1.0-rc.3 / real RunDriver / scripted planner",
+                "engine": "xgen-cli 0.1.0-rc.4 / real RunDriver / scripted planner",
                 "query_contract": "advertised feature; admission pins SinkGuarantee::None, query reconciliation NOT_IMPLEMENTED for planned admission",
                 "scenarios": SCENARIOS, "packet_sizes": [1, 4],
                 "model_tokens": "NOT_MEASURED", "model_cost": "NOT_MEASURED", "external_engines": "NOT_RUN"}
