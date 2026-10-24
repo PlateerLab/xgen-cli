@@ -3,7 +3,7 @@
   "platforms": [
     {
       "target": "x86_64-unknown-linux-musl",
-      "packageName": "@xgen/cli-linux-x64-musl",
+      "packageName": "@xgen-ai/cli-linux-x64-musl",
       "os": "linux",
       "cpu": "x64",
       "asset": "xgen-x86_64-unknown-linux-musl",
@@ -12,7 +12,7 @@
     },
     {
       "target": "aarch64-unknown-linux-musl",
-      "packageName": "@xgen/cli-linux-arm64-musl",
+      "packageName": "@xgen-ai/cli-linux-arm64-musl",
       "os": "linux",
       "cpu": "arm64",
       "asset": "xgen-aarch64-unknown-linux-musl",
@@ -21,7 +21,7 @@
     },
     {
       "target": "x86_64-apple-darwin",
-      "packageName": "@xgen/cli-darwin-x64",
+      "packageName": "@xgen-ai/cli-darwin-x64",
       "os": "darwin",
       "cpu": "x64",
       "asset": "xgen-x86_64-apple-darwin",
@@ -30,7 +30,7 @@
     },
     {
       "target": "aarch64-apple-darwin",
-      "packageName": "@xgen/cli-darwin-arm64",
+      "packageName": "@xgen-ai/cli-darwin-arm64",
       "os": "darwin",
       "cpu": "arm64",
       "asset": "xgen-aarch64-apple-darwin",
@@ -39,7 +39,7 @@
     },
     {
       "target": "x86_64-pc-windows-msvc",
-      "packageName": "@xgen/cli-win32-x64",
+      "packageName": "@xgen-ai/cli-win32-x64",
       "os": "win32",
       "cpu": "x64",
       "asset": "xgen-x86_64-pc-windows-msvc.exe",

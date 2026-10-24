@@ -305,7 +305,7 @@ impl ModelCheckError {
         match self {
             Self::Configuration => "configuration_invalid",
             Self::InvalidBaseUrl => "base_url_invalid",
-            Self::InvalidBasePath => "base_url_must_end_in_v1",
+            Self::InvalidBasePath => "base_url_must_name_the_api_root",
             Self::InvalidModel => "model_invalid",
             Self::InvalidTokenizer => "tokenizer_invalid",
             Self::InvalidCredential => "api_key_invalid",

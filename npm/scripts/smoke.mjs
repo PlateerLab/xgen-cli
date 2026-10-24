@@ -199,7 +199,7 @@ async function main() {
     const root = npmInvocation(['root', '--global', '--prefix', installRoot]);
     const rootResult = await run(root.command, root.args, { env: npmEnvironment });
     const globalRoot = rootResult.stdout.trim();
-    const installedLauncher = path.join(globalRoot, '@xgen', 'cli', 'package.json');
+    const installedLauncher = path.join(globalRoot, '@xgen-ai', 'cli', 'package.json');
     const launcherEntry = await lstat(installedLauncher);
     assert.equal(launcherEntry.isFile(), true);
     const requireFromLauncher = createRequire(installedLauncher);

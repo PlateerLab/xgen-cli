@@ -23,7 +23,7 @@ function resolvePlatformBinary(specification, resolver = require.resolve) {
   } catch (cause) {
     const error = new Error(
       `The required XGEN native package ${specification.packageName} is not installed. ` +
-        'Reinstall @xgen/cli without --omit=optional.',
+        'Reinstall @xgen-ai/cli without --omit=optional.',
     );
     error.code = 'XGEN_PLATFORM_PACKAGE_MISSING';
     error.cause = cause;

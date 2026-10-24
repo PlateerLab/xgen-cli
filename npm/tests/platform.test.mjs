@@ -10,11 +10,11 @@ const catalog = JSON.parse(
 const { resolvePlatformBinary, selectPlatform } = require('../packages/cli/lib/platform.cjs');
 
 const expected = [
-  ['linux', 'x64', '@xgen/cli-linux-x64-musl', 'bin/xgen'],
-  ['linux', 'arm64', '@xgen/cli-linux-arm64-musl', 'bin/xgen'],
-  ['darwin', 'x64', '@xgen/cli-darwin-x64', 'bin/xgen'],
-  ['darwin', 'arm64', '@xgen/cli-darwin-arm64', 'bin/xgen'],
-  ['win32', 'x64', '@xgen/cli-win32-x64', 'bin/xgen.exe'],
+  ['linux', 'x64', '@xgen-ai/cli-linux-x64-musl', 'bin/xgen'],
+  ['linux', 'arm64', '@xgen-ai/cli-linux-arm64-musl', 'bin/xgen'],
+  ['darwin', 'x64', '@xgen-ai/cli-darwin-x64', 'bin/xgen'],
+  ['darwin', 'arm64', '@xgen-ai/cli-darwin-arm64', 'bin/xgen'],
+  ['win32', 'x64', '@xgen-ai/cli-win32-x64', 'bin/xgen.exe'],
 ];
 
 test('platform catalog selects every supported native package exactly', () => {
@@ -42,7 +42,7 @@ test('native package resolution uses the exact package subpath', () => {
     return '/verified/native/xgen';
   });
   assert.equal(resolved, '/verified/native/xgen');
-  assert.deepEqual(requests, ['@xgen/cli-linux-x64-musl/bin/xgen']);
+  assert.deepEqual(requests, ['@xgen-ai/cli-linux-x64-musl/bin/xgen']);
 });
 
 test('missing optional dependency produces a bounded recovery message', () => {
@@ -57,8 +57,8 @@ test('missing optional dependency produces a bounded recovery message', () => {
     (error) =>
       error.code === 'XGEN_PLATFORM_PACKAGE_MISSING' &&
       error.message ===
-        'The required XGEN native package @xgen/cli-linux-x64-musl is not installed. ' +
-          'Reinstall @xgen/cli without --omit=optional.' &&
+        'The required XGEN native package @xgen-ai/cli-linux-x64-musl is not installed. ' +
+          'Reinstall @xgen-ai/cli without --omit=optional.' &&
       !error.message.includes('host-specific'),
   );
 });

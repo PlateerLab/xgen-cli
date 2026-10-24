@@ -7,7 +7,7 @@
 
 ## 사전 조건과 중단 조건
 
-- GitHub Release `v0.1.0-rc.3`과 `@xgen/cli@0.1.0-rc.3`이 게시됐고 provenance, checksum과 package
+- GitHub Release `v0.1.0-rc.3`과 `@xgen-ai/cli@0.1.0-rc.3`이 게시됐고 provenance, checksum과 package
   integrity 검증이 끝나야 한다.
 - 각 참여자는 repository checkout이나 Rust compiler 없이 먼저 설치·온보딩 smoke를 통과한다. 언어별
   compiler/interpreter는 해당 coding fixture 실행을 위해서만 사용한다.

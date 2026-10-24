@@ -1,6 +1,6 @@
 # ADR-0046: XGEN 이름 통일과 기존 저장 데이터 호환
 
-- 상태: Accepted
+- 상태: Accepted (`npm` package scope 결정은 [ADR-0051](0051-npm-package-scope-xgen-ai.md)가 대체)
 - 날짜: 2026-10-04
 
 ## 결정

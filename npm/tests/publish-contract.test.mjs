@@ -12,25 +12,25 @@ const provenance = {
 
 test('platform packages are ordered before the launcher', () => {
   const reports = [
-    { name: '@xgen/cli', integrity: 'sha512-launcher' },
-    { name: '@xgen/cli-linux-x64-musl', integrity: 'sha512-linux' },
-    { name: '@xgen/cli-darwin-arm64', integrity: 'sha512-macos' },
+    { name: '@xgen-ai/cli', integrity: 'sha512-launcher' },
+    { name: '@xgen-ai/cli-linux-x64-musl', integrity: 'sha512-linux' },
+    { name: '@xgen-ai/cli-darwin-arm64', integrity: 'sha512-macos' },
   ];
   assert.deepEqual(
-    publicationOrder(reports, '@xgen/cli').map(({ name }) => name),
-    ['@xgen/cli-linux-x64-musl', '@xgen/cli-darwin-arm64', '@xgen/cli'],
+    publicationOrder(reports, '@xgen-ai/cli').map(({ name }) => name),
+    ['@xgen-ai/cli-linux-x64-musl', '@xgen-ai/cli-darwin-arm64', '@xgen-ai/cli'],
   );
 });
 
 test('publication order requires exactly one launcher', () => {
   assert.throws(
-    () => publicationOrder([{ name: '@xgen/cli-linux-x64-musl' }], '@xgen/cli'),
+    () => publicationOrder([{ name: '@xgen-ai/cli-linux-x64-musl' }], '@xgen-ai/cli'),
     /exactly one launcher/,
   );
 });
 
 test('an identical retry requires integrity, dist-tag, and provenance', () => {
-  const report = { name: '@xgen/cli', integrity: 'sha512-exact' };
+  const report = { name: '@xgen-ai/cli', integrity: 'sha512-exact' };
   const remote = {
     'dist.integrity': 'sha512-exact',
     'dist-tags': { next: '0.1.0-rc.3' },

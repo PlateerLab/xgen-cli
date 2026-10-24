@@ -1039,15 +1039,15 @@ jobs:
               npm install --global --prefix "$test_root/install" \
                 --include=optional --ignore-scripts --no-audit --no-fund \
                 --registry=https://registry.npmjs.org/ \
-                "@xgen/cli@$version"; then
+                "@xgen-ai/cli@$version"; then
               break
             fi
             test "$attempt" -lt 3
             sleep 5
           done
           global_root=$(npm root --global --prefix "$test_root/install")
-          test -f "$global_root/@xgen/cli/package.json"
-          test -f "$global_root/@xgen/$PLATFORM_PACKAGE/package.json"
+          test -f "$global_root/@xgen-ai/cli/package.json"
+          test -f "$global_root/@xgen-ai/$PLATFORM_PACKAGE/package.json"
           HOME="$test_root/home" \
           XGEN_STATE_HOME="$test_root/state" \
             "$test_root/install/bin/xgen" --version > "$test_root/version.txt"
@@ -1072,9 +1072,9 @@ jobs:
             npm install --global --prefix "$test_root/install" \
               --include=optional --ignore-scripts --no-audit --no-fund \
               --registry=https://registry.npmjs.org/ \
-              "@xgen/cli@$version"
-          test -f "$global_root/@xgen/cli/package.json"
-          test -f "$global_root/@xgen/$PLATFORM_PACKAGE/package.json"
+              "@xgen-ai/cli@$version"
+          test -f "$global_root/@xgen-ai/cli/package.json"
+          test -f "$global_root/@xgen-ai/$PLATFORM_PACKAGE/package.json"
           test "$(HOME="$test_root/home" XGEN_STATE_HOME="$test_root/state" \
             "$test_root/install/bin/xgen" --version)" = "xgen $version"
           test ! -e "$test_root/state"
@@ -1082,9 +1082,9 @@ jobs:
           HOME="$test_root/home" \
           npm_config_cache="$test_root/cache" \
             npm uninstall --global --prefix "$test_root/install" \
-              --ignore-scripts --no-audit --no-fund '@xgen/cli'
-          test ! -e "$global_root/@xgen/cli"
-          test ! -e "$global_root/@xgen/$PLATFORM_PACKAGE"
+              --ignore-scripts --no-audit --no-fund '@xgen-ai/cli'
+          test ! -e "$global_root/@xgen-ai/cli"
+          test ! -e "$global_root/@xgen-ai/$PLATFORM_PACKAGE"
           test ! -e "$test_root/install/bin/xgen"
 
       - name: Install and verify exact npm package on Windows
@@ -1114,7 +1114,7 @@ jobs:
                   & npm.cmd install --global --prefix $InstallRoot `
                     --include=optional --ignore-scripts --no-audit --no-fund `
                     --registry=https://registry.npmjs.org/ `
-                    "@xgen/cli@$Version"
+                    "@xgen-ai/cli@$Version"
                   if ($LASTEXITCODE -eq 0) {
                       $Installed = $true
                       break
@@ -1123,10 +1123,10 @@ jobs:
               }
               if (-not $Installed) { throw "npm install failed" }
               $GlobalRoot = (& npm.cmd root --global --prefix $InstallRoot | Out-String).Trim()
-              if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/cli/package.json"))) {
+              if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli/package.json"))) {
                   throw "launcher package is missing"
               }
-              if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/$env:PLATFORM_PACKAGE/package.json"))) {
+              if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE/package.json"))) {
                   throw "platform package is missing"
               }
               $Shim = Join-Path $InstallRoot "xgen.cmd"
@@ -1158,15 +1158,15 @@ jobs:
               & npm.cmd install --global --prefix $InstallRoot `
                 --include=optional --ignore-scripts --no-audit --no-fund `
                 --registry=https://registry.npmjs.org/ `
-                "@xgen/cli@$Version"
+                "@xgen-ai/cli@$Version"
               if ($LASTEXITCODE -ne 0) { throw "npm reinstall failed" }
               $Reinstalled = (& $Shim --version | Out-String).Trim()
               if ($LASTEXITCODE -ne 0 -or $Reinstalled -ne "xgen $Version") {
                   throw "npm reinstall produced the wrong version"
               }
               if (
-                  -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/cli/package.json")) -or
-                  -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/$env:PLATFORM_PACKAGE/package.json"))
+                  -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli/package.json")) -or
+                  -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE/package.json"))
               ) {
                   throw "npm reinstall is missing an exact package"
               }
@@ -1175,11 +1175,11 @@ jobs:
               }
 
               & npm.cmd uninstall --global --prefix $InstallRoot `
-                --ignore-scripts --no-audit --no-fund "@xgen/cli"
+                --ignore-scripts --no-audit --no-fund "@xgen-ai/cli"
               if ($LASTEXITCODE -ne 0) { throw "npm uninstall failed" }
               if (
-                  (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/cli")) -or
-                  (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen/$env:PLATFORM_PACKAGE"))
+                  (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli")) -or
+                  (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE"))
               ) {
                   throw "npm uninstall left package artifacts"
               }

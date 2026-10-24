@@ -18,7 +18,7 @@ Node.js가 이미 있다면 exact RC를 npm으로 설치할 수 있습니다. `-
 제거하므로 사용하지 않습니다.
 
 ```bash
-npm install --global @xgen/cli@0.1.0-rc.3
+npm install --global @xgen-ai/cli@0.1.0-rc.3
 xgen --version
 ```
 

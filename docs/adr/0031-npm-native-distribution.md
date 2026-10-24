@@ -1,6 +1,7 @@
 # ADR-0031: npm은 네이티브 XGEN의 무스크립트 배포 계층이다
 
-- 상태: Accepted (`npm` 게시 인증 결정은 [ADR-0034](0034-npm-token-publishing-policy.md)가 대체)
+- 상태: Accepted (`npm` 게시 인증 결정은 [ADR-0034](0034-npm-token-publishing-policy.md)가,
+  package scope는 [ADR-0051](0051-npm-package-scope-xgen-ai.md)가 대체)
 - 날짜: 2026-09-01
 - 적용 범위: npm package, GitHub Actions release, 사용자 설치
 

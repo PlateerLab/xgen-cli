@@ -1,23 +1,23 @@
 # npm granular token 게시와 provenance 운영
 
-`@xgen/cli`는 native XGEN를 npm으로 설치하기 위한 선택형 배포 계층이다. 직접 GitHub installer를 쓰는
+`@xgen-ai/cli`는 native XGEN를 npm으로 설치하기 위한 선택형 배포 계층이다. 직접 GitHub installer를 쓰는
 사용자는 Node.js가 필요 없고, npm 경로를 고른 사용자는 Node.js 22.14 이상이 필요하다. 두 경로는 같은
 release binary를 실행한다.
 
 이 package 이름은 설치 entrypoint를 뜻하며 화면 구현을 뜻하지 않는다. 현재 가벼운 REPL이나 향후 같은
-`xgen` binary에 포함될 TUI는 동일한 `@xgen/cli`로 배포할 수 있다. TUI를 별도 제품·release cadence로
+`xgen` binary에 포함될 TUI는 동일한 `@xgen-ai/cli`로 배포할 수 있다. TUI를 별도 제품·release cadence로
 분리할 때만 별도 package naming ADR을 먼저 작성한다.
 
 ## Package 구성
 
 | Package | 대상 |
 | --- | --- |
-| `@xgen/cli` | OS/CPU 선택과 native process 실행만 담당하는 launcher |
-| `@xgen/cli-linux-x64-musl` | Linux x86-64 |
-| `@xgen/cli-linux-arm64-musl` | Linux ARM64 |
-| `@xgen/cli-darwin-x64` | macOS Intel |
-| `@xgen/cli-darwin-arm64` | macOS Apple Silicon |
-| `@xgen/cli-win32-x64` | Windows x86-64 |
+| `@xgen-ai/cli` | OS/CPU 선택과 native process 실행만 담당하는 launcher |
+| `@xgen-ai/cli-linux-x64-musl` | Linux x86-64 |
+| `@xgen-ai/cli-linux-arm64-musl` | Linux ARM64 |
+| `@xgen-ai/cli-darwin-x64` | macOS Intel |
+| `@xgen-ai/cli-darwin-arm64` | macOS Apple Silicon |
+| `@xgen-ai/cli-win32-x64` | Windows x86-64 |
 
 모든 package는 같은 exact version으로 게시한다. Lifecycle script, 설치 중 GitHub download와 native
 compile은 없다. Launcher는 현재 platform package가 없으면 종료한다. `--omit=optional` 설치는 지원하지
@@ -27,11 +27,11 @@ compile은 없다. Launcher는 현재 platform package가 없으면 종료한다
 
 이 절차는 release tag를 만들기 전에 npm scope 관리자 한 명이 수행한다.
 
-1. 해당 계정 또는 npm organization이 `@xgen` scope 여섯 package를 public으로 게시할 권한이 있는지
-   확인한다. 권한이나 scope 확보 여부가 불명확하면 `@xgen/cli`를 게시하지 말고 naming ADR을 먼저
+1. 해당 계정 또는 npm organization이 `@xgen-ai` scope 여섯 package를 public으로 게시할 권한이 있는지
+   확인한다. 권한이나 scope 확보 여부가 불명확하면 `@xgen-ai/cli`를 게시하지 말고 naming ADR을 먼저
    갱신한다.
 2. npm에서 package read/write 권한과 `bypass 2FA`가 있는 granular access token을 준비한다. 가능하면
-   `@xgen` package 범위와 만료 시점을 제한한다. Token 값은 repository, release artifact, 문서와 명령
+   `@xgen-ai` package 범위와 만료 시점을 제한한다. Token 값은 repository, release artifact, 문서와 명령
    출력에 넣지 않고 GitHub Actions repository secret `NPM_TOKEN`에만 저장한다.
 3. clean `main` checkout에서 bootstrap tarball을 만든다.
 
@@ -64,7 +64,7 @@ quality + 5-platform native build
   -> immutable GitHub Release + attestations
   -> GitHub Release exact bundle 재다운로드/검증
   -> 5 platform npm packages publish/verify
-  -> @xgen/cli publish/verify
+  -> @xgen-ai/cli publish/verify
   -> 5-platform public registry install smoke
 ```
 

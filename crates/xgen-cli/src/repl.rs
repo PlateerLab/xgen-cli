@@ -935,7 +935,7 @@ where
     })
 }
 
-fn print_progress(output: &mut impl Write, progress: DriverProgress) -> io::Result<()> {
+pub(crate) fn print_progress(output: &mut impl Write, progress: DriverProgress) -> io::Result<()> {
     let line = match progress {
         DriverProgress::ModelCallStarting => "progress: model_call_starting",
         DriverProgress::PlanCommitted => "progress: plan_committed",

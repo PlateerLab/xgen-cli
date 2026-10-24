@@ -30,7 +30,7 @@ assert.equal(lock.packages[''].name, workspace.name);
 assert.equal(lock.packages[''].version, version);
 assert.deepEqual(lock.packages[''].engines, workspace.engines);
 
-assert.equal(launcher.name, '@xgen/cli');
+assert.equal(launcher.name, '@xgen-ai/cli');
 assert.equal(launcher.version, version);
 assert.equal(launcher.license, 'Apache-2.0');
 assert.deepEqual(launcher.repository, { type: 'git', url: repositoryUrl });
@@ -61,7 +61,7 @@ unique(catalog.platforms.map(({ os, cpu }) => `${os}/${cpu}`), 'runtime platform
 const expectedOptionalDependencies = {};
 for (const specification of catalog.platforms) {
   assert.match(specification.target, /^[A-Za-z0-9_-]+$/);
-  assert.match(specification.packageName, /^@xgen\/cli-[a-z0-9-]+$/);
+  assert.match(specification.packageName, /^@xgen-ai\/cli-[a-z0-9-]+$/);
   assert.match(specification.asset, /^xgen-[A-Za-z0-9_.-]+$/);
   assert.match(specification.binaryPath, /^bin\/xgen(?:\.exe)?$/);
   assert.match(specification.tarball, /^xgen-cli-[a-z0-9-]+\.tgz$/);

@@ -29,7 +29,7 @@ binary를 감싸는 선택형 설치 채널이며 제품 runtime을 다시 구�
   `XGEN_MAIN_PROTECTION_ENABLED=true`를 둔다.
 - Bypass actor가 없음을 관리자가 확인한 뒤 Actions repository variable
   `XGEN_RELEASE_RULESET_NO_BYPASS=true`를 설정한다. Read-only ruleset API는 bypass 목록을 숨길 수 있다.
-- npm의 `@xgen` scope에 여섯 package를 게시할 owner 권한을 확인한다. Package read/write와 `bypass 2FA`
+- npm의 `@xgen-ai` scope에 여섯 package를 게시할 owner 권한을 확인한다. Package read/write와 `bypass 2FA`
   권한이 있는 granular token을 repository secret `NPM_TOKEN`에 저장하고 source, artifact와 명령 출력에는
   넣지 않는다. 실행 파일이 없는 bootstrap version을 같은 정책으로 먼저 게시한다. 전체 절차는
   [npm granular token 게시와 provenance](npm-distribution.md)를 따른다.
