@@ -1,6 +1,6 @@
 {
   "name": "@xgen-ai/cli",
-  "version": "0.1.0-rc.3",
+  "version": "0.1.0-rc.4",
   "description": "Local-first XGEN agent CLI and harness",
   "license": "Apache-2.0",
   "repository": {
@@ -25,11 +25,11 @@
     "LICENSE"
   ],
   "optionalDependencies": {
-    "@xgen-ai/cli-linux-x64-musl": "0.1.0-rc.3",
-    "@xgen-ai/cli-linux-arm64-musl": "0.1.0-rc.3",
-    "@xgen-ai/cli-darwin-x64": "0.1.0-rc.3",
-    "@xgen-ai/cli-darwin-arm64": "0.1.0-rc.3",
-    "@xgen-ai/cli-win32-x64": "0.1.0-rc.3"
+    "@xgen-ai/cli-linux-x64-musl": "0.1.0-rc.4",
+    "@xgen-ai/cli-linux-arm64-musl": "0.1.0-rc.4",
+    "@xgen-ai/cli-darwin-x64": "0.1.0-rc.4",
+    "@xgen-ai/cli-darwin-arm64": "0.1.0-rc.4",
+    "@xgen-ai/cli-win32-x64": "0.1.0-rc.4"
   },
   "publishConfig": {
     "access": "public",

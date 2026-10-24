@@ -1,13 +1,13 @@
 # RC3 Developer Preview 파일럿
 
-이 문서는 게시된 `v0.1.0-rc.3` artifact가 일반 개발자의 작은 코딩 작업을 끝까지 수행하는지 확인하는
+이 문서는 게시된 `v0.1.0-rc.4` artifact가 일반 개발자의 작은 코딩 작업을 끝까지 수행하는지 확인하는
 제한 파일럿 runbook이다. Release 이전 source checkout이나 local build 결과를 사용자 결과로 대체하지
 않는다. 파일럿 project와 state는 폐기 가능한 전용 위치에서 만들고 실제 업무 source나 credential을
 사용하지 않는다.
 
 ## 사전 조건과 중단 조건
 
-- GitHub Release `v0.1.0-rc.3`과 `@xgen-ai/cli@0.1.0-rc.3`이 게시됐고 provenance, checksum과 package
+- GitHub Release `v0.1.0-rc.4`와 `@xgen-ai/cli@0.1.0-rc.4`가 게시됐고 provenance, checksum과 package
   integrity 검증이 끝나야 한다.
 - 각 참여자는 repository checkout이나 Rust compiler 없이 먼저 설치·온보딩 smoke를 통과한다. 언어별
   compiler/interpreter는 해당 coding fixture 실행을 위해서만 사용한다.
