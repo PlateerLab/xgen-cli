@@ -38,7 +38,7 @@ script는 필요하지 않다. Model endpoint와 사용자가 실행하려는 co
 | 지속성 | journal/WorkGraph/Receipt/ToolOutput과 private invocation recipe의 process-restart 복원 |
 | 복구 | Started 뒤 outcome을 확정하지 못한 effect를 Unknown으로 닫고 자동 replay하지 않음 |
 | 장기 turn | PlanningContext v3가 Step plan 순서와 passed Receipt ToolOutput 관찰 순서를 보존 |
-| 설치 | 다섯 target native/checksum installer와 무스크립트 `@xgen/cli` exact-version npm package |
+| 설치 | 다섯 target native/checksum installer와 무스크립트 `@xgen-ai/cli` exact-version npm package |
 
 Filesystem, process와 model egress 승인은 서로 대체하지 않는다. Process result의 `success=false`는 adapter
 장애가 아니라 test/build의 durable non-zero 결과일 수 있으며 모델은 그 bounded output을 다음 turn에서

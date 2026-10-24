@@ -4,15 +4,15 @@ import test from 'node:test';
 import { normalizeDryRunReport } from '../scripts/verify-release.mjs';
 
 const report = {
-  id: '@xgen/cli@0.1.0-rc.3',
-  name: '@xgen/cli',
+  id: '@xgen-ai/cli@0.1.0-rc.3',
+  name: '@xgen-ai/cli',
   version: '0.1.0-rc.3',
   files: [],
 };
 
 test('npm 10 and npm 11 dry-run report shapes normalize identically', () => {
   assert.equal(normalizeDryRunReport(report), report);
-  assert.equal(normalizeDryRunReport({ '@xgen/cli': report }), report);
+  assert.equal(normalizeDryRunReport({ '@xgen-ai/cli': report }), report);
 });
 
 test('dry-run normalization rejects ambiguous package reports', () => {

@@ -48,7 +48,7 @@ function parseArguments(argv) {
 function platformReadme(specification, version) {
   return `# \`${specification.packageName}\`\n\n` +
     `Native XGEN CLI ${version} binary for \`${specification.target}\`.\n\n` +
-    'This package is an exact-version optional dependency of `@xgen/cli`. ' +
+    'This package is an exact-version optional dependency of `@xgen-ai/cli`. ' +
     'Install the launcher package instead of installing this package directly. ' +
     'It contains no install lifecycle scripts and performs no network download.\n';
 }
