@@ -1773,6 +1773,78 @@ fn pty_sessions_do_not_outlive_a_host_ended_by_sigterm() {
     }
 }
 
+/// `--debug` is documented as showing durable progress events, and for `run`
+/// it did nothing at all: the flag parsed and was then dropped on the floor.
+///
+/// The events go to stderr beside the existing `XGEN_*` result lines, so a host
+/// that only reads stdout keeps the answer and nothing else, and one that does
+/// not pass the flag sees exactly what it saw before.
+#[test]
+fn debug_reports_durable_progress_for_run_and_leaves_stdout_alone() {
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir(&workspace).expect("workspace should create");
+    let answer = "a loopback answer that needs no tool";
+    let response = provider_response(&json!({
+        "formatVersion": 1,
+        "kind": "response_candidate",
+        "steps": [],
+        "summary": answer
+    }));
+
+    let watched = OneTurnServer::spawn(response.clone());
+    let output = xgen(&state_root)
+        .args(["--debug", "run", "--workspace"])
+        .arg(&workspace)
+        .args(["--base-url", &watched.base_url])
+        .args(["--model", MODEL, "--tokenizer", TOKENIZER])
+        .args([
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--conversation-responses",
+            "answer without tools",
+        ])
+        .bounded_output()
+        .expect("watched run should finish");
+    watched.handle.join().expect("server should finish");
+    assert_exit(&output, 0);
+    let watched_stderr = stderr(&output);
+    assert!(
+        watched_stderr.contains("progress: model_call_starting"),
+        "{watched_stderr}"
+    );
+    assert!(
+        watched_stderr.contains("progress: response_committed"),
+        "{watched_stderr}"
+    );
+    // The answer is the whole of stdout; diagnostics never join it.
+    assert_eq!(String::from_utf8_lossy(&output.stdout), answer);
+
+    let quiet_server = OneTurnServer::spawn(response);
+    let quiet = xgen(&state_root)
+        .args(["run", "--workspace"])
+        .arg(&workspace)
+        .args(["--base-url", &quiet_server.base_url])
+        .args(["--model", MODEL, "--tokenizer", TOKENIZER])
+        .args([
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--conversation-responses",
+            "answer without tools",
+        ])
+        .bounded_output()
+        .expect("quiet run should finish");
+    quiet_server.handle.join().expect("server should finish");
+    assert_exit(&quiet, 0);
+    let quiet_stderr = stderr(&quiet);
+    assert!(!quiet_stderr.contains("progress: "), "{quiet_stderr}");
+    assert!(quiet_stderr.contains("XGEN_RESPONDED"), "{quiet_stderr}");
+    assert_eq!(String::from_utf8_lossy(&quiet.stdout), answer);
+}
+
 fn provider_response(content: &Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "id": RAW_RESPONSE_SENTINEL,

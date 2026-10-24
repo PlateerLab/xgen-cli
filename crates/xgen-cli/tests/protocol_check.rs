@@ -171,6 +171,80 @@ fn execute_approval_without_an_executable_catalog_is_rejected() {
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
     assert!(stderr.contains("code=configuration_mismatch"));
+    // The shared configuration code says nothing on its own, and the flag was
+    // just typed, so the failure names which half is missing and both ways out.
+    assert!(stderr.contains("configuration=executable_catalog"));
+    assert!(stderr.contains("--allow-executable ID=ABSOLUTE_PATH"));
+    assert!(stderr.contains("--allow-path-executables"));
+}
+
+/// A directory holding one executable named after a discovered developer tool.
+#[cfg(unix)]
+fn path_with_a_developer_tool(directory: &std::path::Path) -> &std::path::Path {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let tool = directory.join("git");
+    std::fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o700)).unwrap();
+    directory
+}
+
+/// `--allow-path-executables` is the catalog `--allow-execute` needs.
+///
+/// Egress consent is checked after the catalog, so the pause that asks for it
+/// is proof the catalog was accepted; nothing is sent and no model is involved.
+#[cfg(unix)]
+#[test]
+fn path_discovery_supplies_the_executable_catalog() {
+    let directory = tempdir().expect("temporary directory");
+    let workspace = tempdir().expect("temporary workspace");
+    let output = xgen()
+        .env("XGEN_OPENAI_BASE_URL", "http://127.0.0.1:18000/v1")
+        .env("XGEN_OPENAI_MODEL", "test-model")
+        .env("PATH", path_with_a_developer_tool(directory.path()))
+        .args(["run", "--workspace"])
+        .arg(workspace.path())
+        .args([
+            "--allow-dir",
+            ".",
+            "--allow-execute",
+            "--allow-path-executables",
+            "test goal",
+        ])
+        .output()
+        .expect("xgen should accept a discovered catalog");
+
+    assert_eq!(output.status.code(), Some(10));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
+    assert!(stderr.contains("reason=remote_model_egress_consent_required"));
+    assert!(!stderr.contains("configuration_mismatch"));
+}
+
+/// Asking for discovery that finds nothing is still an empty catalog.
+#[cfg(unix)]
+#[test]
+fn path_discovery_that_finds_nothing_says_so() {
+    let empty = tempdir().expect("temporary directory");
+    let output = xgen()
+        .env("XGEN_OPENAI_BASE_URL", "http://127.0.0.1:18000/v1")
+        .env("XGEN_OPENAI_MODEL", "test-model")
+        .env("PATH", empty.path())
+        .args([
+            "run",
+            "--allow-file",
+            "README.md",
+            "--allow-execute",
+            "--allow-path-executables",
+            "test goal",
+        ])
+        .output()
+        .expect("xgen should reject an empty discovered catalog");
+
+    assert_eq!(output.status.code(), Some(64));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
+    assert!(stderr.contains("configuration=executable_catalog"));
+    assert!(stderr.contains("found no known developer executable"));
 }
 
 #[test]

@@ -15,7 +15,7 @@ launcher용 Node.js 22.14 이상이 필요하다. 사용할 model endpoint 자�
 22.14 이상이 있는 지원 OS에서는 아래 순서가 가장 짧다.
 
 ```bash
-npm install --global --include=optional @xgen/cli@0.1.0-rc.3
+npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.3
 xgen --version
 xgen model setup
 xgen model check --compatibility
@@ -52,16 +52,16 @@ Linux binary는 musl target, Windows binary는 static CRT로 빌드한다. macOS
 ## 설치
 
 Node.js 22.14 이상이 이미 있는 개발자는 RC3가 npm에 게시된 뒤 다음처럼 exact version을 설치한다.
-`@xgen/cli`에는 lifecycle script가 없고 현재 OS/CPU용 native optional package 하나를 registry에서 함께
+`@xgen-ai/cli`에는 lifecycle script가 없고 현재 OS/CPU용 native optional package 하나를 registry에서 함께
 설치한다. 설치 중 GitHub download나 source compile을 하지 않는다.
 
 ```bash
-npm install --global @xgen/cli@0.1.0-rc.3
+npm install --global @xgen-ai/cli@0.1.0-rc.3
 xgen --version
 xgen licenses
 ```
 
-Prerelease 최신 채널은 `@xgen/cli@next`, stable은 `@xgen/cli@latest`지만 재현 가능한 설치와 검증에는
+Prerelease 최신 채널은 `@xgen-ai/cli@next`, stable은 `@xgen-ai/cli@latest`지만 재현 가능한 설치와 검증에는
 exact version을 사용한다. `npm install --omit=optional`은 실행 binary package를 제거하므로 지원하지
 않는다. npm 경로에서 platform package를 찾지 못하면 launcher는 다른 binary를 내려받지 않고 종료한다.
 
@@ -152,7 +152,8 @@ Checksum은 전송 손상을 탐지하지만 같은 release publisher 자체를 
 현재 검증된 기준은 vLLM의 OpenAI-compatible Chat Completions endpoint다. 다음 조건을 모두 만족해야
 실제 planner call이 통과한다.
 
-- base URL의 path가 `/v1`로 끝난다.
+- base URL이 bare host가 아니라 API root를 가리킨다. 대부분 `/v1`이지만 provider가 자기 API를
+  다르게 번호 붙이면 그 경로를 쓴다(예: `/api/paas/v4`). 끝에 `/`가 붙어도 같게 취급한다.
 - plaintext HTTP는 `127.0.0.1` 또는 `::1` literal loopback만 사용한다.
 - server가 strict JSON Schema response format을 지원한다.
 - response의 `model` 문자열이 설정한 served model ID와 정확히 같다.
@@ -166,6 +167,25 @@ xgen model setup
 xgen model list
 xgen model check --compatibility
 ```
+
+`model setup`이 provider를 물을 때 고르는 preset은 base URL과 wire 설정만 채워 주는 기본값이다.
+명시한 option, `XGEN_OPENAI_*` 환경변수, 이미 있는 같은 이름의 profile이 preset보다 우선한다.
+`--provider <id>`로 대화 없이 지정할 수도 있다.
+
+| id | provider | base URL | 검증 |
+| --- | --- | --- | --- |
+| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | 실제 호출로 확인 |
+| `openai` | OpenAI | `https://api.openai.com/v1` | 미확인, provider 문서 기준 |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | 미확인, provider 문서 기준 |
+| `glm` | GLM / Zhipu (z.ai) | `https://api.z.ai/api/paas/v4` | 미확인, provider 문서 기준. Coding Plan 계정은 `https://api.z.ai/api/coding/paas/v4`이므로 `--base-url`로 지정한다 |
+| `local` | 로컬 model (Ollama 기본 port) | `http://127.0.0.1:11434/v1` | loopback fixture로 확인 |
+| `custom` | 그 밖의 OpenAI-compatible endpoint | 직접 입력 | — |
+
+preset에서 가장 중요한 값은 `response_format`이다. planner는 구조화된 JSON으로 답하므로 이 설정을
+무시하는 provider는 `model setup`은 통과하고 Run은 전부 실패한다. 그래서 Anthropic Claude는
+preset에 없다. Claude의 OpenAI 호환 layer는 `response_format`을 무시한다고 문서에 적혀 있어서,
+preset으로 넣으면 설정은 깨끗하게 끝나고 매 턴이 깨진다. 이 설정을 지키는 gateway(예: OpenRouter)
+를 통하면 사용할 수 있다.
 
 인증 없는 loopback vLLM을 non-interactive하게 지정할 수도 있다. Tokenizer를 생략하면 model ID를
 tokenizer/profile identity로 사용한다.
@@ -339,6 +359,31 @@ xgen resume run-0123456789abcdef0123456789abcdef \
   --allow-execute
 ```
 
+매번 경로를 적지 않으려면 `--allow-path-executables`로 PATH에서 찾은 개발 도구(git, cargo, node,
+npm, python3, go, make, java 등)를 한 번에 catalog에 넣는다. 대화형 REPL은 매 세션 이렇게 동작하지만
+`run`은 기본값이 아니다. 발견 결과는 그 실행의 PATH에 달려 있어서 Run의 execution profile이
+머신마다 달라지고, 그러면 `resume`이 프로필 불일치로 닫힌다. 그래서 opt-in이고, `resume`에도 같은
+플래그를 다시 줘야 한다. `--allow-executable`로 적은 항목은 그대로 유지되며 이름이 겹치면 이긴다.
+
+```bash
+xgen run \
+  --workspace . \
+  --allow-dir . \
+  --allow-path-executables \
+  --allow-remote-model-egress \
+  --allow-read \
+  --allow-write \
+  --allow-execute \
+  '테스트를 돌리고 실패를 고쳐줘.'
+```
+
+자동 발견은 shell을 catalog에 넣지 않는다. 항목 하나가 executable 하나이므로 Receipt에 실제로 실행된
+것이 남는다(ADR-0049). `sh -c "<명령>"`은 실제 명령을 argument 안에 숨기므로, shell이 필요한 host는
+`--allow-executable sh=/bin/sh`처럼 이름을 직접 적어 함께 넣는다.
+
+`--allow-execute`는 승인이고 catalog는 나머지 한쪽이다. catalog 없이 `--allow-execute`만 주면
+`configuration_mismatch`로 닫히며, 어느 쪽이 빠졌고 어떻게 채우는지 함께 출력한다.
+
 실행은 shell을 사용하지 않지만 OS sandbox도 아니다. 허용한 compiler, package manager, interpreter와
 그 하위 process는 현재 사용자 권한으로 project code를 실행할 수 있다. CLI는 ambient 환경 전체를
 상속하지 않고 제한된 host 환경만 전달하며 API key와 proxy/클라우드 credential은 child에 전달하지
@@ -377,7 +422,7 @@ npm 설치본은 새 exact version을 다시 설치해 업데이트한다. `next
 가리킬 수 있으므로 파일럿과 장애 재현에는 사용하지 않는다.
 
 ```bash
-npm install --global --include=optional @xgen/cli@0.1.0-rc.3
+npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.3
 xgen --version
 ```
 
@@ -416,7 +461,7 @@ Immutable GitHub Release나 npm version에 치명적 문제가 있으면 기존 
 npm 설치본은 launcher와 현재 platform package를 함께 제거한다.
 
 ```bash
-npm uninstall --global @xgen/cli
+npm uninstall --global @xgen-ai/cli
 ```
 
 Native installer는 runtime state를 삭제하지 않는다. Binary만 제거하려면 설치한 exact regular file을
@@ -448,9 +493,10 @@ profile 저장소를 격리하려면 `XGEN_CONFIG_HOME`을 따로 설정한다. 
 | `unsupported_platform` 또는 platform package 없음 | 지원 OS/architecture와 Node.js version을 확인하고 `--omit=optional` 없이 exact package를 재설치한다. |
 | Installer가 destination을 거부 | 관리자 공용 경로 대신 user-owned directory를 사용하고 symbolic link/reparse point나 broadly writable directory를 제거하지 말고 다른 빈 경로를 선택한다. |
 | PowerShell에서 installer 차단 | Script를 먼저 검토한다. 현재 process 한정 execution-policy 예외는 조직 정책이 허용할 때만 사용한다. SmartScreen 경고는 RC3에 Authenticode가 없기 때문이다. |
+| `base_url_must_name_the_api_root` | base URL이 host만 있고 경로가 없다. `https://api.openai.com`이 아니라 `https://api.openai.com/v1`처럼 API root까지 적는다. 어떤 경로인지는 provider 문서가 정한다. |
 | `credential_store_unavailable` | 평문 저장 fallback은 없다. Secret manager 출력을 `--token-stdin`이나 현재 process의 `XGEN_OPENAI_API_KEY`로 전달한다. |
 | `chat_completions_incompatible` | Provider가 strict JSON Schema 요청을 받아들였지만 실제로 강제하지 않았거나 envelope 밖으로 답했다. Probe는 production planner와 같은 proposal schema를 보내고 schema 밖 field를 하나 더 요구하므로, 문법을 강제하지 못하는 서버는 planner call 대신 `model setup`에서 여기서 닫힌다. 이는 의도된 동작이다. Probe 스키마는 구조만 강제하므로(ADR-0037) `additionalProperties`, `required`, `enum`, `const`를 강제하지 못하는 provider가 여기서 걸린다. |
-| `model_not_advertised` 또는 compatibility 실패 | URL이 `/v1`로 끝나는지, exact served model ID와 strict JSON Schema Chat Completions 지원을 확인한다. Redirect나 자동 retry에 의존하지 않는다. |
+| `model_not_advertised` 또는 compatibility 실패 | URL이 bare host가 아니라 provider의 API root인지, exact served model ID와 strict JSON Schema Chat Completions 지원을 확인한다. Redirect나 자동 retry에 의존하지 않는다. |
 | `model setup`/`model check`의 `timeout` | Inference probe는 production planner와 같은 wall-clock 예산을 쓴다. 로컬 model은 첫 로드가 크기와 disk cache 상태에 따라 수십 초 걸릴 수 있으므로 endpoint에서 model을 한 번 warm-up한 뒤 재시도한다. |
 | `provider_output_truncated` | Probe나 planner 응답이 출력 token 예산에서 잘렸다. Reasoning을 많이 쓰는 model은 최종 JSON 전에 예산을 소진할 수 있으므로 model의 thinking 설정이나 profile의 출력 예산을 조정한다. Rate limit이 아니므로 재시도로 해결되지 않는다. |
 | `proposal_rejected.*` | 뒤의 class가 Core가 제안을 거부한 이유다. `capability_unavailable`/`capability_unsupported`는 허용하지 않은 capability 선택, `invocation_invalid`는 scope 밖 인자나 스키마 위반, `tool_call_budget_exhausted`는 예산 소진이다. Class는 Core 판정이며 model 출력 원문이 아니다. |

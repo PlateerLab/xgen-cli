@@ -193,9 +193,10 @@ pub struct OpenAiPlannerConfig {
 impl OpenAiPlannerConfig {
     /// Build a fixed `OpenAI` Chat Completions profile from an API base URL.
     ///
-    /// The base URL must end in `/v1`; this constructor appends `/chat/completions`. Endpoint
-    /// location and credentials are intentionally excluded from the request-profile digest. The
-    /// stable `planner_id` identifies the configured provider endpoint without exposing a URL.
+    /// The base URL must name the API root rather than a bare host; this constructor appends
+    /// `/chat/completions` to it. Endpoint location and credentials are intentionally excluded
+    /// from the request-profile digest. The stable `planner_id` identifies the configured
+    /// provider endpoint without exposing a URL.
     ///
     /// # Errors
     ///
@@ -1125,7 +1126,7 @@ impl PlannerPort for OpenAiPlanner {
 pub enum OpenAiPlannerConfigError {
     #[error("OpenAI-compatible API base URL is invalid")]
     InvalidBaseUrl,
-    #[error("OpenAI-compatible API base URL must end in /v1")]
+    #[error("OpenAI-compatible API base URL must name the API root, not a bare host")]
     InvalidBasePath,
     #[error("planner identifier is invalid")]
     InvalidPlannerId,
@@ -2058,8 +2059,20 @@ fn api_endpoints(base_url: &str) -> Result<(Url, Url), OpenAiPlannerConfigError>
     {
         return Err(OpenAiPlannerConfigError::InvalidBaseUrl);
     }
+    // The base URL has to name the API root, because both endpoints are built
+    // by appending to it. A bare host carries no root to append to, and
+    // `/chat/completions` at the origin is a different endpoint from the one
+    // the caller meant — which is the ambiguity this rejects.
+    //
+    // What it does NOT require is that the root be spelled `/v1`. It used to,
+    // and the name is a convention rather than a compatibility condition: the
+    // two lines below append the same way to any root. The rule excluded
+    // OpenAI-compatible providers that number their API differently —
+    // Zhipu/GLM serves `/api/paas/v4`, Azure OpenAI
+    // `/openai/deployments/<name>` — and excluded them completely, since
+    // `--base-url` went through the same check as the presets.
     let path = endpoint.path().trim_end_matches('/').to_owned();
-    if !path.ends_with("/v1") {
+    if path.is_empty() {
         return Err(OpenAiPlannerConfigError::InvalidBasePath);
     }
     let mut model_catalog_endpoint = endpoint.clone();
@@ -2941,10 +2954,28 @@ mod tests {
 
     #[test]
     fn config_rejects_ambiguous_endpoint_and_plaintext_credentials() {
+        // A bare host names no API root to append to, which is the ambiguity.
         assert!(matches!(
             OpenAiPlannerConfig::new("http://localhost:8000", PLANNER_ID, MODEL, TOKENIZER),
             Err(OpenAiPlannerConfigError::InvalidBasePath)
         ));
+        assert!(matches!(
+            OpenAiPlannerConfig::new("http://localhost:8000/", PLANNER_ID, MODEL, TOKENIZER),
+            Err(OpenAiPlannerConfigError::InvalidBasePath)
+        ));
+        // A root that is not spelled `/v1` is still a root. These are real
+        // OpenAI-compatible providers that the old spelling rule excluded
+        // outright, presets and `--base-url` alike.
+        for root in [
+            "https://api.z.ai/api/paas/v4",
+            "https://open.bigmodel.cn/api/paas/v4",
+            "https://example.openai.azure.com/openai/deployments/gpt",
+        ] {
+            assert!(
+                OpenAiPlannerConfig::new(root, PLANNER_ID, MODEL, TOKENIZER).is_ok(),
+                "{root} names an API root and must be accepted"
+            );
+        }
         assert!(matches!(
             OpenAiPlannerConfig::new(
                 "http://user:secret@localhost:8000/v1",

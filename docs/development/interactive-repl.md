@@ -89,6 +89,12 @@ xgen --debug
 `--debug`와 pipe 입력에서는 기존 `progress:` event 및 `XGEN_STARTED` 계약을 유지하고 ANSI animation을
 출력하지 않는다. Progress는 runtime의 redacted lifecycle event이며 strict JSON proposal은 표시하지 않는다.
 
+`--debug`는 `run`과 `resume`에도 같은 `progress:` event를 같은 formatter로 내보낸다. 전부 stderr의
+기존 `XGEN_*` 결과 줄 옆에 쓰므로 stdout은 최종 응답만 담는다. 플래그를 주지 않으면 아무 event도
+내보내지 않아서, 결과 줄만 파싱하는 host는 묻지 않은 prefix를 받지 않는다. 진행 표시 쓰기가 실패해도
+Run은 계속한다. 진단 한 줄을 잃은 것이 이미 진행 중인 durable 작업을 버릴 이유는 아니고, `run`의
+중단은 process-level signal handler가 소유한다.
+
 Ctrl+C는 다음 안전한 durable 경계에서 멈춘다. Model request나 process outcome이 이미 불확정해졌으면
 `user_cancelled`보다 `model_call_unknown`/`effect_outcome_unknown`이 우선하고 자동 재실행하지 않는다.
 Network/process call이 진행 중이면 configured timeout까지 기다릴 수 있다.

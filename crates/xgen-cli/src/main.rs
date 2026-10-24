@@ -14,10 +14,10 @@ use xgen_cli::{
     OsModelCredentialStore, PublicRunError, RequestOptions, ResolvedModelEndpoint,
     check_openai_compatibility, check_openai_model, discard_local_model_call,
     discard_local_model_call_at_head, inspect_local_model_call, list_openai_models,
-    new_credential_reference, prepare_local_process_session, resume_local,
-    resume_local_with_model_resolver, resume_local_with_model_resolver_and_progress,
+    new_credential_reference, prepare_local_process_session,
+    resume_local_with_model_resolver_and_progress,
     resume_local_with_process_session_and_model_resolver_progress,
-    run_interactive_with_process_session_progress, run_local_with_started,
+    run_interactive_with_process_session_progress, run_local_with_progress,
 };
 use xgen_provider_openai::{BearerCredential, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
@@ -134,7 +134,7 @@ enum ModelCommand {
 struct ModelCheckArgs {
     #[command(flatten)]
     request_options: RequestOptionArgs,
-    /// OpenAI-compatible API base URL ending in /v1.
+    /// OpenAI-compatible API root, such as `https://api.openai.com/v1`.
     #[arg(long)]
     base_url: Option<String>,
     /// Exact served model identifier expected in GET /v1/models.
@@ -162,12 +162,12 @@ struct ModelSetupArgs {
     #[command(flatten)]
     request_options: RequestOptionArgs,
     /// Provider preset; omitted interactive setup offers a selection.
-    #[arg(long, value_parser = ["deepseek", "openai", "custom"])]
+    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(provider_ids()))]
     provider: Option<String>,
     /// Profile name to create or replace.
     #[arg(long, default_value = "default")]
     name: String,
-    /// OpenAI-compatible API base URL ending in /v1.
+    /// OpenAI-compatible API root, such as `https://api.openai.com/v1`.
     #[arg(long)]
     base_url: Option<String>,
     /// Exact served model identifier; interactive setup lists and prompts when omitted.
@@ -228,7 +228,7 @@ struct RunArgs {
     /// Workspace root opened as the local filesystem capability.
     #[arg(long, default_value = ".")]
     workspace: PathBuf,
-    /// OpenAI-compatible API base URL ending in /v1.
+    /// OpenAI-compatible API root, such as `https://api.openai.com/v1`.
     #[arg(long)]
     base_url: Option<String>,
     /// Served model identifier.
@@ -255,6 +255,15 @@ struct RunArgs {
     /// Catalog one executable as `LOGICAL_ID=ABSOLUTE_PATH`; repeat for more executables.
     #[arg(long = "allow-executable", value_name = "ID=ABSOLUTE_PATH")]
     allow_executables: Vec<String>,
+    /// Also catalog the known developer executables found on PATH, by their own names.
+    ///
+    /// Opt-in, because it makes the catalog depend on this machine's PATH. The
+    /// interactive REPL does this for every session; `run` does not, so that a
+    /// Run's execution profile stays the same wherever the same command is
+    /// issued and `resume` can still match it. `--allow-executable` entries are
+    /// kept as given and win on a name collision.
+    #[arg(long)]
+    allow_path_executables: bool,
     /// Explicitly allow goal/context/tool output transfer to the remote model boundary.
     #[arg(long)]
     allow_remote_model_egress: bool,
@@ -321,6 +330,13 @@ struct ResumeArgs {
     /// Same executable catalog supplied to the original Run.
     #[arg(long = "allow-executable", value_name = "ID=ABSOLUTE_PATH")]
     allow_executables: Vec<String>,
+    /// Same PATH discovery supplied to the original Run.
+    ///
+    /// Discovery reads the PATH of whichever invocation runs it, so a catalog
+    /// that differs from the Run's is a profile change and is refused rather
+    /// than silently accepted.
+    #[arg(long)]
+    allow_path_executables: bool,
     /// Allow a new remote model request to this invocation's supplied --base-url.
     #[arg(long)]
     allow_remote_model_egress: bool,
@@ -383,8 +399,8 @@ fn main() -> ExitCode {
             }
         },
         Some(Command::Model { command }) => run_model_command(command),
-        Some(Command::Run(args)) => run_command(args),
-        Some(Command::Resume(args)) => resume_command(args),
+        Some(Command::Run(args)) => run_command(args, cli.debug),
+        Some(Command::Resume(args)) => resume_command(args, cli.debug),
         Some(Command::Recover(args)) => recover_command(&args),
         Some(Command::Usage(args)) => usage_command(&args),
     }
@@ -417,6 +433,67 @@ fn usage_command(args: &UsageArgs) -> ExitCode {
     }
 }
 
+/// Durable-boundary progress on stderr, for a host that asked to watch.
+///
+/// Same lines and same single formatter as the interactive host, because this
+/// is the same information; only the trigger differs. `--debug` names it, so a
+/// host that parses the `XGEN_*` result lines is not handed a new prefix it
+/// never asked for.
+///
+/// A failed write stops the reporting, not the Run. `run` has no cooperative
+/// cancellation of its own — the process-level signal handler owns
+/// interruption — and losing a diagnostic line is no reason to abandon durable
+/// work that is already underway.
+fn progress_reporter(enabled: bool) -> impl FnMut(DriverProgress) -> DriverProgressControl {
+    let mut reporting = enabled;
+    move |event| {
+        if reporting && repl::print_progress(&mut std::io::stderr(), event).is_err() {
+            reporting = false;
+        }
+        DriverProgressControl::Continue
+    }
+}
+
+/// Developer executables on `PATH`, as the `ID=PATH` entries a catalog takes.
+///
+/// A path that cannot be written as text, or carries control characters, is
+/// dropped rather than catalogued: the entry would be unusable and the catalog
+/// is echoed in diagnostics.
+fn discovered_executables() -> Vec<(String, String)> {
+    repl::discover_developer_executables()
+        .into_iter()
+        .filter_map(|(id, path)| {
+            let path = path.to_str()?;
+            if path.chars().any(char::is_control) {
+                return None;
+            }
+            Some((id, path.to_owned()))
+        })
+        .collect()
+}
+
+/// The executable catalog a Run is given: what was named, plus PATH if asked.
+///
+/// Named entries are kept exactly as supplied and win on a name collision, so
+/// adding discovery can widen a catalog but never redirect an entry the host
+/// spelled out. Discovery contributes no shell: each entry is one executable,
+/// which is what lets a Receipt record what actually ran (ADR-0049). A host
+/// that wants a shell catalogs it by name alongside this flag.
+fn executable_catalog(named: Vec<String>, include_path: bool) -> Vec<String> {
+    if !include_path {
+        return named;
+    }
+    let spelled: Vec<&str> = named
+        .iter()
+        .map(|entry| entry.split('=').next().unwrap_or(entry))
+        .collect();
+    let discovered = discovered_executables()
+        .into_iter()
+        .filter(|(id, _)| !spelled.contains(&id.as_str()))
+        .map(|(id, path)| format!("{id}={path}"));
+    named.iter().cloned().chain(discovered).collect()
+}
+
 const REPL_MAX_TICKS: u32 = 32;
 
 struct InteractiveHost {
@@ -431,18 +508,10 @@ impl InteractiveHost {
     fn new(detailed_progress: bool) -> Result<Self, repl::ReplFailure> {
         let workspace = env::current_dir()
             .map_err(|_| repl::ReplFailure::new(PublicRunError::Configuration.code()))?;
-        let mut executable_specs = Vec::new();
-        let mut executable_ids = Vec::new();
-        for (id, path) in repl::discover_developer_executables() {
-            let Some(path) = path
-                .to_str()
-                .filter(|path| !path.chars().any(char::is_control))
-            else {
-                continue;
-            };
-            executable_specs.push(format!("{id}={path}"));
-            executable_ids.push(id);
-        }
+        let (executable_ids, executable_specs) = discovered_executables()
+            .into_iter()
+            .map(|(id, path)| (id.clone(), format!("{id}={path}")))
+            .unzip();
         Ok(Self {
             detailed_progress,
             workspace,
@@ -632,37 +701,121 @@ fn interactive_command(debug: bool) -> ExitCode {
 }
 
 struct ProviderPreset {
+    id: &'static str,
+    label: &'static str,
     base_url: &'static str,
     response_format: &'static str,
     thinking: &'static str,
 }
 
-fn provider_preset(provider: &str) -> Option<ProviderPreset> {
-    match provider {
-        "deepseek" => Some(ProviderPreset {
-            base_url: "https://api.deepseek.com/v1",
-            response_format: "json_object",
-            thinking: "disabled",
-        }),
-        "openai" => Some(ProviderPreset {
-            base_url: "https://api.openai.com/v1",
-            response_format: "json_schema",
-            thinking: "default",
-        }),
-        _ => None,
-    }
+/// The endpoints setup can fill in for you, instead of asking you to type one.
+///
+/// One table, read by all three places that used to carry their own copy of the
+/// list: the `--provider` value set, the interactive picker, and the lookup. A
+/// provider is one row.
+///
+/// `response_format` is the field that decides whether a provider works at all.
+/// The planner answers in structured JSON — a plan, a tool call, a completion —
+/// so a provider that ignores the setting returns prose and every Run fails
+/// after the profile was configured successfully. That is why Anthropic's
+/// Claude is not a row here: its OpenAI-compatible layer documents
+/// `response_format` as ignored, so a preset for it would configure cleanly and
+/// then fail every turn. Claude is reachable through a gateway that does honour
+/// it, such as `OpenRouter`.
+const PROVIDER_PRESETS: &[ProviderPreset] = &[
+    ProviderPreset {
+        id: "deepseek",
+        label: "DeepSeek",
+        base_url: "https://api.deepseek.com/v1",
+        response_format: "json_object",
+        thinking: "disabled",
+    },
+    ProviderPreset {
+        id: "openai",
+        label: "OpenAI",
+        base_url: "https://api.openai.com/v1",
+        response_format: "json_schema",
+        thinking: "default",
+    },
+    ProviderPreset {
+        id: "openrouter",
+        label: "OpenRouter (many providers behind one key)",
+        base_url: "https://openrouter.ai/api/v1",
+        // Models behind OpenRouter differ in whether they take a schema, and
+        // the gateway passes the setting through rather than emulating it.
+        // `json_object` is the contract they all accept.
+        response_format: "json_object",
+        thinking: "default",
+    },
+    ProviderPreset {
+        id: "glm",
+        label: "GLM / Zhipu (z.ai)",
+        // Not `/v1`: this provider numbers its API `/v4`, which is why the
+        // base-path rule had to stop demanding a spelling.
+        //
+        // This is the pay-as-you-go root. A Coding Plan subscription is served
+        // from `/api/coding/paas/v4` instead, so that account passes
+        // `--base-url`, which wins over the preset.
+        base_url: "https://api.z.ai/api/paas/v4",
+        response_format: "json_object",
+        thinking: "disabled",
+    },
+    ProviderPreset {
+        id: "local",
+        label: "Local model (Ollama, LM Studio, vLLM …)",
+        // Loopback plaintext is allowed and credentials are ignored there, so
+        // this is the one profile that needs no API key and sends nothing off
+        // the machine. 11434 is Ollama's; LM Studio serves 1234 and vLLM 8000.
+        //
+        // The literal address, not `localhost`: plaintext HTTP is accepted only
+        // for a loopback literal, because a hostname is whatever resolution
+        // says it is and the key would leave the machine on a lie.
+        base_url: "http://127.0.0.1:11434/v1",
+        response_format: "json_object",
+        thinking: "default",
+    },
+];
+
+fn provider_preset(provider: &str) -> Option<&'static ProviderPreset> {
+    PROVIDER_PRESETS.iter().find(|preset| preset.id == provider)
+}
+
+/// Every value `--provider` takes: the presets, and `custom` for anything else.
+fn provider_ids() -> Vec<&'static str> {
+    PROVIDER_PRESETS
+        .iter()
+        .map(|preset| preset.id)
+        .chain(std::iter::once("custom"))
+        .collect()
 }
 
 fn prompt_provider() -> Result<String, ModelCliError> {
-    eprintln!(
-        "Choose a provider:\n  1) DeepSeek\n  2) OpenAI\n  3) Other OpenAI-compatible endpoint"
-    );
-    match prompt_line("Provider number: ")?.as_str() {
-        "1" => Ok("deepseek".to_owned()),
-        "2" => Ok("openai".to_owned()),
-        "3" => Ok("custom".to_owned()),
-        _ => Err(ModelCliError::InputUnavailable),
+    // The last entry is `custom`, so the numbering is the table's own order.
+    let offered = PROVIDER_PRESETS
+        .iter()
+        .map(|preset| preset.label)
+        .chain(std::iter::once("Other OpenAI-compatible endpoint"));
+    let menu: Vec<String> = std::iter::once("Choose a provider:".to_owned())
+        .chain(
+            offered
+                .enumerate()
+                .map(|(index, label)| format!("  {}) {label}", index + 1)),
+        )
+        .collect();
+    eprintln!("{}", menu.join("\n"));
+    let custom = PROVIDER_PRESETS.len() + 1;
+    let answer = prompt_line("Provider number: ")?;
+    let chosen = answer
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| ModelCliError::InputUnavailable)?;
+    if chosen == custom {
+        return Ok("custom".to_owned());
     }
+    PROVIDER_PRESETS
+        .get(chosen.wrapping_sub(1))
+        .map(|preset| preset.id.to_owned())
+        .ok_or(ModelCliError::InputUnavailable)
 }
 
 thread_local! {
@@ -796,7 +949,7 @@ fn run_model_command(command: ModelCommand) -> ExitCode {
     }
 }
 
-fn run_command(args: RunArgs) -> ExitCode {
+fn run_command(args: RunArgs, debug: bool) -> ExitCode {
     let mut final_response_schema = match args.response_schema {
         Some(path) => {
             if let Some(schema) = std::fs::File::open(path).ok().and_then(|file| {
@@ -829,6 +982,26 @@ fn run_command(args: RunArgs) -> ExitCode {
     } else {
         None
     };
+    let allow_executables = executable_catalog(args.allow_executables, args.allow_path_executables);
+    // The driver refuses this too, but only as the bare shared configuration
+    // code. Say which half is missing, before anything asks for a token.
+    if args.allow_execute && allow_executables.is_empty() {
+        let error = PublicRunError::Configuration;
+        eprintln!("XGEN_ERROR code={}", error.code());
+        eprintln!("  configuration=executable_catalog");
+        let recovery = if args.allow_path_executables {
+            "--allow-execute approves executions from a catalog, and PATH \
+             discovery found no known developer executable. Catalog one with \
+             --allow-executable ID=ABSOLUTE_PATH."
+        } else {
+            "--allow-execute approves executions from a catalog, and none was \
+             supplied. Catalog one with --allow-executable ID=ABSOLUTE_PATH, \
+             or add --allow-path-executables for the developer executables \
+             found on PATH."
+        };
+        eprintln!("  recovery={recovery}");
+        return ExitCode::from(error.exit_code());
+    }
     let resolved = match resolve_model(
         args.base_url,
         args.model,
@@ -840,35 +1013,38 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(resolved) => resolved,
         Err(error) => return present_model_configuration_error(error),
     };
-    present(run_local_with_started(
-        LocalRunRequest {
-            goal: args.goal,
-            workspace: args.workspace,
-            base_url: resolved.base_url,
-            planner_id: args.planner_id,
-            model: resolved.model,
-            tokenizer: resolved.tokenizer,
-            credential: resolved.credential,
-            inference_limits: resolved.inference_limits,
-            request_options: resolved.request_options,
-            allow_files: args.allow_files,
-            allow_dirs: args.allow_dirs,
-            allow_executables: args.allow_executables,
-            allow_remote_model_egress: args.allow_remote_model_egress,
-            allow_read: args.allow_read,
-            allow_write: args.allow_write,
-            allow_execute: args.allow_execute,
-            max_ticks: args.max_ticks,
-            max_model_turns: args.max_model_turns,
-            final_response_schema,
-            completion_checks,
-            conversation_responses: args.conversation_responses,
-        },
-        |run_id| eprintln!("XGEN_STARTED run_id={run_id}"),
+    let request = LocalRunRequest {
+        goal: args.goal,
+        workspace: args.workspace,
+        base_url: resolved.base_url,
+        planner_id: args.planner_id,
+        model: resolved.model,
+        tokenizer: resolved.tokenizer,
+        credential: resolved.credential,
+        inference_limits: resolved.inference_limits,
+        request_options: resolved.request_options,
+        allow_files: args.allow_files,
+        allow_dirs: args.allow_dirs,
+        allow_executables,
+        allow_remote_model_egress: args.allow_remote_model_egress,
+        allow_read: args.allow_read,
+        allow_write: args.allow_write,
+        allow_execute: args.allow_execute,
+        max_ticks: args.max_ticks,
+        max_model_turns: args.max_model_turns,
+        final_response_schema,
+        completion_checks,
+        conversation_responses: args.conversation_responses,
+    };
+    let started = |run_id: &str| eprintln!("XGEN_STARTED run_id={run_id}");
+    present(run_local_with_progress(
+        request,
+        started,
+        progress_reporter(debug),
     ))
 }
 
-fn resume_command(args: ResumeArgs) -> ExitCode {
+fn resume_command(args: ResumeArgs, debug: bool) -> ExitCode {
     let ResumeArgs {
         request_options,
         run_id,
@@ -879,6 +1055,7 @@ fn resume_command(args: ResumeArgs) -> ExitCode {
         allow_files,
         allow_dirs,
         allow_executables,
+        allow_path_executables,
         allow_remote_model_egress,
         allow_read,
         allow_write,
@@ -894,24 +1071,35 @@ fn resume_command(args: ResumeArgs) -> ExitCode {
         request_options: RequestOptions::default(),
         allow_files,
         allow_dirs,
-        allow_executables,
+        allow_executables: executable_catalog(allow_executables, allow_path_executables),
         allow_remote_model_egress,
         allow_read,
         allow_write,
         allow_execute,
         max_ticks,
     };
-    if !allow_remote_model_egress {
-        return present(resume_local(request));
-    }
-
     let mut resolution_error = None;
-    let result = resume_local_with_model_resolver(request, || {
-        resolve_endpoint(base_url, profile, token_stdin, request_options).map_err(|error| {
-            resolution_error = Some(error);
-            PublicRunError::Configuration
-        })
-    });
+    let result = if allow_remote_model_egress {
+        resume_local_with_model_resolver_and_progress(
+            request,
+            || {
+                resolve_endpoint(base_url, profile, token_stdin, request_options).map_err(|error| {
+                    resolution_error = Some(error);
+                    PublicRunError::Configuration
+                })
+            },
+            progress_reporter(debug),
+        )
+    } else {
+        // Without egress consent the only outcomes are provider-free: durable
+        // completion replay, recovery, or the pause that asks for consent. A
+        // resolver that refuses keeps that contract explicit.
+        resume_local_with_model_resolver_and_progress(
+            request,
+            || Err(PublicRunError::Configuration),
+            progress_reporter(debug),
+        )
+    };
     if let Some(error) = resolution_error {
         present_model_configuration_error(error)
     } else {
@@ -1091,7 +1279,7 @@ fn try_model_setup(mut args: ModelSetupArgs) -> Result<(ModelProfile, bool), Mod
         .map_or_else(
             || {
                 if interactive {
-                    prompt_line("OpenAI-compatible base URL (ending in /v1): ")
+                    prompt_line("OpenAI-compatible API root (e.g. https://api.openai.com/v1): ")
                 } else {
                     Err(ModelCliError::MissingConfiguration)
                 }
@@ -1841,6 +2029,73 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
             }
             ExitCode::from(error.exit_code())
         }
+    }
+}
+
+#[cfg(test)]
+mod provider_preset_tests {
+    use super::*;
+    use xgen_provider_openai::{OpenAiCompatibilityChecker, OpenAiPlannerConfig};
+
+    /// Every preset must be configurable, which is more than it sounds.
+    ///
+    /// A preset's whole job is to spare you from typing a URL that works, so a
+    /// preset holding a URL the configuration rules reject is worse than no
+    /// preset at all: setup fails on a value you never chose. `localhost` in
+    /// the local preset was exactly that — plaintext HTTP is accepted only for
+    /// a loopback literal, so the row failed before it reached the network.
+    #[test]
+    fn presets_pass_the_rules_setup_applies_to_them() {
+        for preset in PROVIDER_PRESETS {
+            // The planner id and model do not take part in the rules under
+            // test here, which are the base-path shape and transport security.
+            let config = OpenAiPlannerConfig::new(preset.base_url, "xgeny.cli.test", "m", "m")
+                .unwrap_or_else(|error| {
+                    panic!("preset {} has an unusable base URL: {error}", preset.id)
+                });
+            // No credential, so this only runs the transport-security rules.
+            // Nothing is sent: the request goes out in `check`, not here.
+            OpenAiCompatibilityChecker::new(config, None).unwrap_or_else(|error| {
+                panic!(
+                    "preset {} cannot be reached as configured: {error}",
+                    preset.id
+                )
+            });
+
+            let options = resolve_request_options(
+                RequestOptionArgs {
+                    response_format: Some(preset.response_format.to_owned()),
+                    thinking: Some(preset.thinking.to_owned()),
+                },
+                None,
+            )
+            .unwrap_or_else(|_| {
+                panic!(
+                    "preset {} names a wire setting that does not exist",
+                    preset.id
+                )
+            });
+            assert_eq!(
+                compatibility_label(options),
+                compatibility_label(options),
+                "preset {} must resolve to a stable wire profile",
+                preset.id
+            );
+        }
+    }
+
+    /// The menu numbers and `--provider` values are the table, not a copy of it.
+    #[test]
+    fn the_picker_and_the_flag_agree_with_the_table() {
+        let ids = provider_ids();
+        let (presets, custom) = ids.split_at(PROVIDER_PRESETS.len());
+        assert_eq!(custom, ["custom"]);
+        for (listed, preset) in presets.iter().zip(PROVIDER_PRESETS) {
+            assert_eq!(*listed, preset.id);
+            assert!(provider_preset(preset.id).is_some());
+        }
+        assert!(provider_preset("custom").is_none());
+        assert!(provider_preset("nonexistent").is_none());
     }
 }
 
