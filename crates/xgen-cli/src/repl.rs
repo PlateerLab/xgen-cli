@@ -777,6 +777,9 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                     session_context.pending_goal = None;
                 }
                 writeln!(output, "rejected: run_id={run_id} reason={}", reason.code())?;
+                if let Some(code) = reason.failure_code() {
+                    writeln!(output, "A step failed: {}.", code.as_str())?;
+                }
                 if model_rejected {
                     writeln!(
                         output,

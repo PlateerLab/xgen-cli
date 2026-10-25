@@ -90,6 +90,8 @@ pub enum RunEventBody {
         effect_id: String,
         #[serde(rename = "receiptDigest")]
         evidence_digest: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        failure_code: Option<StepFailureCode>,
     },
     EffectBecameUnknown {
         step_id: String,
@@ -2950,6 +2952,63 @@ pub struct StepState {
     pub execution_receipt_digest: Option<String>,
     pub uncertainty_reason: Option<String>,
     pub reconciliation_evidence_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<StepFailureCode>,
+}
+
+/// Closed, value-free classification of a definite adapter failure (ADR-0054).
+///
+/// Codes name the kind of failure only. They never carry paths, sizes, content, or OS error text,
+/// so they can be shown to the planner without widening the redaction boundary (ADR-0038).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepFailureCode {
+    /// The target path does not exist.
+    NotFound,
+    /// The target exists but cannot be opened inside the confined workspace (for example a
+    /// symbolic link, a permission error, or a non-portable name).
+    Unavailable,
+    /// A regular file was required.
+    NotAFile,
+    /// A directory was required.
+    NotADirectory,
+    /// The input or target exceeds the capability's size limit.
+    TooLarge,
+    /// The file is not valid UTF-8 text.
+    NotUtf8,
+    /// A bounded scan or output limit was reached before the observation could complete.
+    LimitExceeded,
+    /// The target changed since it was observed; the expected digest no longer matches.
+    PreconditionConflict,
+    /// An edit's original text does not occur in the target.
+    PatchContextMissing,
+    /// An edit's original text occurs more than once in the target.
+    PatchContextAmbiguous,
+    /// Two edits overlap in the target.
+    PatchEditsOverlap,
+    /// The operation failed while reading or writing.
+    IoError,
+}
+
+impl StepFailureCode {
+    /// Stable `snake_case` wire code.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NotFound => "not_found",
+            Self::Unavailable => "unavailable",
+            Self::NotAFile => "not_a_file",
+            Self::NotADirectory => "not_a_directory",
+            Self::TooLarge => "too_large",
+            Self::NotUtf8 => "not_utf8",
+            Self::LimitExceeded => "limit_exceeded",
+            Self::PreconditionConflict => "precondition_conflict",
+            Self::PatchContextMissing => "patch_context_missing",
+            Self::PatchContextAmbiguous => "patch_context_ambiguous",
+            Self::PatchEditsOverlap => "patch_edits_overlap",
+            Self::IoError => "io_error",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -4105,6 +4164,7 @@ fn build_accepted_plan_candidate(
                 execution_receipt_digest: None,
                 uncertainty_reason: None,
                 reconciliation_evidence_digest: None,
+                failure_code: None,
             },
         );
     }
@@ -4272,6 +4332,7 @@ fn plan_step(
             execution_receipt_digest: None,
             uncertainty_reason: None,
             reconciliation_evidence_digest: None,
+            failure_code: None,
         },
     );
     Ok(())
@@ -4320,13 +4381,13 @@ fn apply_effect_lifecycle(
             step_id,
             effect_id,
             evidence_digest,
-        } => record_effect_observation(
+            failure_code,
+        } => record_effect_failure(
             state,
             step_id,
             effect_id,
             evidence_digest,
-            None,
-            StepStatus::Failed,
+            *failure_code,
             body,
         )?,
         RunEventBody::EffectBecameUnknown {
@@ -4529,6 +4590,27 @@ fn record_effect_observation(
     step.status = next_status;
     step.effect_evidence_digest = Some(evidence_digest.to_owned());
     step.output_record_digest = output_record_digest.map(ToOwned::to_owned);
+    Ok(())
+}
+
+fn record_effect_failure(
+    state: &mut RunState,
+    step_id: &str,
+    effect_id: &str,
+    evidence_digest: &str,
+    failure_code: Option<StepFailureCode>,
+    body: &RunEventBody,
+) -> Result<(), TransitionError> {
+    record_effect_observation(
+        state,
+        step_id,
+        effect_id,
+        evidence_digest,
+        None,
+        StepStatus::Failed,
+        body,
+    )?;
+    matching_step_mut(state, step_id, effect_id)?.failure_code = failure_code;
     Ok(())
 }
 
@@ -5439,6 +5521,61 @@ mod tests {
             assert!(other.has_blocking_failures());
             assert!(!other.all_steps_settled());
         }
+    }
+
+    #[test]
+    fn effect_failure_codes_are_optional_on_the_wire_and_kept_in_the_step() {
+        let legacy = RunEventBody::EffectFailed {
+            step_id: "step-a".to_owned(),
+            effect_id: "effect-a".to_owned(),
+            evidence_digest: "sha256:legacy".to_owned(),
+            failure_code: None,
+        };
+        let legacy_json = serde_json::to_value(&legacy).unwrap();
+        assert!(legacy_json.get("failureCode").is_none());
+        assert_eq!(
+            serde_json::from_value::<RunEventBody>(legacy_json).unwrap(),
+            legacy
+        );
+
+        let classified = RunEventBody::EffectFailed {
+            step_id: "step-a".to_owned(),
+            effect_id: "effect-a".to_owned(),
+            evidence_digest: "sha256:classified".to_owned(),
+            failure_code: Some(StepFailureCode::PatchContextMissing),
+        };
+        let classified_json = serde_json::to_value(&classified).unwrap();
+        assert_eq!(classified_json["failureCode"], "patch_context_missing");
+        assert_eq!(
+            serde_json::from_value::<RunEventBody>(classified_json).unwrap(),
+            classified
+        );
+
+        let mut step = serde_json::to_value(StepState {
+            step_id: "step-a".to_owned(),
+            objective: "objective".to_owned(),
+            depends_on: Vec::new(),
+            planned_invocation: None,
+            status: StepStatus::Failed,
+            attempts: 1,
+            intent: None,
+            effect_evidence_digest: None,
+            output_record_digest: None,
+            execution_receipt_id: None,
+            execution_receipt_digest: None,
+            uncertainty_reason: None,
+            reconciliation_evidence_digest: None,
+            failure_code: None,
+        })
+        .unwrap();
+        assert!(step.get("failureCode").is_none());
+        step["failureCode"] = serde_json::Value::from("too_large");
+        assert_eq!(
+            serde_json::from_value::<StepState>(step)
+                .unwrap()
+                .failure_code,
+            Some(StepFailureCode::TooLarge)
+        );
     }
 
     #[test]
@@ -6511,6 +6648,7 @@ mod tests {
             execution_receipt_digest: None,
             uncertainty_reason: None,
             reconciliation_evidence_digest: None,
+            failure_code: None,
         };
         let step_value = serde_json::to_value(&step).expect("Step projection should serialize");
         assert!(step_value.pointer("/dependsOn").is_none());
@@ -6545,6 +6683,7 @@ mod tests {
                 execution_receipt_digest: Some(format!("sha256:{}", "a".repeat(64))),
                 uncertainty_reason: None,
                 reconciliation_evidence_digest: None,
+                failure_code: None,
             };
             if index == step_count - 1 {
                 step.status = StepStatus::Planned;

@@ -47,7 +47,7 @@ directory의 하위)으로 검사한다. effect class는 `read_only`이고 `--al
 
 경로는 `read-text`·search-text와 같이 symlink를 따르지 않는다. 실패는 기존 조회 adapter와 같은 고정
 분류 digest(`open`, `read`, `limit`, `decode`, `encode`)만 남긴다. 실패는 ADR-0052에 따라 recoverable
-read failure가 되고, 모델에 원인 분류는 전달되지 않는다. verifier는 digest와 함께 줄 번호 관계
+read failure가 된다. 원인 분류 code는 [ADR-0054](0054-value-free-step-failure-codes.md)에 따라 전달된다. verifier는 digest와 함께 줄 번호 관계
 (`endLine + 1 = startLine + 반환 줄 수`, `endLine <= totalLines`)와 content 상한을 다시 검사한다.
 
 ## 대안

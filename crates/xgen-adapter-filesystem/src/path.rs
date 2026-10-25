@@ -66,6 +66,38 @@ impl std::fmt::Debug for RelativePath {
     }
 }
 
+/// Value-free class of an error from opening one path component without following links.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpenErrorClass {
+    /// Nothing exists at the name.
+    Missing,
+    /// Something other than a directory exists at the name.
+    NotADirectory,
+    /// The name exists but is refused, such as a symbolic link, or the error is not classified.
+    Refused,
+}
+
+/// Classify an open error for `name` in `parent`. Some platforms report a symbolic link opened
+/// without following as "not a directory"; that link exists and is refused, so it is not
+/// reported as a wrong kind.
+pub(crate) fn classify_open_error(
+    parent: &cap_std::fs::Dir,
+    name: &str,
+    error: &std::io::Error,
+) -> OpenErrorClass {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => OpenErrorClass::Missing,
+        std::io::ErrorKind::NotADirectory
+            if !parent
+                .symlink_metadata(name)
+                .is_ok_and(|metadata| metadata.file_type().is_symlink()) =>
+        {
+            OpenErrorClass::NotADirectory
+        }
+        _ => OpenErrorClass::Refused,
+    }
+}
+
 pub(crate) fn canonical_resource(
     workspace_id: &WorkspaceId,
     resource: &str,

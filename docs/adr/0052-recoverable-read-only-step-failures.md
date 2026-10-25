@@ -58,8 +58,8 @@ reducer 조건이 넓어지기만 하므로 기존 journal은 새 binary에서 �
   설명할 수 있다.
 - 실패한 읽기도 tool-call과 planned-step budget을 소비한다. 반복 실패는 예산 소진으로 끝난다
   (ADR-0015).
-- 실패 원인 분류(too-large, not-found 등)는 아직 모델에 전달하지 않는다. 지금 adapter는 고정 분류의
-  digest만 남긴다. typed failure output은 별도 결정이 필요하다.
+- 실패 원인 분류는 이 ADR에서 모델에 전달하지 않는다. 값 없는 분류 code 전달은
+  [ADR-0054](0054-value-free-step-failure-codes.md)가 추가한다.
 - 64 KiB를 넘는 파일을 읽는 방법은 이 ADR에 없다. 줄 범위 읽기는
   [ADR-0053](0053-bounded-line-range-text-read.md)이 추가한다.
 

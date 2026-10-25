@@ -2045,6 +2045,9 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         }
         Ok(LocalCommandResult::Rejected { run_id, reason }) => {
             eprintln!("XGEN_REJECTED run_id={run_id} reason={}", reason.code());
+            if let Some(code) = reason.failure_code() {
+                eprintln!("XGEN_STEP_FAILURE run_id={run_id} code={}", code.as_str());
+            }
             if let Some(diagnostic) = reason.invocation_diagnostic() {
                 eprintln!(
                     "XGEN_INVOCATION_DIAGNOSTIC run_id={run_id} version=1 category={} field={}",

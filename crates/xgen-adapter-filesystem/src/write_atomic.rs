@@ -210,6 +210,7 @@ impl PreparedAdapterInvocation for PreparedWriteAtomic {
             Err(failure) => AdapterExecutionObservation::Failed {
                 evidence_digest: AdapterEvidenceDigest::new(write_failure_digest(failure))
                     .expect("a SHA-256 digest is canonical"),
+                failure_code: failure.failure_code(),
             },
         }
     }

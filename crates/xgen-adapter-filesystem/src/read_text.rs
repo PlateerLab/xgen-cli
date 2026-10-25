@@ -13,12 +13,13 @@ use xgen_runtime::{
     AdapterEvidenceDigest, AdapterExecutionObservation, AdapterPrepareFailure,
     AdapterPrepareRequest, AdapterReconcileRequest, AdapterReconciliationInconclusiveReason,
     AdapterReconciliationObservation, AdapterToolOutput, EffectAdapter, EffectVerifier,
-    PreparedAdapterInvocation, RuleVerificationObservation, VerificationPortFailure,
-    VerificationReport, VerificationRequest, VerifiedArtifactDescriptor, VerifierOutputDigest,
+    PreparedAdapterInvocation, RuleVerificationObservation, StepFailureCode,
+    VerificationPortFailure, VerificationReport, VerificationRequest, VerifiedArtifactDescriptor,
+    VerifierOutputDigest,
 };
 use xgen_workgraph::EffectClass;
 
-use crate::path::{RelativePath, parse_canonical};
+use crate::path::{OpenErrorClass, RelativePath, classify_open_error, parse_canonical};
 use crate::{READ_TEXT_CAPABILITY_ID, READ_TEXT_CONTRACT_VERSION, WorkspaceRoot};
 
 /// Hard product ceiling chosen so worst-case JSON escaping remains below the durable-output bound
@@ -216,6 +217,7 @@ impl PreparedAdapterInvocation for PreparedReadText {
             Err(failure) => AdapterExecutionObservation::Failed {
                 evidence_digest: AdapterEvidenceDigest::new(failure.evidence_digest())
                     .expect("a SHA-256 digest is canonical"),
+                failure_code: failure.failure_code(),
             },
         }
     }
@@ -232,8 +234,9 @@ struct InspectedOutput {
     postcondition: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReadFailure {
+    NotFound,
     Open,
     NonRegular,
     TooLarge,
@@ -244,6 +247,7 @@ pub(crate) enum ReadFailure {
 impl ReadFailure {
     fn evidence_digest(self) -> String {
         let code = match self {
+            Self::NotFound => "not-found",
             Self::Open => "open",
             Self::NonRegular => "non-regular",
             Self::TooLarge => "too-large",
@@ -251,6 +255,26 @@ impl ReadFailure {
             Self::InvalidUtf8 => "invalid-utf8",
         };
         sha256_digest(format!("xgeny.fs/read-text/failure/v1/{code}").as_bytes())
+    }
+
+    pub(crate) const fn failure_code(self) -> StepFailureCode {
+        match self {
+            Self::NotFound => StepFailureCode::NotFound,
+            Self::Open => StepFailureCode::Unavailable,
+            Self::NonRegular => StepFailureCode::NotAFile,
+            Self::TooLarge => StepFailureCode::TooLarge,
+            Self::Read => StepFailureCode::IoError,
+            Self::InvalidUtf8 => StepFailureCode::NotUtf8,
+        }
+    }
+}
+
+/// A missing component, or a parent component that is not a directory, means the path does not
+/// exist. Every other open error stays unclassified beyond "unavailable".
+fn open_failure(parent: &Dir, name: &str, error: &std::io::Error) -> ReadFailure {
+    match classify_open_error(parent, name, error) {
+        OpenErrorClass::Missing | OpenErrorClass::NotADirectory => ReadFailure::NotFound,
+        OpenErrorClass::Refused => ReadFailure::Open,
     }
 }
 
@@ -409,7 +433,7 @@ fn open_file(root: &Dir, relative_path: &RelativePath) -> Result<File, ReadFailu
     for component in parents {
         directory = directory
             .open_dir_nofollow(component)
-            .map_err(|_| ReadFailure::Open)?;
+            .map_err(|error| open_failure(&directory, component, &error))?;
         if is_windows_reparse_point(&directory.dir_metadata().map_err(|_| ReadFailure::Open)?) {
             return Err(ReadFailure::Open);
         }
@@ -418,7 +442,7 @@ fn open_file(root: &Dir, relative_path: &RelativePath) -> Result<File, ReadFailu
     options.read(true).follow(FollowSymlinks::No).nonblock(true);
     directory
         .open_with(leaf, &options)
-        .map_err(|_| ReadFailure::Open)
+        .map_err(|error| open_failure(&directory, leaf, &error))
 }
 
 #[cfg(windows)]
@@ -573,7 +597,7 @@ mod tests {
         ));
         assert!(matches!(
             fixture.read("missing.txt", ReadTextLimits::default()),
-            Err(ReadFailure::Open)
+            Err(ReadFailure::NotFound)
         ));
         assert!(matches!(
             fixture.read("directory", ReadTextLimits::default()),
@@ -691,7 +715,11 @@ mod tests {
         let first = execute("missing-one-SENTINEL.txt");
         let second = execute("missing-two-SENTINEL.txt");
         let digest = |observation: AdapterExecutionObservation| match observation {
-            AdapterExecutionObservation::Failed { evidence_digest } => {
+            AdapterExecutionObservation::Failed {
+                evidence_digest,
+                failure_code,
+            } => {
+                assert_eq!(failure_code, StepFailureCode::NotFound);
                 evidence_digest.as_str().to_owned()
             }
             other => panic!("missing read must be a definite failure, got {other:?}"),

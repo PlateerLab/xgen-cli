@@ -9,7 +9,7 @@ use std::rc::Rc;
 use crate::{
     DriveAction, DurableEffectRuntime, EffectSink, EventFactory, EventFactoryError, EventMetadata,
     ExecutionObservation, LeaseError, LocalRunLease, PreparedEffect, PreparedEffectBinding,
-    ReconciliationObservation, RuntimeError, RuntimePolicy,
+    ReconciliationObservation, RuntimeError, RuntimePolicy, StepFailureCode,
 };
 use tempfile::{TempDir, tempdir};
 use xgen_local_store::{
@@ -467,6 +467,7 @@ fn definite_effect_failure_commits_its_receipt() {
     let mut sink = ScriptedSink::new(Rc::clone(&trace));
     sink.executions.push_back(ExecutionObservation::Failed {
         evidence_digest: "sha256:failure-receipt-1".to_owned(),
+        failure_code: Some(StepFailureCode::TooLarge),
     });
     let mut events = DeterministicEvents::default();
     let (_directory, lease) = lease();
@@ -483,6 +484,10 @@ fn definite_effect_failure_commits_its_receipt() {
             .effect_evidence_digest
             .as_deref(),
         Some("sha256:failure-receipt-1")
+    );
+    assert_eq!(
+        report.state.steps[STEP_ID].failure_code,
+        Some(StepFailureCode::TooLarge)
     );
     assert_eq!(
         trace.borrow().as_slice(),

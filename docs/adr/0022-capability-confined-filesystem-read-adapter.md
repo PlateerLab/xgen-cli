@@ -224,7 +224,7 @@ Linux, macOS와 Windows의 `cargo test --workspace --locked`가 동일 gate를 �
   (UTF-8 줄 범위 읽기는 [ADR-0053](0053-bounded-line-range-text-read.md)가 다룬다)
 - case/Unicode alias의 stable physical file identity
 - ReadOnly crash 뒤 자동 retry와 tool failure를 다음 model turn에 전달하는 typed error output
-  (확정된 read-only 실패 뒤 계획을 계속하는 것은 [ADR-0052](0052-recoverable-read-only-step-failures.md)가 다룬다. 실패 원인 분류 전달은 여전히 범위 밖이다)
+  (확정된 read-only 실패 뒤 계획을 계속하는 것은 [ADR-0052](0052-recoverable-read-only-step-failures.md)가 다룬다. 값 없는 실패 원인 분류 전달은 [ADR-0054](0054-value-free-step-failure-codes.md)가 다룬다)
 - remote model egress 승인
 
 ## 결과

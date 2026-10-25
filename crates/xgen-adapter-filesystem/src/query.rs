@@ -11,12 +11,15 @@ use xgen_runtime::{
     AdapterEvidenceDigest, AdapterExecutionObservation, AdapterPrepareFailure,
     AdapterPrepareRequest, AdapterReconcileRequest, AdapterReconciliationInconclusiveReason,
     AdapterReconciliationObservation, AdapterToolOutput, EffectAdapter, EffectVerifier,
-    PreparedAdapterInvocation, RuleVerificationObservation, VerificationPortFailure,
-    VerificationReport, VerificationRequest, VerifiedArtifactDescriptor, VerifierOutputDigest,
+    PreparedAdapterInvocation, RuleVerificationObservation, StepFailureCode,
+    VerificationPortFailure, VerificationReport, VerificationRequest, VerifiedArtifactDescriptor,
+    VerifierOutputDigest,
 };
 use xgen_workgraph::EffectClass;
 
-use crate::path::{RelativePath, canonical_resource, parse_canonical};
+use crate::path::{
+    OpenErrorClass, RelativePath, canonical_resource, classify_open_error, parse_canonical,
+};
 use crate::{
     LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION, READ_TEXT_LINES_CAPABILITY_ID,
     READ_TEXT_LINES_CONTRACT_VERSION, SEARCH_TEXT_CAPABILITY_ID, SEARCH_TEXT_CONTRACT_VERSION,
@@ -325,6 +328,7 @@ impl PreparedAdapterInvocation for PreparedFilesystemQuery {
                     failure.evidence_digest(self.operation),
                 )
                 .expect("SHA-256 failure digest is canonical"),
+                failure_code: failure.failure_code(),
             },
         }
     }
@@ -441,7 +445,11 @@ struct InspectedOutput {
 
 #[derive(Debug, Clone, Copy)]
 enum QueryFailure {
+    NotFound,
     Open,
+    NotAFile,
+    NotADirectory,
+    TooLarge,
     Read,
     TooManyEntries,
     Limit,
@@ -452,7 +460,11 @@ enum QueryFailure {
 impl QueryFailure {
     fn evidence_digest(self, operation: QueryOperation) -> String {
         let code = match self {
+            Self::NotFound => "not-found",
             Self::Open => "open",
+            Self::NotAFile => "not-a-file",
+            Self::NotADirectory => "not-a-directory",
+            Self::TooLarge => "too-large",
             Self::Read => "read",
             Self::TooManyEntries => "too-many-entries",
             Self::Limit => "limit",
@@ -460,6 +472,19 @@ impl QueryFailure {
             Self::Decode => "decode",
         };
         sha256_digest(format!("{}/{code}", operation.failure_domain()).as_bytes())
+    }
+
+    const fn failure_code(self) -> StepFailureCode {
+        match self {
+            Self::NotFound => StepFailureCode::NotFound,
+            Self::Open => StepFailureCode::Unavailable,
+            Self::NotAFile => StepFailureCode::NotAFile,
+            Self::NotADirectory => StepFailureCode::NotADirectory,
+            Self::TooLarge => StepFailureCode::TooLarge,
+            Self::Read | Self::Encode => StepFailureCode::IoError,
+            Self::TooManyEntries | Self::Limit => StepFailureCode::LimitExceeded,
+            Self::Decode => StepFailureCode::NotUtf8,
+        }
     }
 }
 
@@ -704,7 +729,7 @@ fn read_text_lines(
     let mut file = open_regular_file(root, path)?;
     let metadata = file.metadata().map_err(|_| QueryFailure::Open)?;
     if metadata.len() > u64::try_from(MAX_READ_TEXT_LINES_FILE_BYTES).expect("limit fits u64") {
-        return Err(QueryFailure::Limit);
+        return Err(QueryFailure::TooLarge);
     }
     let mut bytes = Vec::with_capacity(
         usize::try_from(metadata.len())
@@ -717,7 +742,7 @@ fn read_text_lines(
         .read_to_end(&mut bytes)
         .map_err(|_| QueryFailure::Read)?;
     if bytes.len() > MAX_READ_TEXT_LINES_FILE_BYTES {
-        return Err(QueryFailure::Limit);
+        return Err(QueryFailure::TooLarge);
     }
     let content = String::from_utf8(bytes).map_err(|_| QueryFailure::Decode)?;
     line_range_output(&content, range)
@@ -976,10 +1001,17 @@ fn bounded_preview(line: &str, match_start: usize, match_end: usize) -> String {
 
 fn open_directory(root: &Dir, path: &RelativePath) -> Result<Dir, QueryFailure> {
     let mut directory = root.try_clone().map_err(|_| QueryFailure::Open)?;
-    for component in path.components() {
-        directory = directory
-            .open_dir_nofollow(component)
-            .map_err(|_| QueryFailure::Open)?;
+    let last = path.components().len().saturating_sub(1);
+    for (index, component) in path.components().iter().enumerate() {
+        directory = directory.open_dir_nofollow(component).map_err(|error| {
+            match classify_open_error(&directory, component, &error) {
+                // A non-directory final component exists but has the wrong kind; an earlier one
+                // means the requested path does not exist.
+                OpenErrorClass::NotADirectory if index == last => QueryFailure::NotADirectory,
+                OpenErrorClass::Missing | OpenErrorClass::NotADirectory => QueryFailure::NotFound,
+                OpenErrorClass::Refused => QueryFailure::Open,
+            }
+        })?;
         if is_windows_reparse_point(&directory.dir_metadata().map_err(|_| QueryFailure::Open)?) {
             return Err(QueryFailure::Open);
         }
@@ -988,17 +1020,30 @@ fn open_directory(root: &Dir, path: &RelativePath) -> Result<Dir, QueryFailure> 
 }
 
 fn open_regular_file(root: &Dir, path: &RelativePath) -> Result<File, QueryFailure> {
-    let (leaf, parents) = path.components().split_last().ok_or(QueryFailure::Open)?;
+    // The workspace root itself is a directory.
+    let (leaf, parents) = path
+        .components()
+        .split_last()
+        .ok_or(QueryFailure::NotAFile)?;
     let parent = RelativePath::from_components(parents.to_vec());
-    let directory = open_directory(root, &parent)?;
+    let directory = open_directory(root, &parent).map_err(|failure| match failure {
+        QueryFailure::NotADirectory => QueryFailure::NotFound,
+        other => other,
+    })?;
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No).nonblock(true);
-    let file = directory
-        .open_with(leaf, &options)
-        .map_err(|_| QueryFailure::Open)?;
+    let file = directory.open_with(leaf, &options).map_err(|error| {
+        match classify_open_error(&directory, leaf, &error) {
+            OpenErrorClass::Missing | OpenErrorClass::NotADirectory => QueryFailure::NotFound,
+            OpenErrorClass::Refused => QueryFailure::Open,
+        }
+    })?;
     let metadata = file.metadata().map_err(|_| QueryFailure::Open)?;
-    if !metadata.is_file() || is_windows_reparse_point(&metadata) {
+    if is_windows_reparse_point(&metadata) {
         return Err(QueryFailure::Open);
+    }
+    if !metadata.is_file() {
+        return Err(QueryFailure::NotAFile);
     }
     Ok(file)
 }
@@ -1634,7 +1679,7 @@ mod tests {
                 &fixture.relative("huge.txt"),
                 lines(1, 1)
             ),
-            Err(QueryFailure::Limit)
+            Err(QueryFailure::TooLarge)
         ));
         assert!(matches!(
             read_text_lines(
@@ -1646,7 +1691,7 @@ mod tests {
         ));
         assert!(matches!(
             read_text_lines(&fixture.root.directory, &fixture.relative("."), lines(1, 1)),
-            Err(QueryFailure::Open)
+            Err(QueryFailure::NotAFile)
         ));
     }
 
@@ -1705,6 +1750,51 @@ mod tests {
                 )
                 .is_err(),
                 "{field} tampering must fail closed"
+            );
+        }
+    }
+
+    #[test]
+    fn failures_name_missing_paths_and_wrong_kinds_without_values() {
+        let fixture = Fixture::new();
+        fs::write(fixture.directory.path().join("file.txt"), "text").unwrap();
+        fs::create_dir(fixture.directory.path().join("dir")).unwrap();
+        let root = &fixture.root.directory;
+
+        for (observed, expected) in [
+            (
+                list_directory(root, &fixture.relative("missing")).err(),
+                StepFailureCode::NotFound,
+            ),
+            (
+                list_directory(root, &fixture.relative("file.txt")).err(),
+                StepFailureCode::NotADirectory,
+            ),
+            (
+                list_directory(root, &fixture.relative("file.txt/child")).err(),
+                StepFailureCode::NotFound,
+            ),
+            (
+                stat_path(root, &fixture.relative("missing.txt")).err(),
+                StepFailureCode::NotFound,
+            ),
+            (
+                read_text_lines(root, &fixture.relative("missing.txt"), lines(1, 1)).err(),
+                StepFailureCode::NotFound,
+            ),
+            (
+                read_text_lines(root, &fixture.relative("file.txt/child"), lines(1, 1)).err(),
+                StepFailureCode::NotFound,
+            ),
+            (
+                read_text_lines(root, &fixture.relative("dir"), lines(1, 1)).err(),
+                StepFailureCode::NotAFile,
+            ),
+        ] {
+            assert_eq!(
+                observed.map(QueryFailure::failure_code),
+                Some(expected),
+                "{expected:?}"
             );
         }
     }

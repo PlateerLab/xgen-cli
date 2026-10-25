@@ -5,7 +5,8 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use xgen_local_store::{Commit, ExpectedHead, RunStore, StoreError};
 use xgen_workgraph::{
     EffectIntent, InvocationMaterialRecord, ReconciliationResolution, RunEvent, RunEventBody,
-    RunState, SinkGuarantee, StepState, StepStatus, TOOL_OUTPUT_PROFILE_V1, ToolOutputRecord,
+    RunState, SinkGuarantee, StepFailureCode, StepState, StepStatus, TOOL_OUTPUT_PROFILE_V1,
+    ToolOutputRecord,
 };
 
 use crate::RunLease;
@@ -159,6 +160,7 @@ pub(crate) enum ExecutionObservation {
     },
     Failed {
         evidence_digest: String,
+        failure_code: Option<StepFailureCode>,
     },
     Unknown {
         reason: String,
@@ -583,12 +585,18 @@ impl PendingExecutionCommit {
         }
     }
 
-    fn failed(step: &StepState, intent: &EffectIntent, evidence_digest: String) -> Self {
+    fn failed(
+        step: &StepState,
+        intent: &EffectIntent,
+        evidence_digest: String,
+        failure_code: Option<StepFailureCode>,
+    ) -> Self {
         Self {
             body: RunEventBody::EffectFailed {
                 step_id: step.step_id.clone(),
                 effect_id: intent.effect_id.clone(),
                 evidence_digest,
+                failure_code,
             },
             action: DriveAction::EffectFailed,
             output: None,
@@ -648,13 +656,17 @@ fn classify_execution_observation(
             evidence_digest,
             output,
         ),
-        ExecutionObservation::Failed { evidence_digest } => {
+        ExecutionObservation::Failed {
+            evidence_digest,
+            failure_code,
+        } => {
             let evidence_digest =
                 require_observation_value("execution_failed", "evidence_digest", evidence_digest)?;
             Ok(PendingExecutionCommit::failed(
                 step,
                 intent,
                 evidence_digest,
+                failure_code,
             ))
         }
         ExecutionObservation::Unknown { reason } => {

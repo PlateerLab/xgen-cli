@@ -13,7 +13,7 @@ use xgen_protocol::{
 };
 use xgen_workgraph::{
     EffectIntent, InvocationMaterialError, InvocationMaterialRecord, ReceiptPlacement, RunState,
-    SinkGuarantee, StepStatus, TOOL_OUTPUT_PROFILE_V1, invocation_material_digest,
+    SinkGuarantee, StepFailureCode, StepStatus, TOOL_OUTPUT_PROFILE_V1, invocation_material_digest,
     receipt_provenance_digest, validate_tool_output_candidate,
 };
 
@@ -206,8 +206,10 @@ pub enum AdapterExecutionObservation {
         evidence_digest: AdapterEvidenceDigest,
         output: AdapterToolOutput,
     },
+    /// A definite failure. `failure_code` is the value-free classification the planner sees.
     Failed {
         evidence_digest: AdapterEvidenceDigest,
+        failure_code: StepFailureCode,
     },
     Unknown {
         reason: AdapterExecutionUnknownReason,
@@ -481,11 +483,13 @@ impl EffectSink for DirectSink<'_> {
                     }
                 }
             }
-            AdapterExecutionObservation::Failed { evidence_digest } => {
-                ExecutionObservation::Failed {
-                    evidence_digest: evidence_digest.into_string(),
-                }
-            }
+            AdapterExecutionObservation::Failed {
+                evidence_digest,
+                failure_code,
+            } => ExecutionObservation::Failed {
+                evidence_digest: evidence_digest.into_string(),
+                failure_code: Some(failure_code),
+            },
             AdapterExecutionObservation::Unknown { reason } => ExecutionObservation::Unknown {
                 reason: reason.code().to_owned(),
             },

@@ -896,11 +896,13 @@ fn failed_read_is_shown_to_the_planner_and_the_task_can_complete() {
 
     let after_failure = planning_context(&requests[1]);
     assert_eq!(after_failure["steps"][0]["status"], "failed");
+    assert_eq!(after_failure["steps"][0]["failureCode"], "too_large");
     assert_eq!(after_failure["toolOutputs"], json!([]));
     let serialized = after_failure.to_string();
     assert!(!serialized.contains(path_text(&workspace)));
     let before_completion = planning_context(&requests[2]);
     assert_eq!(before_completion["steps"][1]["status"], "completed");
+    assert!(before_completion["steps"][1].get("failureCode").is_none());
     assert_eq!(
         chronological_output_capabilities(&before_completion),
         ["xgeny.fs/read-text"]
@@ -1025,6 +1027,12 @@ fn failed_write_still_stops_the_run() {
     server.handle.join().expect("provider server should finish");
     assert!(
         stderr(&output).contains("reason=failed_work"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        stderr(&output).contains("XGEN_STEP_FAILURE run_id=")
+            && stderr(&output).contains(" code=precondition_conflict"),
         "{}",
         stderr(&output)
     );
