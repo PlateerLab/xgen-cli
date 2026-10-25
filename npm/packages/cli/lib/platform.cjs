@@ -1,5 +1,31 @@
 'use strict';
 
+// Optional platform packages declare the same engines range, so npm skips them
+// silently on an older Node.js. Check first so that case is not reported as
+// a missing optional dependency.
+function checkNodeVersion(engine, version) {
+  const required = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(engine);
+  if (!required) {
+    throw new Error('XGEN npm launcher engine range is invalid');
+  }
+  const current = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (current) {
+    const difference = [1, 2, 3]
+      .map((index) => Number(current[index]) - Number(required[index]))
+      .find((value) => value !== 0);
+    if (difference === undefined || difference > 0) {
+      return;
+    }
+  }
+  const minimum = engine.slice(2);
+  const error = new Error(
+    `XGEN requires Node.js ${minimum} or later (current: ${version}). ` +
+      'Upgrade Node.js, then reinstall @xgen-ai/cli.',
+  );
+  error.code = 'XGEN_UNSUPPORTED_NODE';
+  throw error;
+}
+
 function selectPlatform(catalog, platform, architecture) {
   if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.platforms)) {
     throw new Error('XGEN npm platform catalog is invalid');
@@ -31,4 +57,4 @@ function resolvePlatformBinary(specification, resolver = require.resolve) {
   }
 }
 
-module.exports = { resolvePlatformBinary, selectPlatform };
+module.exports = { checkNodeVersion, resolvePlatformBinary, selectPlatform };
