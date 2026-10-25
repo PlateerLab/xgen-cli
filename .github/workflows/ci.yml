@@ -209,8 +209,15 @@ jobs:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest@0.9.148
+
+      # nextest runs every test binary concurrently instead of one after another, and runs the
+      # full suite (the `default` profile). The workspace has no doctests.
       - name: Test workspace
-        run: cargo test --workspace --locked --no-fail-fast
+        run: cargo nextest run --workspace --locked --no-fail-fast
 
       - name: Lint platform-specific filesystem adapter
         run: cargo clippy --locked -p xgen-adapter-filesystem --all-targets -- -D warnings
