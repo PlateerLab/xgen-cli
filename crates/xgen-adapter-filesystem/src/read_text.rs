@@ -270,10 +270,12 @@ impl ReadFailure {
 }
 
 /// A missing component, or a parent component that is not a directory, means the path does not
-/// exist. Every other open error stays unclassified beyond "unavailable".
+/// exist, and a directory is not a file. Every other open error stays unclassified beyond
+/// "unavailable".
 fn open_failure(parent: &Dir, name: &str, error: &std::io::Error) -> ReadFailure {
     match classify_open_error(parent, name, error) {
         OpenErrorClass::Missing | OpenErrorClass::NotADirectory => ReadFailure::NotFound,
+        OpenErrorClass::Directory => ReadFailure::NonRegular,
         OpenErrorClass::Refused => ReadFailure::Open,
     }
 }

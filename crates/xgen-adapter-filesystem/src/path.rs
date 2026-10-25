@@ -73,6 +73,9 @@ pub(crate) enum OpenErrorClass {
     Missing,
     /// Something other than a directory exists at the name.
     NotADirectory,
+    /// A directory exists at the name. Some platforms refuse to open a directory as a file, so
+    /// this is how a file open learns that the name has the wrong kind.
+    Directory,
     /// The name exists but is refused, such as a symbolic link, or the error is not classified.
     Refused,
 }
@@ -85,15 +88,16 @@ pub(crate) fn classify_open_error(
     name: &str,
     error: &std::io::Error,
 ) -> OpenErrorClass {
-    match error.kind() {
-        std::io::ErrorKind::NotFound => OpenErrorClass::Missing,
-        std::io::ErrorKind::NotADirectory
-            if !parent
-                .symlink_metadata(name)
-                .is_ok_and(|metadata| metadata.file_type().is_symlink()) =>
-        {
-            OpenErrorClass::NotADirectory
-        }
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return OpenErrorClass::Missing;
+    }
+    let file_type = parent
+        .symlink_metadata(name)
+        .map(|metadata| metadata.file_type());
+    match file_type {
+        Ok(file_type) if file_type.is_symlink() => OpenErrorClass::Refused,
+        _ if error.kind() == std::io::ErrorKind::NotADirectory => OpenErrorClass::NotADirectory,
+        Ok(file_type) if file_type.is_dir() => OpenErrorClass::Directory,
         _ => OpenErrorClass::Refused,
     }
 }

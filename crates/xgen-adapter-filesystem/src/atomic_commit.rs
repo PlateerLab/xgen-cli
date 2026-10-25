@@ -146,7 +146,9 @@ fn open_parent(root: &Dir, path: &RelativePath) -> Result<(Dir, String), AtomicC
                 OpenErrorClass::Missing | OpenErrorClass::NotADirectory => {
                     AtomicCommitFailure::ParentNotFound
                 }
-                OpenErrorClass::Refused => AtomicCommitFailure::OpenParent,
+                OpenErrorClass::Directory | OpenErrorClass::Refused => {
+                    AtomicCommitFailure::OpenParent
+                }
             }
         })?;
         if is_windows_reparse_point(
