@@ -7,7 +7,12 @@ const require = createRequire(import.meta.url);
 const catalog = JSON.parse(
   await readFile(new URL('../platforms.json', import.meta.url), 'utf8'),
 );
-const { resolvePlatformBinary, selectPlatform } = require('../packages/cli/lib/platform.cjs');
+const { checkNodeVersion, resolvePlatformBinary, selectPlatform } = require(
+  '../packages/cli/lib/platform.cjs',
+);
+const launcher = JSON.parse(
+  await readFile(new URL('../packages/cli/package.json', import.meta.url), 'utf8'),
+);
 
 const expected = [
   ['linux', 'x64', '@xgen-ai/cli-linux-x64-musl', 'bin/xgen'],
@@ -61,4 +66,37 @@ test('missing optional dependency produces a bounded recovery message', () => {
           'Reinstall @xgen-ai/cli without --omit=optional.' &&
       !error.message.includes('host-specific'),
   );
+});
+
+test('launcher accepts Node.js versions at or above the declared engine', () => {
+  const engine = launcher.engines.node;
+  for (const version of ['v22.14.0', 'v22.14.1', 'v22.22.1', 'v23.0.0', 'v24.1.0']) {
+    assert.doesNotThrow(() => checkNodeVersion(engine, version), version);
+  }
+  assert.doesNotThrow(() => checkNodeVersion(engine, process.version));
+});
+
+test('older Node.js is reported before the missing native package', () => {
+  const engine = launcher.engines.node;
+  for (const version of ['v22.13.1', 'v22.0.0', 'v20.18.0', 'v18.20.4', 'not-a-version']) {
+    assert.throws(
+      () => checkNodeVersion(engine, version),
+      (error) =>
+        error.code === 'XGEN_UNSUPPORTED_NODE' &&
+        error.message ===
+          `XGEN requires Node.js 22.14.0 or later (current: ${version}). ` +
+            'Upgrade Node.js, then reinstall @xgen-ai/cli.',
+      version,
+    );
+  }
+});
+
+test('launcher rejects an engine range it cannot evaluate', () => {
+  for (const engine of ['^22.14.0', '>=22.14', '>=22.14.0 <25']) {
+    assert.throws(
+      () => checkNodeVersion(engine, 'v22.14.0'),
+      /XGEN npm launcher engine range is invalid/,
+      engine,
+    );
+  }
 });

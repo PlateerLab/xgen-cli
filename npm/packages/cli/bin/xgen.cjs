@@ -3,11 +3,13 @@
 
 const { spawnSync } = require('node:child_process');
 const catalog = require('../platforms.json');
-const { resolvePlatformBinary, selectPlatform } = require('../lib/platform.cjs');
+const manifest = require('../package.json');
+const { checkNodeVersion, resolvePlatformBinary, selectPlatform } = require('../lib/platform.cjs');
 
 let specification;
 let binary;
 try {
+  checkNodeVersion(manifest.engines.node, process.version);
   specification = selectPlatform(catalog, process.platform, process.arch);
   binary = resolvePlatformBinary(specification);
 } catch (error) {
