@@ -66,7 +66,8 @@ Runtime observer는 다음 고정 event만 terminal에 전달한다.
 - completion committed
 
 Event에는 prompt, model output, path, argv, environment, file/process output, credential이 없다. Structured
-planner token은 표시하지 않는다. 최종 summary는 completion sidecar와 durable binding 검증이 끝난 뒤
+planner token은 표시하지 않는다. Run이 끝난 뒤에는 검증된 journal 기록으로 만든 변경 내역을 따로 표시한다
+([ADR-0057](0057-committed-change-report.md)). 최종 summary는 completion sidecar와 durable binding 검증이 끝난 뒤
 control character를 escape해 표시한다. 따라서 RC3의 streaming은 실제 진행 경계 스트리밍이지 token
 타이핑 효과가 아니다. 자유 형식 assistant token streaming은 planner와 분리된 검증 가능한 response
 channel을 설계하기 전까지 포함하지 않는다.

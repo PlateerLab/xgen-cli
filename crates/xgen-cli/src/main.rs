@@ -2017,10 +2017,58 @@ fn print_licenses() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// One `XGEN_CHANGE` line per committed workspace change, rebuilt from the verified journal rather
+/// than the model's summary (ADR-0057). Text values are JSON strings, so they cannot break a line.
+fn print_committed_changes(run_id: &str) {
+    let Ok(changes) = xgen_cli::inspect_local_changes(run_id) else {
+        eprintln!("XGEN_CHANGES_UNAVAILABLE run_id={run_id}");
+        return;
+    };
+    let quoted = |value: &str| serde_json::to_string(value).expect("a string serializes");
+    for change in changes {
+        match change {
+            xgen_cli::CommittedChange::Patch {
+                path,
+                changed,
+                edits,
+            } => {
+                let (mut added, mut removed) = (0, 0);
+                for edit in &edits {
+                    let (old, new) = xgen_cli::edit_lines(edit);
+                    removed += old.len();
+                    added += new.len();
+                }
+                eprintln!(
+                    "XGEN_CHANGE run_id={run_id} kind=patch path={} changed={changed} added={added} removed={removed}",
+                    quoted(&path)
+                );
+            }
+            xgen_cli::CommittedChange::Write {
+                path,
+                created,
+                changed,
+                content,
+            } => eprintln!(
+                "XGEN_CHANGE run_id={run_id} kind=write path={} changed={changed} created={created} lines={}",
+                quoted(&path),
+                content.lines().count()
+            ),
+            xgen_cli::CommittedChange::Execute { executable, .. } => eprintln!(
+                "XGEN_CHANGE run_id={run_id} kind=execute executable={}",
+                quoted(&executable)
+            ),
+            xgen_cli::CommittedChange::Terminal => {
+                eprintln!("XGEN_CHANGE run_id={run_id} kind=terminal");
+            }
+        }
+    }
+}
+
 fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
     match result {
         Ok(LocalCommandResult::Responded { run_id, summary }) => {
             eprintln!("XGEN_RESPONDED run_id={run_id}");
+            print_committed_changes(&run_id);
             if std::io::stdout().write_all(summary.as_bytes()).is_err() {
                 eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
                 return ExitCode::from(PublicRunError::Internal.exit_code());
@@ -2029,6 +2077,7 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         }
         Ok(LocalCommandResult::Completed { run_id, summary }) => {
             eprintln!("XGEN_COMPLETED run_id={run_id}");
+            print_committed_changes(&run_id);
             if std::io::stdout().write_all(summary.as_bytes()).is_err() {
                 eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
                 return ExitCode::from(PublicRunError::Internal.exit_code());
@@ -2038,6 +2087,7 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         Ok(LocalCommandResult::Paused { run_id, reason }) => {
             if let Some(run_id) = run_id {
                 eprintln!("XGEN_PAUSED run_id={run_id} reason={}", reason.code());
+                print_committed_changes(&run_id);
             } else {
                 eprintln!("XGEN_PAUSED reason={}", reason.code());
             }
@@ -2045,6 +2095,7 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         }
         Ok(LocalCommandResult::Rejected { run_id, reason }) => {
             eprintln!("XGEN_REJECTED run_id={run_id} reason={}", reason.code());
+            print_committed_changes(&run_id);
             if let Some(code) = reason.failure_code() {
                 eprintln!("XGEN_STEP_FAILURE run_id={run_id} code={code}");
             }

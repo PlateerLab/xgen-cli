@@ -9,7 +9,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use xgen_cli::{
-    DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason, RejectionReason,
+    CommittedChange, DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason,
+    RejectionReason, edit_lines,
 };
 use xgen_runtime::AgentLoopQuiescence;
 
@@ -215,6 +216,11 @@ pub(crate) trait ReplHost {
 
     fn usage(&mut self, run_id: &str) -> Result<xgen_cli::UsageReport, ReplFailure> {
         xgen_cli::inspect_local_usage(run_id).map_err(ReplFailure::from_run_error)
+    }
+
+    /// Workspace changes the Run committed, rebuilt from its verified journal (ADR-0057).
+    fn changes(&mut self, run_id: &str) -> Result<Vec<CommittedChange>, ReplFailure> {
+        xgen_cli::inspect_local_changes(run_id).map_err(ReplFailure::from_run_error)
     }
 
     fn start(
@@ -594,14 +600,15 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     &mut outcome,
                     &mut tally,
                 )?;
-                if interactive_display
-                    && matches!(
-                        outcome,
-                        SessionOutcome::Completed | SessionOutcome::Responded
-                    )
-                {
-                    print_run_footer(output, tally)?;
-                }
+                finish_goal_output(
+                    output,
+                    host,
+                    last_run.as_deref(),
+                    &mut session_context,
+                    outcome,
+                    tally,
+                    interactive_display,
+                )?;
             }
             ReplEntry::Goal(goal) => {
                 if active_run.is_some() {
@@ -648,14 +655,15 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     &mut outcome,
                     &mut tally,
                 )?;
-                if interactive_display
-                    && matches!(
-                        outcome,
-                        SessionOutcome::Completed | SessionOutcome::Responded
-                    )
-                {
-                    print_run_footer(output, tally)?;
-                }
+                finish_goal_output(
+                    output,
+                    host,
+                    last_run.as_deref(),
+                    &mut session_context,
+                    outcome,
+                    tally,
+                    interactive_display,
+                )?;
             }
         }
     }
@@ -820,6 +828,8 @@ const MAX_SESSION_REQUEST_BYTES: usize = 4 * 1024;
 struct SessionContext {
     turns: VecDeque<SessionTurn>,
     pending_goal: Option<String>,
+    /// Run whose committed changes were last shown and how many, so `/resume` shows only new ones.
+    reported_changes: Option<(String, usize)>,
 }
 
 #[derive(serde::Serialize)]
@@ -1098,6 +1108,171 @@ where
     tally.committed_steps = committed_steps.load(Ordering::Relaxed);
     tally.elapsed = started.elapsed();
     result
+}
+
+/// Show what the Run committed to the workspace, then the footer. The changes come from verified
+/// journal records, not the model's summary, so a wrong or overstated summary is visible
+/// (ADR-0057).
+fn finish_goal_output<H: ReplHost>(
+    output: &mut impl Write,
+    host: &mut H,
+    run_id: Option<&str>,
+    session_context: &mut SessionContext,
+    outcome: SessionOutcome,
+    tally: RunTally,
+    styled: bool,
+) -> io::Result<()> {
+    if let Some(run_id) = run_id.filter(|_| tally.committed_steps > 0) {
+        let already = match &session_context.reported_changes {
+            Some((reported, count)) if reported == run_id => *count,
+            _ => 0,
+        };
+        match host.changes(run_id) {
+            Ok(changes) => {
+                if changes.len() > already {
+                    print_changes(output, &changes[already..], styled)?;
+                }
+                session_context.reported_changes = Some((run_id.to_owned(), changes.len()));
+            }
+            Err(_) => writeln!(output, "Changes could not be read from the Run journal.")?,
+        }
+    }
+    if styled
+        && matches!(
+            outcome,
+            SessionOutcome::Completed | SessionOutcome::Responded
+        )
+    {
+        print_run_footer(output, tally)?;
+    }
+    Ok(())
+}
+
+const MAX_CHANGE_LINES: usize = 12;
+const MAX_CHANGE_REPORT_LINES: usize = 40;
+
+/// List committed changes with the lines each edit removed and added, bounded and escaped.
+fn print_changes(
+    output: &mut impl Write,
+    changes: &[CommittedChange],
+    styled: bool,
+) -> io::Result<()> {
+    let (removed_style, added_style, dim, plain) = if styled {
+        ("\x1b[31m", "\x1b[32m", DIM, PLAIN)
+    } else {
+        ("", "", "", "")
+    };
+    writeln!(output, "{dim}Changes{plain}")?;
+    let mut budget = MAX_CHANGE_REPORT_LINES;
+    for change in changes {
+        let mut lines: Vec<(char, &str)> = Vec::new();
+        write!(output, "  ")?;
+        match change {
+            CommittedChange::Patch {
+                path,
+                changed,
+                edits,
+            } => {
+                for edit in edits {
+                    let (removed, added) = edit_lines(edit);
+                    lines.extend(removed.into_iter().map(|line| ('-', line)));
+                    lines.extend(added.into_iter().map(|line| ('+', line)));
+                }
+                let added = lines.iter().filter(|(sign, _)| *sign == '+').count();
+                write_terminal_line(output, path)?;
+                if *changed {
+                    writeln!(
+                        output,
+                        " {dim}patched +{added} -{}{plain}",
+                        lines.len() - added
+                    )?;
+                } else {
+                    writeln!(output, " {dim}already up to date{plain}")?;
+                    lines.clear();
+                }
+            }
+            CommittedChange::Write {
+                path,
+                created,
+                changed,
+                content,
+            } => {
+                write_terminal_line(output, path)?;
+                let count = content.lines().count();
+                let verb = if *created { "created" } else { "replaced" };
+                if *changed {
+                    writeln!(output, " {dim}{verb}, {count} lines{plain}")?;
+                    if *created {
+                        lines.extend(content.lines().map(|line| ('+', line)));
+                    }
+                } else {
+                    writeln!(output, " {dim}already up to date{plain}")?;
+                }
+            }
+            CommittedChange::Execute { executable, args } => {
+                let mut command = executable.clone();
+                for argument in args {
+                    command.push(' ');
+                    command.push_str(argument);
+                }
+                write!(output, "ran ")?;
+                write_terminal_line(output, &bounded_command(&command))?;
+                writeln!(output, " {dim}(file changes not tracked){plain}")?;
+            }
+            CommittedChange::Terminal => {
+                writeln!(
+                    output,
+                    "terminal input {dim}(file changes not tracked){plain}"
+                )?;
+            }
+        }
+        let shown = lines.len().min(MAX_CHANGE_LINES).min(budget);
+        for (sign, line) in &lines[..shown] {
+            let style = if *sign == '+' {
+                added_style
+            } else {
+                removed_style
+            };
+            write!(output, "    {style}{sign} ")?;
+            write_terminal_line(output, line)?;
+            writeln!(output, "{plain}")?;
+        }
+        if shown < lines.len() {
+            writeln!(
+                output,
+                "    {dim}… {} more lines{plain}",
+                lines.len() - shown
+            )?;
+        }
+        budget -= shown;
+    }
+    Ok(())
+}
+
+const MAX_CHANGE_COMMAND_CHARS: usize = 120;
+
+/// A command line cut to one readable line; the full arguments stay in the Run journal.
+fn bounded_command(command: &str) -> String {
+    if command.chars().count() <= MAX_CHANGE_COMMAND_CHARS {
+        return command.to_owned();
+    }
+    let mut cut: String = command.chars().take(MAX_CHANGE_COMMAND_CHARS).collect();
+    cut.push('…');
+    cut
+}
+
+/// Write one line of untrusted text, escaping every control character including newlines.
+fn write_terminal_line(output: &mut impl Write, value: &str) -> io::Result<()> {
+    for character in value.chars() {
+        if character.is_control() {
+            for escaped in character.escape_default() {
+                write!(output, "{escaped}")?;
+            }
+        } else {
+            write!(output, "{character}")?;
+        }
+    }
+    Ok(())
 }
 
 /// The line under an answer: how long the Run took and how much of it is durable. The live line
@@ -1744,6 +1919,7 @@ mod tests {
         resumes: Vec<(String, InvocationGrants)>,
         tools: Vec<String>,
         model: ModelView,
+        changes: Vec<CommittedChange>,
     }
 
     impl FakeHost {
@@ -1758,6 +1934,7 @@ mod tests {
                     model: "qwen".to_owned(),
                     authentication: "external_or_none",
                 },
+                changes: Vec::new(),
             }
         }
 
@@ -1780,6 +1957,10 @@ mod tests {
 
         fn executable_ids(&self) -> &[String] {
             &self.tools
+        }
+
+        fn changes(&mut self, _run_id: &str) -> Result<Vec<CommittedChange>, ReplFailure> {
+            Ok(self.changes.clone())
         }
 
         fn allow_executable(&mut self, specification: &str) -> Result<(), ReplFailure> {
@@ -1823,6 +2004,107 @@ mod tests {
             });
             self.next()
         }
+    }
+
+    #[test]
+    fn committed_changes_are_listed_escaped_bounded_and_once_per_run() {
+        let run_id = "run-55555555555555555555555555555555";
+        let mut host = FakeHost::new([]);
+        host.changes = vec![
+            CommittedChange::Patch {
+                path: "README.md".to_owned(),
+                changed: true,
+                edits: vec![xgen_cli::TextEdit {
+                    old_text: "| a |\n| b |".to_owned(),
+                    new_text: "| a |\n| b |\n| b\u{1b}[31m |".to_owned(),
+                }],
+            },
+            CommittedChange::Write {
+                path: "notes.md".to_owned(),
+                created: true,
+                changed: true,
+                content: "line\n".repeat(20),
+            },
+            CommittedChange::Execute {
+                executable: "cargo".to_owned(),
+                args: vec!["fmt".to_owned()],
+            },
+            CommittedChange::Execute {
+                executable: "python3".to_owned(),
+                args: vec!["-c".to_owned(), "print(1)\n".repeat(40)],
+            },
+        ];
+        let mut context = SessionContext::default();
+        let tally = RunTally {
+            committed_steps: 3,
+            ..RunTally::default()
+        };
+        let mut output = Vec::new();
+        finish_goal_output(
+            &mut output,
+            &mut host,
+            Some(run_id),
+            &mut context,
+            SessionOutcome::Completed,
+            tally,
+            false,
+        )
+        .unwrap();
+        let rendered = String::from_utf8(output).unwrap();
+        assert!(rendered.starts_with("Changes\n"), "{rendered}");
+        assert!(
+            rendered.contains("  README.md patched +1 -0\n"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("    + | b\\u{1b}[31m |\n"), "{rendered}");
+        assert!(!rendered.contains('\u{1b}'), "{rendered}");
+        assert!(
+            rendered.contains("  notes.md created, 20 lines\n"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("    … 8 more lines\n"), "{rendered}");
+        assert!(
+            rendered.contains("  ran cargo fmt (file changes not tracked)\n"),
+            "{rendered}"
+        );
+        let long = rendered
+            .lines()
+            .find(|line| line.starts_with("  ran python3 -c "))
+            .expect("the long command should be listed");
+        assert!(long.ends_with("… (file changes not tracked)"), "{long}");
+        assert!(long.contains("print(1)\\n"), "{long}");
+
+        // A resumed leg of the same Run shows only what it added.
+        host.changes.push(CommittedChange::Terminal);
+        let mut output = Vec::new();
+        finish_goal_output(
+            &mut output,
+            &mut host,
+            Some(run_id),
+            &mut context,
+            SessionOutcome::Completed,
+            tally,
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "Changes\n  terminal input (file changes not tracked)\n"
+        );
+
+        // Nothing committed in this leg, nothing to read.
+        let mut output = Vec::new();
+        finish_goal_output(
+            &mut output,
+            &mut host,
+            Some(run_id),
+            &mut context,
+            SessionOutcome::Completed,
+            RunTally::default(),
+            false,
+        )
+        .unwrap();
+        assert!(output.is_empty());
     }
 
     #[test]
