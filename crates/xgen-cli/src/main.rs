@@ -561,6 +561,28 @@ impl repl::ReplHost for InteractiveHost {
         &self.executable_ids
     }
 
+    fn allow_executable(&mut self, specification: &str) -> Result<(), repl::ReplFailure> {
+        let specification = specification.trim();
+        let invalid = || repl::ReplFailure::new("executable_specification_invalid");
+        let (logical_id, _) = specification
+            .split_once('=')
+            .filter(|(id, path)| !id.is_empty() && !path.is_empty())
+            .ok_or_else(invalid)?;
+        if self.executable_ids.iter().any(|id| id == logical_id) {
+            return Err(repl::ReplFailure::new("executable_already_catalogued"));
+        }
+        // Build the session now so an unusable path is refused here, with the catalog
+        // unchanged, instead of failing the next goal.
+        let mut specifications = self.executable_specs.clone();
+        specifications.push(specification.to_owned());
+        let session = prepare_local_process_session(&self.workspace, &specifications)
+            .map_err(|error| repl::ReplFailure::new(error.code()))?;
+        self.executable_specs = specifications;
+        self.executable_ids.push(logical_id.to_owned());
+        self.process_session = Some(session);
+        Ok(())
+    }
+
     fn start(
         &mut self,
         goal: String,
