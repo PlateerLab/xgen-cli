@@ -460,6 +460,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
             output,
             "trust mode: model/read/write/execute run without asking (/permissions KIND ask to restore)"
         )?;
+        print_executables(output, host.executable_ids())?;
         PermissionSettings::trusted()
     } else {
         PermissionSettings::default()
@@ -1847,6 +1848,39 @@ fn write_terminal_text(output: &mut impl Write, value: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Shells trust mode may catalogue (ADR-0060), so one approved call can run a pipeline.
+#[cfg(not(windows))]
+const SHELL_EXECUTABLES: &[&str] = &["bash", "zsh", "sh"];
+#[cfg(windows)]
+const SHELL_EXECUTABLES: &[&str] = &["pwsh", "powershell"];
+
+/// The user's own shell when `SHELL` names a known one, otherwise the first known shell on PATH.
+pub(crate) fn discover_shell_executable() -> Option<(String, PathBuf)> {
+    let path = env::var_os("PATH").unwrap_or_default();
+    #[cfg(windows)]
+    let extensions = windows_executable_extensions();
+    #[cfg(not(windows))]
+    let extensions = vec![String::new()];
+    select_shell_executable(env::var_os("SHELL").map(PathBuf::from), &path, &extensions)
+}
+
+fn select_shell_executable(
+    login_shell: Option<PathBuf>,
+    search_path: &std::ffi::OsStr,
+    extensions: &[String],
+) -> Option<(String, PathBuf)> {
+    let login = login_shell.filter(|shell| shell.is_absolute() && is_executable_file(shell));
+    if let Some(shell) = login
+        && let Some(id) = shell.file_name().and_then(|name| name.to_str())
+        && SHELL_EXECUTABLES.contains(&id)
+    {
+        return Some((id.to_owned(), shell));
+    }
+    discover_developer_executables_in(search_path, extensions, SHELL_EXECUTABLES)
+        .into_iter()
+        .next()
+}
+
 pub(crate) fn discover_developer_executables() -> Vec<(String, PathBuf)> {
     let Some(path) = env::var_os("PATH") else {
         return Vec::new();
@@ -2411,6 +2445,40 @@ mod tests {
         assert_eq!(output.matches("Allow read").count(), 2);
         assert_eq!(output.matches("Allow write").count(), 1);
         assert_eq!(output.matches("Allow execute").count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_selection_prefers_a_known_login_shell_and_falls_back_to_path() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempdir().unwrap();
+        let make = |name: &str| {
+            let path = directory.path().join(name);
+            fs::write(&path, "").unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            path
+        };
+        let zsh = make("zsh");
+        let bash = make("bash");
+        let fish = make("fish");
+        let search = directory.path().as_os_str();
+        let none = [String::new()];
+        assert_eq!(
+            select_shell_executable(Some(zsh.clone()), search, &none),
+            Some(("zsh".to_owned(), zsh))
+        );
+        assert_eq!(
+            select_shell_executable(Some(fish), search, &none),
+            Some(("bash".to_owned(), bash.clone()))
+        );
+        assert_eq!(
+            select_shell_executable(Some(PathBuf::from("bash")), search, &none),
+            Some(("bash".to_owned(), bash))
+        );
+        assert_eq!(
+            select_shell_executable(None, std::ffi::OsStr::new(""), &none),
+            None
+        );
     }
 
     #[test]
