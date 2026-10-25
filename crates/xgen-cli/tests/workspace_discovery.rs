@@ -986,20 +986,108 @@ fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
 }
 
 #[test]
-fn failed_write_still_stops_the_run() {
+fn rejected_write_is_shown_to_the_planner_and_a_corrected_write_completes() {
     let fixture = tempdir().expect("test directory should exist");
     let state_root = fixture.path().join("state");
     let workspace = fixture.path().join("workspace");
     fs::create_dir_all(workspace.join("src")).expect("workspace should create");
     let source = "pub fn answer() -> u32 {\n    41\n}\n";
     fs::write(workspace.join("src/lib.rs"), source).expect("source should write");
+    let patch = |key: &str, objective: &str, expected: &[u8]| {
+        plan_response(
+            key,
+            objective,
+            "xgeny.fs/apply-patch",
+            &json!({
+                "path": "src/lib.rs",
+                "expectedDigest": test_sha256_digest(expected),
+                "edits": [{
+                    "oldText": "41",
+                    "newText": "42"
+                }]
+            }),
+        )
+    };
+    let server = SequentialServer::spawn_responses(vec![
+        patch(
+            "patch_stale",
+            "Patch with a stale digest",
+            b"stale contents",
+        ),
+        patch(
+            "patch_current",
+            "Patch the current contents",
+            source.as_bytes(),
+        ),
+        completion_response(),
+    ]);
+
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        "src",
+        "--allow-write",
+        "--allow-remote-model-egress",
+        "Update the answer.",
+    ]))
+    .expect("xgen run should finish");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(!stderr(&output).contains("XGEN_STEP_FAILURE"));
+    assert_eq!(
+        fs::read_to_string(workspace.join("src/lib.rs")).unwrap(),
+        source.replace("41", "42")
+    );
+
+    let requests = (0..3)
+        .map(|_| {
+            server
+                .requests
+                .recv_timeout(TEST_TIMEOUT)
+                .expect("every model request should arrive")
+        })
+        .collect::<Vec<_>>();
+    server.handle.join().expect("provider server should finish");
+    // The rejected patch applied nothing, so the planner sees why and plans a corrected one
+    // (ADR-0055).
+    let after_rejection = planning_context(&requests[1]);
+    assert_eq!(after_rejection["steps"][0]["status"], "failed");
+    assert_eq!(
+        after_rejection["steps"][0]["failureCode"],
+        "precondition_conflict"
+    );
+    let meaning = after_rejection["steps"][0]["failureMeaning"]
+        .as_str()
+        .expect("a failed Step should state what its code means");
+    assert!(meaning.contains("stale") && meaning.contains("Nothing was changed"));
+    assert!(!after_rejection.to_string().contains(path_text(&workspace)));
+    let before_completion = planning_context(&requests[2]);
+    assert_eq!(before_completion["steps"][1]["status"], "completed");
+}
+
+#[test]
+fn write_beyond_a_capability_limit_still_stops_the_run() {
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(workspace.join("src")).expect("workspace should create");
+    // One byte over the apply-patch source ceiling recurs on every retry of this file.
+    let source = format!("41\n{}", "x".repeat(64 * 1024));
+    fs::write(workspace.join("src/large.txt"), &source).expect("source should write");
     let server = SequentialServer::spawn_responses(vec![plan_response(
-        "patch_source",
-        "Patch with a stale digest",
+        "patch_large",
+        "Patch the large file",
         "xgeny.fs/apply-patch",
         &json!({
-            "path": "src/lib.rs",
-            "expectedDigest": test_sha256_digest(b"stale contents"),
+            "path": "src/large.txt",
+            "expectedDigest": test_sha256_digest(source.as_bytes()),
             "edits": [{
                 "oldText": "41",
                 "newText": "42"
@@ -1026,18 +1114,14 @@ fn failed_write_still_stops_the_run() {
     .expect("xgen run should finish");
     server.handle.join().expect("provider server should finish");
     assert!(
-        stderr(&output).contains("reason=failed_work"),
-        "{}",
-        stderr(&output)
-    );
-    assert!(
-        stderr(&output).contains("XGEN_STEP_FAILURE run_id=")
-            && stderr(&output).contains(" code=precondition_conflict"),
+        stderr(&output).contains("reason=failed_work")
+            && stderr(&output).contains("XGEN_STEP_FAILURE run_id=")
+            && stderr(&output).contains(" code=too_large"),
         "{}",
         stderr(&output)
     );
     assert_eq!(
-        fs::read_to_string(workspace.join("src/lib.rs")).unwrap(),
+        fs::read_to_string(workspace.join("src/large.txt")).unwrap(),
         source
     );
 }

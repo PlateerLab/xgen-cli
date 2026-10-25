@@ -2956,6 +2956,56 @@ pub struct StepState {
     pub failure_code: Option<StepFailureCode>,
 }
 
+impl StepState {
+    /// Report whether this failed Step left nothing to undo, so the Run may continue past it.
+    ///
+    /// A read-only intent has no effect (ADR-0052). Any other Step is settled only when its adapter
+    /// failed definitely before applying the effect and the arguments, not a limit or the
+    /// environment, caused it, so a corrected request can succeed (ADR-0055). An adapter reports a
+    /// failure code only for a definite failure; a failure after a possible effect is reported as
+    /// unknown. Verification and reconciliation failures carry no code and stay blocking.
+    #[must_use]
+    pub fn failure_is_settled(&self) -> bool {
+        self.status == StepStatus::Failed
+            && (self
+                .failure_code
+                .is_some_and(StepFailureCode::is_argument_mismatch)
+                || self
+                    .intent
+                    .as_ref()
+                    .is_some_and(|intent| intent.effect_class == EffectClass::ReadOnly))
+    }
+
+    /// Fixed statement of what this Step's failure means, shown to the planner with its label.
+    #[must_use]
+    pub fn failure_meaning(&self) -> Option<&'static str> {
+        if self.status != StepStatus::Failed {
+            return None;
+        }
+        self.failure_code.map(StepFailureCode::meaning).or_else(|| {
+            self.execution_receipt_digest
+                .is_some()
+                .then_some("The effect ran but its result failed verification.")
+        })
+    }
+
+    /// Value-free failure label shown to the planner and the user, if this Step failed.
+    ///
+    /// Adapter failures carry their own code. A Step can also fail at verification, after a
+    /// Receipt is recorded; that path has a fixed label.
+    #[must_use]
+    pub fn failure_label(&self) -> Option<&'static str> {
+        if self.status != StepStatus::Failed {
+            return None;
+        }
+        self.failure_code.map(StepFailureCode::as_str).or_else(|| {
+            self.execution_receipt_digest
+                .is_some()
+                .then_some("verification_failed")
+        })
+    }
+}
+
 /// Closed, value-free classification of a definite adapter failure (ADR-0054).
 ///
 /// Codes name the kind of failure only. They never carry paths, sizes, content, or OS error text,
@@ -3007,6 +3057,69 @@ impl StepFailureCode {
             Self::PatchContextAmbiguous => "patch_context_ambiguous",
             Self::PatchEditsOverlap => "patch_edits_overlap",
             Self::IoError => "io_error",
+        }
+    }
+
+    /// Fixed, value-free statement of what the failure means, shown to the planner beside the code.
+    ///
+    /// Each text states a fact about the failed request and never an instruction, so it stays
+    /// inside the untrusted-data contract of the planning context (ADR-0055).
+    #[must_use]
+    pub const fn meaning(self) -> &'static str {
+        match self {
+            Self::NotFound => "Nothing exists at the requested path. Nothing was changed.",
+            Self::Unavailable => {
+                "The target exists but was refused or could not be opened. Nothing was changed."
+            }
+            Self::NotAFile => "The requested path is not a regular file. Nothing was changed.",
+            Self::NotADirectory => "The requested path is not a directory. Nothing was changed.",
+            Self::TooLarge => {
+                "The target exceeds this capability's size limit, so the same request on it \
+                 always fails. Nothing was changed."
+            }
+            Self::NotUtf8 => "The target is not UTF-8 text. Nothing was changed.",
+            Self::LimitExceeded => {
+                "The result exceeded this capability's limit. Nothing was changed."
+            }
+            Self::PreconditionConflict => {
+                "The target's current digest differs from expectedDigest: it changed after it \
+                 was observed, so earlier observations of it are stale. Nothing was changed."
+            }
+            Self::PatchContextMissing => {
+                "An edit's oldText does not occur in the current target. Nothing was changed."
+            }
+            Self::PatchContextAmbiguous => {
+                "An edit's oldText occurs more than once in the current target. Nothing was \
+                 changed."
+            }
+            Self::PatchEditsOverlap => {
+                "Two edits overlap in the current target. Nothing was changed."
+            }
+            Self::IoError => {
+                "Reading or writing failed in the environment; the target was not changed."
+            }
+        }
+    }
+
+    /// Report whether the request's arguments disagree with the current workspace: they name the
+    /// wrong kind of target, a missing one, or content that is no longer there. Another request can
+    /// succeed. Limits of a capability (`too_large`, `not_utf8`, `limit_exceeded`) and environment
+    /// failures (`unavailable`, `io_error`) recur on any retry of the same target (ADR-0055).
+    #[must_use]
+    pub const fn is_argument_mismatch(self) -> bool {
+        match self {
+            Self::NotFound
+            | Self::NotAFile
+            | Self::NotADirectory
+            | Self::PreconditionConflict
+            | Self::PatchContextMissing
+            | Self::PatchContextAmbiguous
+            | Self::PatchEditsOverlap => true,
+            Self::Unavailable
+            | Self::TooLarge
+            | Self::NotUtf8
+            | Self::LimitExceeded
+            | Self::IoError => false,
         }
     }
 }
@@ -3089,8 +3202,9 @@ pub struct WorkFrontier {
     pub verified_completed_step_ids: Vec<String>,
     pub unverified_completed_step_ids: Vec<String>,
     pub failed_step_ids: Vec<String>,
-    /// Subset of `failed_step_ids` whose durable intent is read-only (ADR-0052).
-    pub read_only_failed_step_ids: Vec<String>,
+    /// Subset of `failed_step_ids` that left nothing to undo: a read-only intent (ADR-0052) or a
+    /// definite adapter failure reported with a failure code (ADR-0055).
+    pub settled_failed_step_ids: Vec<String>,
     pub manual_required_step_ids: Vec<String>,
 }
 
@@ -3110,19 +3224,20 @@ impl WorkFrontier {
         self.total_steps > 0 && self.verified_completed_step_ids.len() == self.total_steps
     }
 
-    /// Report whether a failed Step has side effects that must stop the Run.
+    /// Report whether a failed Step may have side effects that must stop the Run.
     #[must_use]
     pub fn has_blocking_failures(&self) -> bool {
-        self.failed_step_ids.len() > self.read_only_failed_step_ids.len()
+        self.failed_step_ids.len() > self.settled_failed_step_ids.len()
     }
 
-    /// Report whether every planned Step is receipt-completed or a definite read-only failure.
+    /// Report whether every planned Step is receipt-completed or a settled failure.
     ///
-    /// A failed read has no effect to undo, so a task may complete past it (ADR-0052).
+    /// A settled failure has no effect to undo, so a task may complete past it (ADR-0052,
+    /// ADR-0055).
     #[must_use]
     pub fn all_steps_settled(&self) -> bool {
         self.total_steps > 0
-            && self.verified_completed_step_ids.len() + self.read_only_failed_step_ids.len()
+            && self.verified_completed_step_ids.len() + self.settled_failed_step_ids.len()
                 == self.total_steps
     }
 }
@@ -3225,7 +3340,7 @@ struct FrontierAssembly<'a> {
     verified_completed_step_ids: Vec<String>,
     unverified_completed_step_ids: Vec<String>,
     failed_step_ids: Vec<String>,
-    read_only_failed_step_ids: Vec<String>,
+    settled_failed_step_ids: Vec<String>,
     manual_required_step_ids: Vec<String>,
     processed: usize,
 }
@@ -3359,12 +3474,8 @@ impl<'a> FrontierAssembly<'a> {
             }
             StepStatus::Failed => {
                 self.failed_step_ids.push(step_id.to_owned());
-                if step
-                    .intent
-                    .as_ref()
-                    .is_some_and(|intent| intent.effect_class == EffectClass::ReadOnly)
-                {
-                    self.read_only_failed_step_ids.push(step_id.to_owned());
+                if step.failure_is_settled() {
+                    self.settled_failed_step_ids.push(step_id.to_owned());
                 }
                 DependencyOutcome::Blocked
             }
@@ -3393,7 +3504,7 @@ impl<'a> FrontierAssembly<'a> {
         self.verified_completed_step_ids.sort();
         self.unverified_completed_step_ids.sort();
         self.failed_step_ids.sort();
-        self.read_only_failed_step_ids.sort();
+        self.settled_failed_step_ids.sort();
         self.manual_required_step_ids.sort();
 
         WorkFrontier {
@@ -3408,7 +3519,7 @@ impl<'a> FrontierAssembly<'a> {
             verified_completed_step_ids: self.verified_completed_step_ids,
             unverified_completed_step_ids: self.unverified_completed_step_ids,
             failed_step_ids: self.failed_step_ids,
-            read_only_failed_step_ids: self.read_only_failed_step_ids,
+            settled_failed_step_ids: self.settled_failed_step_ids,
             manual_required_step_ids: self.manual_required_step_ids,
         }
     }
@@ -5489,7 +5600,7 @@ mod tests {
     }
 
     #[test]
-    fn frontier_settles_definite_read_only_failures_but_not_other_failures() {
+    fn frontier_settles_read_only_and_argument_mismatch_failures_only() {
         let mut records = Vec::new();
         let state = planned_state(&mut records);
         let RunEventBody::EffectIntentCommitted { intent, .. } =
@@ -5497,27 +5608,41 @@ mod tests {
         else {
             panic!("helper must create an intent")
         };
-        let failed_with = |effect_class| {
+        let failed_with = |effect_class, failure_code| {
             let mut failed = state.clone();
             let step = failed.steps.get_mut("step-material").unwrap();
             step.status = StepStatus::Failed;
+            step.failure_code = failure_code;
             let mut step_intent = (*intent).clone();
             step_intent.effect_class = effect_class;
             step.intent = Some(step_intent);
             derive_frontier(&failed).expect("frontier should derive")
         };
 
-        let read = failed_with(EffectClass::ReadOnly);
+        let read = failed_with(EffectClass::ReadOnly, None);
         assert_eq!(read.failed_step_ids, ["step-material"]);
-        assert_eq!(read.read_only_failed_step_ids, ["step-material"]);
+        assert_eq!(read.settled_failed_step_ids, ["step-material"]);
         assert!(!read.has_blocking_failures());
         assert!(read.all_steps_settled());
         assert!(!read.all_steps_receipt_completed());
 
         for effect_class in [EffectClass::Idempotent, EffectClass::NonIdempotent] {
-            let other = failed_with(effect_class);
+            // A definite adapter failure caused by the arguments applied nothing and a corrected
+            // request can succeed, whatever the effect class (ADR-0055).
+            let rejected = failed_with(effect_class, Some(StepFailureCode::PreconditionConflict));
+            assert_eq!(rejected.settled_failed_step_ids, ["step-material"]);
+            assert!(!rejected.has_blocking_failures());
+            assert!(rejected.all_steps_settled());
+
+            // A limit recurs on every retry of the same target, so it still stops the Run.
+            let limited = failed_with(effect_class, Some(StepFailureCode::TooLarge));
+            assert!(limited.settled_failed_step_ids.is_empty());
+            assert!(limited.has_blocking_failures());
+
+            // Without a code the failure may follow an effect, as after verification.
+            let other = failed_with(effect_class, None);
             assert_eq!(other.failed_step_ids, ["step-material"]);
-            assert!(other.read_only_failed_step_ids.is_empty());
+            assert!(other.settled_failed_step_ids.is_empty());
             assert!(other.has_blocking_failures());
             assert!(!other.all_steps_settled());
         }
