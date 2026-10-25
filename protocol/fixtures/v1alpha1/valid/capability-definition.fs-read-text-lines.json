@@ -1,0 +1,76 @@
+{
+  "apiVersion": "xgeny.io/v1alpha1",
+  "kind": "CapabilityDefinition",
+  "metadata": {
+    "id": "xgeny.fs/read-text-lines",
+    "contractVersion": "1.0.0",
+    "displayName": "Read text file lines",
+    "labels": {
+      "xgeny.io/pack": "core-os"
+    }
+  },
+  "spec": {
+    "summary": "Read a range of lines from a UTF-8 text file of up to 8 MiB without following symbolic links. Use it for files larger than read-text accepts (64 KiB) or to read around a search-text match line. Each returned line keeps its line terminator; continue from endLine + 1 while endLine is below totalLines.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["path", "startLine", "lineCount"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Slash-separated workspace-relative file path."
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "One-based first line to return."
+        },
+        "lineCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "Maximum number of lines to return."
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["content", "startLine", "endLine", "totalLines", "truncated", "digest"],
+      "properties": {
+        "content": {"type": "string", "description": "The selected lines, at most 64 KiB once JSON-escaped."},
+        "startLine": {"type": "integer", "minimum": 1},
+        "endLine": {"type": "integer", "minimum": 0, "description": "Last returned line; startLine - 1 when no line is returned."},
+        "totalLines": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean", "description": "True when the content limit stopped the range early or cut its only line."},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "class": "read_only",
+      "resourceSelectors": [
+        {"scope": "filesystem.read", "argumentPointer": "/path"}
+      ],
+      "criticalActions": []
+    },
+    "requiredCapabilities": [],
+    "execution": {
+      "styles": ["sync"],
+      "cancellable": false,
+      "idempotencyKeySupported": false,
+      "defaultTimeoutMs": 30000,
+      "maxTimeoutMs": 30000
+    },
+    "verification": [
+      {"strategy": "output_schema", "required": true},
+      {"strategy": "postcondition", "required": true, "description": "Digest matches the canonical bounded line-range observation."}
+    ],
+    "discovery": {
+      "keywords": ["file", "large", "lines", "range", "read", "text"],
+      "examples": ["Read lines 1200 to 1400 of src/server.py."]
+    }
+  }
+}

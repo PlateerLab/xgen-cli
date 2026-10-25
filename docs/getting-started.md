@@ -327,7 +327,7 @@ xgen run \
 ```
 
 이 mode는 `list-directory`, `stat`, case-sensitive literal `search-text`, bounded UTF-8
-`read-text`, `write-atomic`, `apply-patch`를 제공한다. `--allow-write`는 read/model egress와 독립된 동의다. 더 좁게
+`read-text`, 큰 파일용 줄 범위 `read-text-lines`, `write-atomic`, `apply-patch`를 제공한다. `--allow-write`는 read/model egress와 독립된 동의다. 더 좁게
 허용하려면 `--allow-dir src --allow-dir tests`처럼 반복하고,
 directory 밖의 exact file만 `--allow-file Cargo.toml`로 추가한다. 미완료 재개에는 원래와 동일한
 `--allow-dir`/`--allow-file` 집합을 다시 제공해야 한다.

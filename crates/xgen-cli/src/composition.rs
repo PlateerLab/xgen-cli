@@ -11,10 +11,12 @@ use xgen_adapter_filesystem::{
     APPLY_PATCH_CAPABILITY_ID, APPLY_PATCH_CONTRACT_VERSION, FILESYSTEM_READ_SCOPE,
     FILESYSTEM_WRITE_SCOPE, LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION,
     MAX_APPLY_PATCH_BYTES, MAX_APPLY_PATCH_EDITS, MAX_DIRECTORY_SCAN_ENTRIES,
-    MAX_LIST_DIRECTORY_ENTRIES, MAX_QUERY_OUTPUT_CANONICAL_BYTES, MAX_SEARCH_FILE_BYTES,
-    MAX_SEARCH_MATCHES, MAX_SEARCH_PREVIEW_BYTES, MAX_SEARCH_QUERY_BYTES,
+    MAX_LIST_DIRECTORY_ENTRIES, MAX_QUERY_OUTPUT_CANONICAL_BYTES,
+    MAX_READ_TEXT_LINES_CONTENT_BYTES, MAX_READ_TEXT_LINES_COUNT, MAX_READ_TEXT_LINES_FILE_BYTES,
+    MAX_SEARCH_FILE_BYTES, MAX_SEARCH_MATCHES, MAX_SEARCH_PREVIEW_BYTES, MAX_SEARCH_QUERY_BYTES,
     MAX_SEARCH_QUERY_UNICODE_SCALARS, MAX_SEARCH_TOTAL_BYTES, MAX_SEARCH_VISITED_ENTRIES,
-    MAX_WRITE_ATOMIC_BYTES, READ_TEXT_CAPABILITY_ID, READ_TEXT_CONTRACT_VERSION, ReadTextLimits,
+    MAX_WRITE_ATOMIC_BYTES, READ_TEXT_CAPABILITY_ID, READ_TEXT_CONTRACT_VERSION,
+    READ_TEXT_LINES_CAPABILITY_ID, READ_TEXT_LINES_CONTRACT_VERSION, ReadTextLimits,
     SEARCH_TEXT_CAPABILITY_ID, SEARCH_TEXT_CONTRACT_VERSION, STAT_CAPABILITY_ID,
     STAT_CONTRACT_VERSION, WRITE_ATOMIC_CAPABILITY_ID, WRITE_ATOMIC_CONTRACT_VERSION, WorkspaceId,
     WorkspaceResourceResolver, WorkspaceRoot,
@@ -2441,6 +2443,9 @@ struct DiscoveryLimitsDescriptor {
     search_file_bytes: usize,
     search_total_bytes: usize,
     search_preview_bytes: usize,
+    read_text_lines_count: u64,
+    read_text_lines_file_bytes: usize,
+    read_text_lines_content_bytes: usize,
     query_output_canonical_bytes: usize,
 }
 
@@ -2616,6 +2621,9 @@ fn workspace_discovery_profile_digest(workspace: &WorkspaceRoot) -> Result<Strin
             search_file_bytes: MAX_SEARCH_FILE_BYTES,
             search_total_bytes: MAX_SEARCH_TOTAL_BYTES,
             search_preview_bytes: MAX_SEARCH_PREVIEW_BYTES,
+            read_text_lines_count: MAX_READ_TEXT_LINES_COUNT,
+            read_text_lines_file_bytes: MAX_READ_TEXT_LINES_FILE_BYTES,
+            read_text_lines_content_bytes: MAX_READ_TEXT_LINES_CONTENT_BYTES,
             query_output_canonical_bytes: MAX_QUERY_OUTPUT_CANONICAL_BYTES,
         },
         route_profile: WORKSPACE_ROUTE_PROFILE,
@@ -2781,6 +2789,15 @@ fn workspace_discovery_specs(
         read_text_spec(workspace)?,
         filesystem_spec(
             include_str!(
+                "../../../protocol/fixtures/v1alpha1/valid/capability-definition.fs-read-text-lines.json"
+            ),
+            READ_TEXT_LINES_CAPABILITY_ID,
+            READ_TEXT_LINES_CONTRACT_VERSION,
+            "local.fs.read-text-lines.builtin.v1",
+            workspace.read_text_lines_binding(),
+        )?,
+        filesystem_spec(
+            include_str!(
                 "../../../protocol/fixtures/v1alpha1/valid/capability-definition.fs-search-text.json"
             ),
             SEARCH_TEXT_CAPABILITY_ID,
@@ -2849,32 +2866,29 @@ fn local_tool_product(
         .register(&workspace.binding(), read_verifier)
         .map_err(|_| PublicRunError::Internal)?;
     if workspace_discovery {
-        let list_adapter = workspace.list_directory_adapter();
-        let list_verifier = list_adapter.verifier();
-        adapters
-            .register(&workspace.list_directory_binding(), list_adapter)
-            .map_err(|_| PublicRunError::Internal)?;
-        verifiers
-            .register(&workspace.list_directory_binding(), list_verifier)
-            .map_err(|_| PublicRunError::Internal)?;
-
-        let search_adapter = workspace.search_text_adapter();
-        let search_verifier = search_adapter.verifier();
-        adapters
-            .register(&workspace.search_text_binding(), search_adapter)
-            .map_err(|_| PublicRunError::Internal)?;
-        verifiers
-            .register(&workspace.search_text_binding(), search_verifier)
-            .map_err(|_| PublicRunError::Internal)?;
-
-        let stat_adapter = workspace.stat_adapter();
-        let stat_verifier = stat_adapter.verifier();
-        adapters
-            .register(&workspace.stat_binding(), stat_adapter)
-            .map_err(|_| PublicRunError::Internal)?;
-        verifiers
-            .register(&workspace.stat_binding(), stat_verifier)
-            .map_err(|_| PublicRunError::Internal)?;
+        for (binding, query_adapter) in [
+            (
+                workspace.list_directory_binding(),
+                workspace.list_directory_adapter(),
+            ),
+            (
+                workspace.read_text_lines_binding(),
+                workspace.read_text_lines_adapter(),
+            ),
+            (
+                workspace.search_text_binding(),
+                workspace.search_text_adapter(),
+            ),
+            (workspace.stat_binding(), workspace.stat_adapter()),
+        ] {
+            let query_verifier = query_adapter.verifier();
+            adapters
+                .register(&binding, query_adapter)
+                .map_err(|_| PublicRunError::Internal)?;
+            verifiers
+                .register(&binding, query_verifier)
+                .map_err(|_| PublicRunError::Internal)?;
+        }
 
         let write_adapter = workspace.write_atomic_adapter();
         let write_verifier = write_adapter.verifier();
@@ -4027,10 +4041,10 @@ mod tests {
         let discovery_catalog =
             LocalReadCatalog::build(&workspace, &[], &[".".to_owned()]).unwrap();
         let discovery = local_tool_product(&workspace, &discovery_catalog, None).unwrap();
-        assert_eq!(discovery.capabilities.definitions().count(), 6);
-        assert_eq!(discovery.capabilities.instances().count(), 6);
-        assert_eq!(discovery.adapters.len(), 6);
-        assert!(format!("{:?}", discovery.verifiers).contains("verifier_count: 6"));
+        assert_eq!(discovery.capabilities.definitions().count(), 7);
+        assert_eq!(discovery.capabilities.instances().count(), 7);
+        assert_eq!(discovery.adapters.len(), 7);
+        assert!(format!("{:?}", discovery.verifiers).contains("verifier_count: 7"));
         let scoped_catalog = LocalReadCatalog::build(&workspace, &[], &["src".to_owned()]).unwrap();
         let scoped = local_tool_product(&workspace, &scoped_catalog, None).unwrap();
         let root_definitions = discovery
@@ -4067,7 +4081,7 @@ mod tests {
                 .unwrap();
         let process_product =
             local_tool_product(&workspace, &discovery_catalog, Some(&process)).unwrap();
-        let expected = if terminal_supported() { 11 } else { 7 };
+        let expected = if terminal_supported() { 12 } else { 8 };
         assert_eq!(process_product.capabilities.definitions().count(), expected);
         assert_eq!(process_product.capabilities.instances().count(), expected);
         assert_eq!(process_product.adapters.len(), expected);

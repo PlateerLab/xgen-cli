@@ -60,8 +60,8 @@ reducer 조건이 넓어지기만 하므로 기존 journal은 새 binary에서 �
   (ADR-0015).
 - 실패 원인 분류(too-large, not-found 등)는 아직 모델에 전달하지 않는다. 지금 adapter는 고정 분류의
   digest만 남긴다. typed failure output은 별도 결정이 필요하다.
-- 64 KiB를 넘는 파일을 읽는 방법은 여전히 없다. ADR-0022가 예정한 range/chunk capability는 후속
-  작업이다.
+- 64 KiB를 넘는 파일을 읽는 방법은 이 ADR에 없다. 줄 범위 읽기는
+  [ADR-0053](0053-bounded-line-range-text-read.md)이 추가한다.
 
 ## 검증
 

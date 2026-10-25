@@ -143,7 +143,7 @@ read가 bounded이며 한 byte 초과하면 실패한다. 그 뒤 `String::from_
 머물도록 선택했다. PR3의 MVP composition 회귀는 effective Run budget도 512 KiB로 설정하고 그
 동일한 budget과 비교한다. 더 작은 context budget을 선택한 host에서는 유효한 큰 read가 실행된 뒤
 다음 planning turn 직전에 `ContextBudgetExceeded`로 pause할 수 있다. 큰 파일은 상한을 높이지 않고
-후속 range/chunk capability로 다룬다.
+후속 range/chunk capability로 다룬다(줄 범위 읽기는 [ADR-0053](0053-bounded-line-range-text-read.md)).
 
 성공 output은 기존 public Definition과 정확히 같다.
 
@@ -221,6 +221,7 @@ Linux, macOS와 Windows의 `cargo test --workspace --locked`가 동일 gate를 �
 - hostile same-UID process, kernel/driver와 untrusted in-process plugin 격리
 - concurrent in-place write 중 coherent/atomic file snapshot
 - filesystem timeout, cancellation, streaming, binary, range/chunk read
+  (UTF-8 줄 범위 읽기는 [ADR-0053](0053-bounded-line-range-text-read.md)가 다룬다)
 - case/Unicode alias의 stable physical file identity
 - ReadOnly crash 뒤 자동 retry와 tool failure를 다음 model turn에 전달하는 typed error output
   (확정된 read-only 실패 뒤 계획을 계속하는 것은 [ADR-0052](0052-recoverable-read-only-step-failures.md)가 다룬다. 실패 원인 분류 전달은 여전히 범위 밖이다)

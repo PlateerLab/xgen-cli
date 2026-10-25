@@ -28,7 +28,7 @@ xgen run \
   '프로젝트 구조를 확인하고 관련 구현을 찾아 설명해줘.'
 ```
 
-`--allow-dir .`은 선택한 workspace root 전체를 네 read-only Capability로 관찰할 후보 경계를 제공한다.
+`--allow-dir .`은 선택한 workspace root 전체를 다섯 read-only Capability로 관찰할 후보 경계를 제공한다.
 같은 mode에서 `write-atomic`과 `apply-patch`도 광고되지만 실제 mutation은 별도 `--allow-write`가 있어야 한다.
 Planner는 immutable input schema에서 `.` 규칙을 받고, 별도 `planningConstraints`에서 caller가 허용한
 directory/file 목록을 받는다. Constrained provider prompt는 이를 후보 제한으로 따르되 권한으로
@@ -42,6 +42,7 @@ directory/file 목록을 받는다. Constrained provider prompt는 이를 후보
 | `xgeny.fs/stat@1.0.0` | regular file size 또는 directory kind |
 | `xgeny.fs/search-text@1.0.0` | directory 아래 case-sensitive literal UTF-8 검색 |
 | `xgeny.fs/read-text@1.0.0` | bounded UTF-8 file content 읽기 |
+| `xgeny.fs/read-text-lines@1.0.0` | 8 MiB 이하 UTF-8 file의 줄 범위 읽기 ([ADR-0053](../adr/0053-bounded-line-range-text-read.md)) |
 | `xgeny.fs/write-atomic@1.0.0` | 별도 승인 아래 UTF-8 file create/atomic replace |
 | `xgeny.fs/apply-patch@1.0.0` | 별도 승인 아래 기존 UTF-8 file의 strict contextual edit |
 
