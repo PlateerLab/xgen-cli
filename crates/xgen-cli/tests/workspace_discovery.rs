@@ -838,6 +838,141 @@ fn exact_patch_requires_write_approval_and_survives_process_resume() {
     assert!(output.get("edits").is_none());
 }
 
+#[test]
+fn failed_read_is_shown_to_the_planner_and_the_task_can_complete() {
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(&workspace).expect("workspace should create");
+    // One byte over the read-text ceiling (ADR-0022) fails as a definite read-only failure.
+    fs::write(workspace.join("large.txt"), "x".repeat(64 * 1024 + 1))
+        .expect("large file should write");
+    fs::write(workspace.join("README.md"), "fixture workspace").expect("README should write");
+    let server = SequentialServer::spawn_responses(vec![
+        plan_response(
+            "read_large",
+            "Read the large file",
+            "xgeny.fs/read-text",
+            &json!({"path": "large.txt"}),
+        ),
+        plan_response(
+            "read_readme",
+            "Read the README instead",
+            "xgeny.fs/read-text",
+            &json!({"path": "README.md"}),
+        ),
+        completion_response(),
+    ]);
+
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-read",
+        "--allow-remote-model-egress",
+        "Summarize the workspace files.",
+    ]))
+    .expect("xgen run should finish");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), COMPLETION);
+
+    let requests = (0..3)
+        .map(|_| {
+            server
+                .requests
+                .recv_timeout(TEST_TIMEOUT)
+                .expect("every model request should arrive")
+        })
+        .collect::<Vec<_>>();
+    server.handle.join().expect("provider server should finish");
+
+    let after_failure = planning_context(&requests[1]);
+    assert_eq!(after_failure["steps"][0]["status"], "failed");
+    assert_eq!(after_failure["toolOutputs"], json!([]));
+    let serialized = after_failure.to_string();
+    assert!(!serialized.contains(path_text(&workspace)));
+    let before_completion = planning_context(&requests[2]);
+    assert_eq!(before_completion["steps"][1]["status"], "completed");
+    assert_eq!(
+        chronological_output_capabilities(&before_completion),
+        ["xgeny.fs/read-text"]
+    );
+
+    let run_id = extract_run_id(&stderr(&output));
+    let store = SqliteRunStore::open_existing_read_only(
+        state_root.join("runs").join(&run_id).join("run.sqlite3"),
+    )
+    .expect("run store should open");
+    let snapshot = store.load().unwrap().expect("run should exist");
+    let mut statuses = snapshot
+        .state
+        .steps
+        .values()
+        .map(|step| step.status)
+        .collect::<Vec<_>>();
+    statuses.sort_by_key(|status| format!("{status:?}"));
+    assert_eq!(statuses, [StepStatus::Completed, StepStatus::Failed]);
+}
+
+#[test]
+fn failed_write_still_stops_the_run() {
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(workspace.join("src")).expect("workspace should create");
+    let source = "pub fn answer() -> u32 {\n    41\n}\n";
+    fs::write(workspace.join("src/lib.rs"), source).expect("source should write");
+    let server = SequentialServer::spawn_responses(vec![plan_response(
+        "patch_source",
+        "Patch with a stale digest",
+        "xgeny.fs/apply-patch",
+        &json!({
+            "path": "src/lib.rs",
+            "expectedDigest": test_sha256_digest(b"stale contents"),
+            "edits": [{
+                "oldText": "41",
+                "newText": "42"
+            }]
+        }),
+    )]);
+
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        "src",
+        "--allow-write",
+        "--allow-remote-model-egress",
+        "Update the answer.",
+    ]))
+    .expect("xgen run should finish");
+    server.handle.join().expect("provider server should finish");
+    assert!(
+        stderr(&output).contains("reason=failed_work"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.join("src/lib.rs")).unwrap(),
+        source
+    );
+}
+
 fn assert_resume_scope_and_material_failures(
     state_root: &Path,
     workspace: &Path,
