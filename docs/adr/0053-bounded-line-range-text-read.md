@@ -65,6 +65,7 @@ read failure가 된다. 원인 분류 code는 [ADR-0054](0054-value-free-step-fa
   바뀌므로 이 변경 이전 binary로 시작해 멈춘 workspace Run은 새 binary에서 `ConfigurationMismatch`로
   재개가 거절된다. 완료된 Run의 offline replay는 영향이 없다.
 - 큰 파일 수정은 여전히 불가능하다. `apply-patch`·`write-atomic`도 64 KiB 상한이다. 별도 결정이 필요하다.
+  [ADR-0056](0056-large-file-patch.md)에서 `apply-patch` 대상을 8 MiB로 올리고 `fileDigest`를 더했다.
 - 같은 파일을 여러 범위로 읽으면 tool output이 planning context에 쌓인다. context budget 소진은 기존
   `ContextBudgetExceeded` 경로를 탄다.
 

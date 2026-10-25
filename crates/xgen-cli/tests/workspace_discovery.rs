@@ -925,7 +925,7 @@ fn failed_read_is_shown_to_the_planner_and_the_task_can_complete() {
 }
 
 #[test]
-fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
+fn a_file_larger_than_read_text_accepts_is_read_by_range_and_patched() {
     let fixture = tempdir().expect("test directory should exist");
     let state_root = fixture.path().join("state");
     let workspace = fixture.path().join("workspace");
@@ -940,6 +940,17 @@ fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
             "Read the definition at the end of the large file",
             "xgeny.fs/read-text-lines",
             &json!({"path": "large.py", "startLine": 3_001, "lineCount": 50}),
+        ),
+        // The whole-file digest from the range read is the patch precondition (ADR-0056).
+        plan_response(
+            "patch_tail",
+            "Change the value the definition returns",
+            "xgeny.fs/apply-patch",
+            &json!({
+                "path": "large.py",
+                "expectedDigest": test_sha256_digest(large.as_bytes()),
+                "edits": [{"oldText": "return 42", "newText": "return 43"}]
+            }),
         ),
         completion_response(),
     ]);
@@ -957,13 +968,18 @@ fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
         "--allow-dir",
         ".",
         "--allow-read",
+        "--allow-write",
         "--allow-remote-model-egress",
-        "What does target return?",
+        "Make target return 43.",
     ]))
     .expect("xgen run should finish");
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(
+        fs::read_to_string(workspace.join("large.py")).unwrap(),
+        large.replace("return 42", "return 43")
+    );
 
-    let requests = (0..2)
+    let requests = (0..3)
         .map(|_| {
             server
                 .requests
@@ -983,6 +999,12 @@ fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
     assert_eq!(observed["endLine"], 3_002);
     assert_eq!(observed["totalLines"], 3_002);
     assert_eq!(observed["truncated"], false);
+    assert_eq!(
+        observed["fileDigest"],
+        test_sha256_digest(large.as_bytes()).as_str()
+    );
+    let before_completion = planning_context(&requests[2]);
+    assert_eq!(before_completion["steps"][1]["status"], "completed");
 }
 
 #[test]
@@ -1078,8 +1100,8 @@ fn write_beyond_a_capability_limit_still_stops_the_run() {
     let state_root = fixture.path().join("state");
     let workspace = fixture.path().join("workspace");
     fs::create_dir_all(workspace.join("src")).expect("workspace should create");
-    // One byte over the apply-patch source ceiling recurs on every retry of this file.
-    let source = format!("41\n{}", "x".repeat(64 * 1024));
+    // One byte over the apply-patch target ceiling recurs on every retry of this file.
+    let source = format!("41\n{}", "x".repeat(8 * 1024 * 1024 - 2));
     fs::write(workspace.join("src/large.txt"), &source).expect("source should write");
     let server = SequentialServer::spawn_responses(vec![plan_response(
         "patch_large",
@@ -1430,7 +1452,10 @@ fn plan_response(key: &str, objective: &str, capability_id: &str, arguments: &Va
             "dependsOn": [],
             "capability": {
                 "capabilityId": capability_id,
-                "contractVersion": if capability_id == "xgen.tools/describe" { "2.0.0" } else { "1.0.0" }
+                "contractVersion": match capability_id {
+                    "xgen.tools/describe" | "xgeny.fs/read-text-lines" | "xgeny.fs/apply-patch" => "2.0.0",
+                    _ => "1.0.0",
+                }
             },
             "arguments": arguments
         }],

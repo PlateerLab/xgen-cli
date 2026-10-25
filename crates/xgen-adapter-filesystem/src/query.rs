@@ -110,7 +110,7 @@ impl QueryOperation {
     const fn output_field_count(self) -> usize {
         match self {
             Self::ListDirectory | Self::Stat | Self::SearchText => 3,
-            Self::ReadTextLines => 6,
+            Self::ReadTextLines => 7,
         }
     }
 }
@@ -744,14 +744,19 @@ fn read_text_lines(
     if bytes.len() > MAX_READ_TEXT_LINES_FILE_BYTES {
         return Err(QueryFailure::TooLarge);
     }
+    let file_digest = crate::read_text::sha256_digest(&bytes);
     let content = String::from_utf8(bytes).map_err(|_| QueryFailure::Decode)?;
-    line_range_output(&content, range)
+    line_range_output(&content, &file_digest, range)
 }
 
 /// Select whole lines, each with its original terminator, so consecutive ranges concatenate to
 /// the file. Selection stops before the JSON-escaped content would exceed its byte limit; a first
 /// line that alone exceeds it is cut at a character boundary. Either case sets `truncated`.
-fn line_range_output(content: &str, range: LineRange) -> Result<ObservedOutput, QueryFailure> {
+fn line_range_output(
+    content: &str,
+    file_digest: &str,
+    range: LineRange,
+) -> Result<ObservedOutput, QueryFailure> {
     let total_lines =
         u64::try_from(content.split_inclusive('\n').count()).map_err(|_| QueryFailure::Limit)?;
     let skip = usize::try_from(range.start_line - 1).unwrap_or(usize::MAX);
@@ -791,6 +796,7 @@ fn line_range_output(content: &str, range: LineRange) -> Result<ObservedOutput, 
             "endLine": end_line,
             "totalLines": total_lines,
             "truncated": truncated,
+            "fileDigest": file_digest,
         }),
     })
 }
@@ -1134,6 +1140,11 @@ fn validate_lines_output(object: &Map<String, Value>) -> Result<(), Verification
     object
         .get("truncated")
         .and_then(Value::as_bool)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    object
+        .get("fileDigest")
+        .and_then(Value::as_str)
+        .filter(|digest| crate::read_text::is_canonical_digest(digest))
         .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
     let returned = u64::try_from(content.split_inclusive('\n').count())
         .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?;
@@ -1537,6 +1548,9 @@ mod tests {
         assert_eq!(first["endLine"], 2);
         assert_eq!(first["totalLines"], 5);
         assert_eq!(first["truncated"], false);
+        let whole_file = crate::read_text::sha256_digest(text.as_bytes());
+        assert_eq!(first["fileDigest"], whole_file);
+        assert_eq!(rest["fileDigest"], whole_file);
         assert_eq!(rest["content"], "\nfour\nfive");
         assert_eq!(rest["endLine"], 5);
         assert_eq!(rest["truncated"], false);

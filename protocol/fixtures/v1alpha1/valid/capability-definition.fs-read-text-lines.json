@@ -3,14 +3,14 @@
   "kind": "CapabilityDefinition",
   "metadata": {
     "id": "xgeny.fs/read-text-lines",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "displayName": "Read text file lines",
     "labels": {
       "xgeny.io/pack": "core-os"
     }
   },
   "spec": {
-    "summary": "Read a range of lines from a UTF-8 text file of up to 8 MiB without following symbolic links. Use it for files larger than read-text accepts (64 KiB) or to read around a search-text match line. Each returned line keeps its line terminator; continue from endLine + 1 while endLine is below totalLines.",
+    "summary": "Read a range of lines from a UTF-8 text file of up to 8 MiB without following symbolic links. Use it for files larger than read-text accepts (64 KiB) or to read around a search-text match line. Each returned line keeps its line terminator; continue from endLine + 1 while endLine is below totalLines. fileDigest identifies the whole file and is the expectedDigest that apply-patch needs.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -38,13 +38,14 @@
     "outputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
-      "required": ["content", "startLine", "endLine", "totalLines", "truncated", "digest"],
+      "required": ["content", "startLine", "endLine", "totalLines", "truncated", "fileDigest", "digest"],
       "properties": {
         "content": {"type": "string", "description": "The selected lines, at most 64 KiB once JSON-escaped."},
         "startLine": {"type": "integer", "minimum": 1},
         "endLine": {"type": "integer", "minimum": 0, "description": "Last returned line; startLine - 1 when no line is returned."},
         "totalLines": {"type": "integer", "minimum": 0},
         "truncated": {"type": "boolean", "description": "True when the content limit stopped the range early or cut its only line."},
+        "fileDigest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$", "description": "SHA-256 of the whole file's bytes, the same value read-text returns as digest."},
         "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
       },
       "additionalProperties": false

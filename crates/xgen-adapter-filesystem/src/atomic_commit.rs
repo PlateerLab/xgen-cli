@@ -12,6 +12,9 @@ use crate::path::{OpenErrorClass, RelativePath, classify_open_error};
 use crate::read_text::sha256_digest;
 
 pub(crate) const MAX_ATOMIC_TEXT_BYTES: usize = 64 * 1024;
+/// Largest existing target a commit inspects. Patches replace files read by line range, so this
+/// matches the read-text-lines file ceiling rather than the 64 KiB content bound.
+pub(crate) const MAX_ATOMIC_TARGET_BYTES: usize = crate::query::MAX_READ_TEXT_LINES_FILE_BYTES;
 const TEMP_CREATE_ATTEMPTS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,15 +184,15 @@ fn inspect_target(
     }
     let mut bytes = Vec::with_capacity(
         usize::try_from(metadata.len())
-            .unwrap_or(MAX_ATOMIC_TEXT_BYTES)
-            .min(MAX_ATOMIC_TEXT_BYTES)
+            .unwrap_or(MAX_ATOMIC_TARGET_BYTES)
+            .min(MAX_ATOMIC_TARGET_BYTES)
             .saturating_add(1),
     );
     std::io::Read::by_ref(&mut file)
-        .take(u64::try_from(MAX_ATOMIC_TEXT_BYTES).expect("usize fits u64") + 1)
+        .take(u64::try_from(MAX_ATOMIC_TARGET_BYTES).expect("usize fits u64") + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| AtomicCommitFailure::InspectTarget)?;
-    if bytes.len() > MAX_ATOMIC_TEXT_BYTES {
+    if bytes.len() > MAX_ATOMIC_TARGET_BYTES {
         return Err(AtomicCommitFailure::InspectTarget);
     }
     Ok(Some(TargetObservation {

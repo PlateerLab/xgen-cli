@@ -42,9 +42,9 @@ directory/file 목록을 받는다. Constrained provider prompt는 이를 후보
 | `xgeny.fs/stat@1.0.0` | regular file size 또는 directory kind |
 | `xgeny.fs/search-text@1.0.0` | directory 아래 case-sensitive literal UTF-8 검색 |
 | `xgeny.fs/read-text@1.0.0` | bounded UTF-8 file content 읽기 |
-| `xgeny.fs/read-text-lines@1.0.0` | 8 MiB 이하 UTF-8 file의 줄 범위 읽기 ([ADR-0053](../adr/0053-bounded-line-range-text-read.md)) |
+| `xgeny.fs/read-text-lines@2.0.0` | 8 MiB 이하 UTF-8 file의 줄 범위 읽기와 file 전체 digest ([ADR-0053](../adr/0053-bounded-line-range-text-read.md), [ADR-0056](../adr/0056-large-file-patch.md)) |
 | `xgeny.fs/write-atomic@1.0.0` | 별도 승인 아래 UTF-8 file create/atomic replace |
-| `xgeny.fs/apply-patch@1.0.0` | 별도 승인 아래 기존 UTF-8 file의 strict contextual edit |
+| `xgeny.fs/apply-patch@2.0.0` | 별도 승인 아래 8 MiB 이하 기존 UTF-8 file의 strict contextual edit |
 
 더 좁은 범위는 directory를 반복 지정하고 필요한 exact file만 추가한다.
 

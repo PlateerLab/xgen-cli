@@ -42,7 +42,8 @@ primitive만 공유해야 한다.
 - `oldText`는 비어 있을 수 없고 `oldText == newText`인 no-op은 거부한다.
 - 모든 old/new UTF-8 byte 합은 64 KiB 이하여야 한다. JSON Schema character limit과 별도로 adapter가
   byte limit을 다시 검사한다.
-- 원본 file과 최종 file도 각각 64 KiB 이하여야 한다.
+- 원본 file과 최종 file도 각각 64 KiB 이하여야 한다. 2.0.0에서 8 MiB로 올렸다
+  ([ADR-0056](0056-large-file-patch.md)).
 
 Unified diff text, line number, byte offset, regex, glob과 fuzzy match는 contract에 없다. Structured exact
 format은 parser ambiguity를 줄이고 JSON Schema/typed material 경계에서 닫힌 shape를 유지한다.
