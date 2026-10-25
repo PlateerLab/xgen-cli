@@ -68,6 +68,10 @@ pub(crate) const FIXTURES: &[Asset] = &[
         "../../../protocol/fixtures/v1alpha1/valid/capability-definition.fs-read-text.json"
     ),
     asset!(
+        "valid/capability-definition.fs-read-text-lines.json",
+        "../../../protocol/fixtures/v1alpha1/valid/capability-definition.fs-read-text-lines.json"
+    ),
+    asset!(
         "valid/capability-definition.fs-search-text.json",
         "../../../protocol/fixtures/v1alpha1/valid/capability-definition.fs-search-text.json"
     ),

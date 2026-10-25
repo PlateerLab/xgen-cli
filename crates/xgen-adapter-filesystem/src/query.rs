@@ -18,8 +18,9 @@ use xgen_workgraph::EffectClass;
 
 use crate::path::{RelativePath, canonical_resource, parse_canonical};
 use crate::{
-    LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION, SEARCH_TEXT_CAPABILITY_ID,
-    SEARCH_TEXT_CONTRACT_VERSION, STAT_CAPABILITY_ID, STAT_CONTRACT_VERSION, WorkspaceRoot,
+    LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION, READ_TEXT_LINES_CAPABILITY_ID,
+    READ_TEXT_LINES_CONTRACT_VERSION, SEARCH_TEXT_CAPABILITY_ID, SEARCH_TEXT_CONTRACT_VERSION,
+    STAT_CAPABILITY_ID, STAT_CONTRACT_VERSION, WorkspaceRoot,
 };
 
 /// Maximum entries returned by one list-directory observation.
@@ -40,7 +41,13 @@ pub const MAX_SEARCH_FILE_BYTES: usize = 256 * 1024;
 pub const MAX_SEARCH_TOTAL_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum UTF-8 bytes retained in one match preview.
 pub const MAX_SEARCH_PREVIEW_BYTES: usize = 512;
-/// Maximum canonical JCS bytes emitted by one list/stat/search tool output, including its digest.
+/// Maximum lines requested by one read-text-lines observation.
+pub const MAX_READ_TEXT_LINES_COUNT: u64 = 2_000;
+/// Maximum file size scanned by one read-text-lines observation.
+pub const MAX_READ_TEXT_LINES_FILE_BYTES: usize = 8 * 1024 * 1024;
+/// Maximum JSON-escaped bytes of the content returned by one read-text-lines observation.
+pub const MAX_READ_TEXT_LINES_CONTENT_BYTES: usize = 64 * 1024;
+/// Maximum canonical JCS bytes emitted by one query tool output, including its digest.
 pub const MAX_QUERY_OUTPUT_CANONICAL_BYTES: usize = 128 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +55,7 @@ enum QueryOperation {
     ListDirectory,
     Stat,
     SearchText,
+    ReadTextLines,
 }
 
 impl QueryOperation {
@@ -56,6 +64,7 @@ impl QueryOperation {
             Self::ListDirectory => LIST_DIRECTORY_CAPABILITY_ID,
             Self::Stat => STAT_CAPABILITY_ID,
             Self::SearchText => SEARCH_TEXT_CAPABILITY_ID,
+            Self::ReadTextLines => READ_TEXT_LINES_CAPABILITY_ID,
         }
     }
 
@@ -64,6 +73,7 @@ impl QueryOperation {
             Self::ListDirectory => LIST_DIRECTORY_CONTRACT_VERSION,
             Self::Stat => STAT_CONTRACT_VERSION,
             Self::SearchText => SEARCH_TEXT_CONTRACT_VERSION,
+            Self::ReadTextLines => READ_TEXT_LINES_CONTRACT_VERSION,
         }
     }
 
@@ -72,6 +82,7 @@ impl QueryOperation {
             Self::ListDirectory => "list-directory-output",
             Self::Stat => "stat-output",
             Self::SearchText => "search-text-output",
+            Self::ReadTextLines => "read-text-lines-output",
         }
     }
 
@@ -80,6 +91,23 @@ impl QueryOperation {
             Self::ListDirectory => "xgeny.fs/list-directory/failure/v1",
             Self::Stat => "xgeny.fs/stat/failure/v1",
             Self::SearchText => "xgeny.fs/search-text/failure/v1",
+            Self::ReadTextLines => "xgeny.fs/read-text-lines/failure/v1",
+        }
+    }
+
+    const fn argument_count(self) -> usize {
+        match self {
+            Self::ListDirectory | Self::Stat => 1,
+            Self::SearchText => 2,
+            Self::ReadTextLines => 3,
+        }
+    }
+
+    /// Output fields including the appended digest.
+    const fn output_field_count(self) -> usize {
+        match self {
+            Self::ListDirectory | Self::Stat | Self::SearchText => 3,
+            Self::ReadTextLines => 6,
         }
     }
 }
@@ -110,6 +138,13 @@ impl FilesystemQueryAdapter {
         Self {
             root,
             operation: QueryOperation::SearchText,
+        }
+    }
+
+    pub(crate) const fn read_text_lines(root: WorkspaceRoot) -> Self {
+        Self {
+            root,
+            operation: QueryOperation::ReadTextLines,
         }
     }
 
@@ -147,6 +182,7 @@ impl EffectAdapter for FilesystemQueryAdapter {
             directory: Arc::clone(&self.root.directory),
             relative_path: arguments.path,
             query: arguments.query,
+            lines: arguments.lines,
             operation: self.operation,
         }))
     }
@@ -242,6 +278,7 @@ struct PreparedFilesystemQuery {
     directory: Arc<Dir>,
     relative_path: RelativePath,
     query: Option<String>,
+    lines: Option<LineRange>,
     operation: QueryOperation,
 }
 
@@ -252,6 +289,7 @@ impl std::fmt::Debug for PreparedFilesystemQuery {
             .field("directory", &"<preopened/redacted>")
             .field("relative_path", &"<redacted>")
             .field("query", &self.query.as_ref().map(|_| "<redacted>"))
+            .field("lines", &self.lines)
             .field("operation", &self.operation)
             .finish()
     }
@@ -268,6 +306,12 @@ impl PreparedAdapterInvocation for PreparedFilesystemQuery {
                 self.query
                     .as_deref()
                     .expect("search preparation always retains a query"),
+            ),
+            QueryOperation::ReadTextLines => read_text_lines(
+                &self.directory,
+                &self.relative_path,
+                self.lines
+                    .expect("line-range preparation always retains a range"),
             ),
         };
         match observation.and_then(ObservedOutput::finish) {
@@ -289,6 +333,14 @@ impl PreparedAdapterInvocation for PreparedFilesystemQuery {
 struct ParsedArguments {
     path: RelativePath,
     query: Option<String>,
+    lines: Option<LineRange>,
+}
+
+/// One-based first line and requested line count of a read-text-lines observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineRange {
+    start_line: u64,
+    line_count: u64,
 }
 
 struct ObservedOutput {
@@ -394,6 +446,7 @@ enum QueryFailure {
     TooManyEntries,
     Limit,
     Encode,
+    Decode,
 }
 
 impl QueryFailure {
@@ -404,6 +457,7 @@ impl QueryFailure {
             Self::TooManyEntries => "too-many-entries",
             Self::Limit => "limit",
             Self::Encode => "encode",
+            Self::Decode => "decode",
         };
         sha256_digest(format!("{}/{code}", operation.failure_domain()).as_bytes())
     }
@@ -414,6 +468,7 @@ fn binding_for(root: &WorkspaceRoot, operation: QueryOperation) -> xgen_domain::
         QueryOperation::ListDirectory => root.list_directory_binding(),
         QueryOperation::Stat => root.stat_binding(),
         QueryOperation::SearchText => root.search_text_binding(),
+        QueryOperation::ReadTextLines => root.read_text_lines_binding(),
     }
 }
 
@@ -491,14 +546,7 @@ fn parse_arguments(
 ) -> Result<ParsedArguments, AdapterPrepareFailure> {
     let object = arguments
         .as_object()
-        .filter(|object| {
-            object.len()
-                == if operation == QueryOperation::SearchText {
-                    2
-                } else {
-                    1
-                }
-        })
+        .filter(|object| object.len() == operation.argument_count())
         .ok_or(AdapterPrepareFailure::InvalidMaterial)?;
     let path = object
         .get("path")
@@ -521,7 +569,25 @@ fn parse_arguments(
     } else {
         None
     };
-    Ok(ParsedArguments { path, query })
+    let lines = if operation == QueryOperation::ReadTextLines {
+        let start_line = object
+            .get("startLine")
+            .and_then(Value::as_u64)
+            .filter(|line| *line >= 1)
+            .ok_or(AdapterPrepareFailure::InvalidMaterial)?;
+        let line_count = object
+            .get("lineCount")
+            .and_then(Value::as_u64)
+            .filter(|count| (1..=MAX_READ_TEXT_LINES_COUNT).contains(count))
+            .ok_or(AdapterPrepareFailure::InvalidMaterial)?;
+        Some(LineRange {
+            start_line,
+            line_count,
+        })
+    } else {
+        None
+    };
+    Ok(ParsedArguments { path, query, lines })
 }
 
 fn list_directory(root: &Dir, path: &RelativePath) -> Result<ObservedOutput, QueryFailure> {
@@ -628,6 +694,93 @@ fn search_text(
         left.cmp(&right)
     });
     bounded_collection_output("matches", state.matches, state.truncated)
+}
+
+fn read_text_lines(
+    root: &Dir,
+    path: &RelativePath,
+    range: LineRange,
+) -> Result<ObservedOutput, QueryFailure> {
+    let mut file = open_regular_file(root, path)?;
+    let metadata = file.metadata().map_err(|_| QueryFailure::Open)?;
+    if metadata.len() > u64::try_from(MAX_READ_TEXT_LINES_FILE_BYTES).expect("limit fits u64") {
+        return Err(QueryFailure::Limit);
+    }
+    let mut bytes = Vec::with_capacity(
+        usize::try_from(metadata.len())
+            .unwrap_or(MAX_READ_TEXT_LINES_FILE_BYTES)
+            .min(MAX_READ_TEXT_LINES_FILE_BYTES)
+            .saturating_add(1),
+    );
+    file.by_ref()
+        .take(u64::try_from(MAX_READ_TEXT_LINES_FILE_BYTES + 1).expect("read limit fits u64"))
+        .read_to_end(&mut bytes)
+        .map_err(|_| QueryFailure::Read)?;
+    if bytes.len() > MAX_READ_TEXT_LINES_FILE_BYTES {
+        return Err(QueryFailure::Limit);
+    }
+    let content = String::from_utf8(bytes).map_err(|_| QueryFailure::Decode)?;
+    line_range_output(&content, range)
+}
+
+/// Select whole lines, each with its original terminator, so consecutive ranges concatenate to
+/// the file. Selection stops before the JSON-escaped content would exceed its byte limit; a first
+/// line that alone exceeds it is cut at a character boundary. Either case sets `truncated`.
+fn line_range_output(content: &str, range: LineRange) -> Result<ObservedOutput, QueryFailure> {
+    let total_lines =
+        u64::try_from(content.split_inclusive('\n').count()).map_err(|_| QueryFailure::Limit)?;
+    let skip = usize::try_from(range.start_line - 1).unwrap_or(usize::MAX);
+    let take = usize::try_from(range.line_count).map_err(|_| QueryFailure::Limit)?;
+    let mut selected = String::new();
+    let mut selected_size = 0_usize;
+    let mut end_line = range.start_line - 1;
+    let mut truncated = false;
+    for line in content.split_inclusive('\n').skip(skip).take(take) {
+        let line_size = json_escaped_size(line);
+        if selected_size + line_size <= MAX_READ_TEXT_LINES_CONTENT_BYTES {
+            selected.push_str(line);
+            selected_size += line_size;
+            end_line += 1;
+            continue;
+        }
+        truncated = true;
+        if selected.is_empty() {
+            let mut cut = 0;
+            for (index, character) in line.char_indices() {
+                let size = json_escaped_char_size(character);
+                if selected_size + size > MAX_READ_TEXT_LINES_CONTENT_BYTES {
+                    break;
+                }
+                selected_size += size;
+                cut = index + character.len_utf8();
+            }
+            selected.push_str(&line[..cut]);
+            end_line += 1;
+        }
+        break;
+    }
+    Ok(ObservedOutput {
+        payload: json!({
+            "content": selected,
+            "startLine": range.start_line,
+            "endLine": end_line,
+            "totalLines": total_lines,
+            "truncated": truncated,
+        }),
+    })
+}
+
+fn json_escaped_size(text: &str) -> usize {
+    text.chars().map(json_escaped_char_size).sum()
+}
+
+/// Size of one character inside an RFC 8785 JSON string.
+const fn json_escaped_char_size(character: char) -> usize {
+    match character {
+        '"' | '\\' | '\u{8}' | '\u{c}' | '\n' | '\r' | '\t' => 2,
+        '\u{0}'..='\u{1f}' => 6,
+        _ => character.len_utf8(),
+    }
 }
 
 fn search_match_key(candidate: &Value) -> (&str, u64, u64) {
@@ -878,7 +1031,7 @@ fn inspect_output(
     }
     let object = output
         .as_object()
-        .filter(|object| object.len() == 3)
+        .filter(|object| object.len() == operation.output_field_count())
         .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
     let claimed = object
         .get("digest")
@@ -909,7 +1062,42 @@ fn validate_output_shape(
         QueryOperation::ListDirectory => validate_list_output(object, workspace_id),
         QueryOperation::Stat => validate_stat_output(object),
         QueryOperation::SearchText => validate_search_output(object, workspace_id),
+        QueryOperation::ReadTextLines => validate_lines_output(object),
     }
+}
+
+fn validate_lines_output(object: &Map<String, Value>) -> Result<(), VerificationPortFailure> {
+    let content = object
+        .get("content")
+        .and_then(Value::as_str)
+        .filter(|content| json_escaped_size(content) <= MAX_READ_TEXT_LINES_CONTENT_BYTES)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    let start_line = object
+        .get("startLine")
+        .and_then(Value::as_u64)
+        .filter(|line| *line >= 1)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    let end_line = object
+        .get("endLine")
+        .and_then(Value::as_u64)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    let total_lines = object
+        .get("totalLines")
+        .and_then(Value::as_u64)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    object
+        .get("truncated")
+        .and_then(Value::as_bool)
+        .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
+    let returned = u64::try_from(content.split_inclusive('\n').count())
+        .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?;
+    if returned > MAX_READ_TEXT_LINES_COUNT
+        || end_line.checked_add(1) != start_line.checked_add(returned)
+        || (returned > 0 && end_line > total_lines)
+    {
+        return Err(VerificationPortFailure::ResponseUnverifiable);
+    }
+    Ok(())
 }
 
 fn validate_list_output(
@@ -1273,6 +1461,254 @@ mod tests {
         assert!(state.scanned_bytes <= "second".len());
     }
 
+    fn lines(start_line: u64, line_count: u64) -> LineRange {
+        LineRange {
+            start_line,
+            line_count,
+        }
+    }
+
+    #[test]
+    fn line_ranges_keep_terminators_and_concatenate_to_the_file() {
+        let fixture = Fixture::new();
+        let text = "one\r\ntwo\n\nfour\nfive";
+        fs::write(fixture.directory.path().join("file.txt"), text).unwrap();
+        let path = fixture.relative("file.txt");
+
+        let first = read_text_lines(&fixture.root.directory, &path, lines(1, 2))
+            .unwrap()
+            .finish()
+            .unwrap()
+            .output;
+        let rest = read_text_lines(&fixture.root.directory, &path, lines(3, 10))
+            .unwrap()
+            .finish()
+            .unwrap()
+            .output;
+
+        assert_eq!(first["content"], "one\r\ntwo\n");
+        assert_eq!(first["startLine"], 1);
+        assert_eq!(first["endLine"], 2);
+        assert_eq!(first["totalLines"], 5);
+        assert_eq!(first["truncated"], false);
+        assert_eq!(rest["content"], "\nfour\nfive");
+        assert_eq!(rest["endLine"], 5);
+        assert_eq!(rest["truncated"], false);
+        assert_eq!(
+            format!(
+                "{}{}",
+                first["content"].as_str().unwrap(),
+                rest["content"].as_str().unwrap()
+            ),
+            text
+        );
+    }
+
+    #[test]
+    fn a_range_past_the_end_is_empty_and_reports_the_line_count() {
+        let fixture = Fixture::new();
+        fs::write(fixture.directory.path().join("file.txt"), "a\nb\n").unwrap();
+        fs::write(fixture.directory.path().join("empty.txt"), "").unwrap();
+
+        let past = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("file.txt"),
+            lines(9, 5),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
+        let empty = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("empty.txt"),
+            lines(1, 5),
+        )
+        .unwrap()
+        .finish()
+        .unwrap()
+        .output;
+
+        assert_eq!(past.output["content"], "");
+        assert_eq!(past.output["endLine"], 8);
+        assert_eq!(past.output["totalLines"], 2);
+        assert!(
+            inspect_output(
+                &past.output,
+                &past.digest,
+                &fixture.root.workspace_id,
+                QueryOperation::ReadTextLines,
+            )
+            .unwrap()
+            .postcondition
+        );
+        assert_eq!(empty["content"], "");
+        assert_eq!(empty["endLine"], 0);
+        assert_eq!(empty["totalLines"], 0);
+    }
+
+    #[test]
+    fn line_ranges_stop_at_the_escaped_content_limit() {
+        let fixture = Fixture::new();
+        // Each line escapes to 1_024 bytes: 1_020 plain characters, a quote, and a newline.
+        let line = format!("{}\"\n", "x".repeat(1_020));
+        fs::write(fixture.directory.path().join("wide.txt"), line.repeat(100)).unwrap();
+        let control_line = "\u{1}".repeat(MAX_READ_TEXT_LINES_CONTENT_BYTES);
+        fs::write(
+            fixture.directory.path().join("long.txt"),
+            format!("{control_line}\nnext\n"),
+        )
+        .unwrap();
+
+        let wide = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("wide.txt"),
+            lines(1, 100),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
+        let long = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("long.txt"),
+            lines(1, 2),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
+
+        assert_eq!(wide.output["endLine"], 64);
+        assert_eq!(wide.output["totalLines"], 100);
+        assert_eq!(wide.output["truncated"], true);
+        assert_eq!(long.output["endLine"], 1);
+        assert_eq!(long.output["truncated"], true);
+        assert_eq!(
+            long.output["content"].as_str().unwrap().chars().count(),
+            MAX_READ_TEXT_LINES_CONTENT_BYTES / 6
+        );
+        for finished in [&wide, &long] {
+            assert!(
+                serde_jcs::to_vec(&finished.output).unwrap().len()
+                    <= MAX_QUERY_OUTPUT_CANONICAL_BYTES
+            );
+            assert!(
+                inspect_output(
+                    &finished.output,
+                    &finished.digest,
+                    &fixture.root.workspace_id,
+                    QueryOperation::ReadTextLines,
+                )
+                .unwrap()
+                .postcondition
+            );
+        }
+    }
+
+    #[test]
+    fn line_ranges_read_files_past_the_whole_file_limit_but_fail_closed_beyond_the_scan_limit() {
+        let fixture = Fixture::new();
+        let large = "line\n".repeat(20_000);
+        fs::write(fixture.directory.path().join("large.txt"), &large).unwrap();
+        fs::write(
+            fixture.directory.path().join("huge.txt"),
+            vec![b'x'; MAX_READ_TEXT_LINES_FILE_BYTES + 1],
+        )
+        .unwrap();
+        fs::write(fixture.directory.path().join("binary.bin"), [0xff, 0xfe]).unwrap();
+
+        let tail = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("large.txt"),
+            lines(19_999, 5),
+        )
+        .unwrap()
+        .finish()
+        .unwrap()
+        .output;
+
+        assert!(large.len() > crate::MAX_READ_TEXT_BYTES);
+        assert_eq!(tail["content"], "line\nline\n");
+        assert_eq!(tail["totalLines"], 20_000);
+        assert!(matches!(
+            read_text_lines(
+                &fixture.root.directory,
+                &fixture.relative("huge.txt"),
+                lines(1, 1)
+            ),
+            Err(QueryFailure::Limit)
+        ));
+        assert!(matches!(
+            read_text_lines(
+                &fixture.root.directory,
+                &fixture.relative("binary.bin"),
+                lines(1, 1)
+            ),
+            Err(QueryFailure::Decode)
+        ));
+        assert!(matches!(
+            read_text_lines(&fixture.root.directory, &fixture.relative("."), lines(1, 1)),
+            Err(QueryFailure::Open)
+        ));
+    }
+
+    #[test]
+    fn line_range_parser_requires_a_bounded_one_based_range() {
+        let fixture = Fixture::new();
+        let parsed = parse_arguments(
+            &json!({"path": "workspace:fixture/a.txt", "startLine": 3, "lineCount": 2000}),
+            &fixture.root,
+            QueryOperation::ReadTextLines,
+        )
+        .unwrap();
+        assert_eq!(parsed.lines, Some(lines(3, 2_000)));
+        for arguments in [
+            json!({"path": "workspace:fixture/a.txt"}),
+            json!({"path": "workspace:fixture/a.txt", "startLine": 0, "lineCount": 1}),
+            json!({"path": "workspace:fixture/a.txt", "startLine": 1, "lineCount": 0}),
+            json!({"path": "workspace:fixture/a.txt", "startLine": 1, "lineCount": 2001}),
+            json!({"path": "workspace:fixture/a.txt", "startLine": 1.5, "lineCount": 1}),
+            json!({"path": "workspace:fixture/a.txt", "startLine": 1, "lineCount": 1, "x": 1}),
+        ] {
+            assert_eq!(
+                parse_arguments(&arguments, &fixture.root, QueryOperation::ReadTextLines)
+                    .map(|_| ()),
+                Err(AdapterPrepareFailure::InvalidMaterial)
+            );
+        }
+    }
+
+    #[test]
+    fn line_range_inspection_rejects_inconsistent_line_numbers() {
+        let fixture = Fixture::new();
+        fs::write(fixture.directory.path().join("file.txt"), "a\nb\nc\n").unwrap();
+        let finished = read_text_lines(
+            &fixture.root.directory,
+            &fixture.relative("file.txt"),
+            lines(2, 1),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
+        for (field, value) in [
+            ("endLine", json!(3)),
+            ("startLine", json!(0)),
+            ("totalLines", json!(1)),
+            ("content", json!("b\nc\n")),
+        ] {
+            let mut tampered = finished.output.clone();
+            tampered[field] = value;
+            assert!(
+                inspect_output(
+                    &tampered,
+                    &finished.digest,
+                    &fixture.root.workspace_id,
+                    QueryOperation::ReadTextLines,
+                )
+                .is_err(),
+                "{field} tampering must fail closed"
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn queries_never_follow_workspace_symlinks() {
@@ -1290,6 +1726,14 @@ mod tests {
                 &fixture.root.directory,
                 &fixture.relative("linked"),
                 "SECRET"
+            )
+            .is_err()
+        );
+        assert!(
+            read_text_lines(
+                &fixture.root.directory,
+                &fixture.relative("linked/secret.txt"),
+                lines(1, 1)
             )
             .is_err()
         );

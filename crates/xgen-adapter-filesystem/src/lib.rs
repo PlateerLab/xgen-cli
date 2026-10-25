@@ -22,8 +22,9 @@ pub use apply_patch::{
 };
 pub use query::{
     FilesystemQueryAdapter, FilesystemQueryVerifier, MAX_DIRECTORY_SCAN_ENTRIES,
-    MAX_LIST_DIRECTORY_ENTRIES, MAX_QUERY_OUTPUT_CANONICAL_BYTES, MAX_SEARCH_FILE_BYTES,
-    MAX_SEARCH_MATCHES, MAX_SEARCH_PREVIEW_BYTES, MAX_SEARCH_QUERY_BYTES,
+    MAX_LIST_DIRECTORY_ENTRIES, MAX_QUERY_OUTPUT_CANONICAL_BYTES,
+    MAX_READ_TEXT_LINES_CONTENT_BYTES, MAX_READ_TEXT_LINES_COUNT, MAX_READ_TEXT_LINES_FILE_BYTES,
+    MAX_SEARCH_FILE_BYTES, MAX_SEARCH_MATCHES, MAX_SEARCH_PREVIEW_BYTES, MAX_SEARCH_QUERY_BYTES,
     MAX_SEARCH_QUERY_UNICODE_SCALARS, MAX_SEARCH_TOTAL_BYTES, MAX_SEARCH_VISITED_ENTRIES,
 };
 pub use read_text::{
@@ -62,6 +63,12 @@ pub const SEARCH_TEXT_CAPABILITY_ID: &str = "xgeny.fs/search-text";
 pub const SEARCH_TEXT_CONTRACT_VERSION: &str = "1.0.0";
 /// Exact operation name used in the root-bound search Instance.
 pub const SEARCH_TEXT_OPERATION_REF: &str = "searchText";
+/// Exact public Capability identifier for one bounded line range of a UTF-8 text file.
+pub const READ_TEXT_LINES_CAPABILITY_ID: &str = "xgeny.fs/read-text-lines";
+/// Exact immutable read-text-lines contract version.
+pub const READ_TEXT_LINES_CONTRACT_VERSION: &str = "1.0.0";
+/// Exact operation name used in the root-bound line-range read Instance.
+pub const READ_TEXT_LINES_OPERATION_REF: &str = "readTextLines";
 /// Exact public Capability identifier for one atomic UTF-8 file replacement.
 pub const WRITE_ATOMIC_CAPABILITY_ID: &str = "xgeny.fs/write-atomic";
 /// Exact immutable write-atomic contract version.
@@ -206,6 +213,12 @@ impl WorkspaceRoot {
         workspace_binding(&self.workspace_id, SEARCH_TEXT_OPERATION_REF)
     }
 
+    /// Return the exact root-bound binding for the read-text-lines adapter.
+    #[must_use]
+    pub fn read_text_lines_binding(&self) -> InstanceBinding {
+        workspace_binding(&self.workspace_id, READ_TEXT_LINES_OPERATION_REF)
+    }
+
     /// Return the exact root-bound binding for atomic writes.
     #[must_use]
     pub fn write_atomic_binding(&self) -> InstanceBinding {
@@ -234,6 +247,12 @@ impl WorkspaceRoot {
     #[must_use]
     pub fn search_text_adapter(&self) -> FilesystemQueryAdapter {
         FilesystemQueryAdapter::search_text(self.clone())
+    }
+
+    /// Construct the bounded line-range text read adapter.
+    #[must_use]
+    pub fn read_text_lines_adapter(&self) -> FilesystemQueryAdapter {
+        FilesystemQueryAdapter::read_text_lines(self.clone())
     }
 
     /// Construct the bounded atomic UTF-8 write adapter.

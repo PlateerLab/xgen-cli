@@ -923,6 +923,67 @@ fn failed_read_is_shown_to_the_planner_and_the_task_can_complete() {
 }
 
 #[test]
+fn a_line_range_reads_a_file_larger_than_read_text_accepts() {
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(&workspace).expect("workspace should create");
+    let mut large = format!("line {}\n", "x".repeat(32)).repeat(3_000);
+    large.push_str("def target():\n    return 42\n");
+    assert!(large.len() > 64 * 1024);
+    fs::write(workspace.join("large.py"), &large).expect("large file should write");
+    let server = SequentialServer::spawn_responses(vec![
+        plan_response(
+            "read_tail",
+            "Read the definition at the end of the large file",
+            "xgeny.fs/read-text-lines",
+            &json!({"path": "large.py", "startLine": 3_001, "lineCount": 50}),
+        ),
+        completion_response(),
+    ]);
+
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-read",
+        "--allow-remote-model-egress",
+        "What does target return?",
+    ]))
+    .expect("xgen run should finish");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+
+    let requests = (0..2)
+        .map(|_| {
+            server
+                .requests
+                .recv_timeout(TEST_TIMEOUT)
+                .expect("every model request should arrive")
+        })
+        .collect::<Vec<_>>();
+    server.handle.join().expect("provider server should finish");
+
+    let first = planning_context(&requests[0]);
+    let lines = capability(&first, "xgeny.fs/read-text-lines");
+    assert_eq!(lines["effectClass"], "read_only");
+    let after_read = planning_context(&requests[1]);
+    let observed = tool_output(&after_read, "xgeny.fs/read-text-lines");
+    assert_eq!(observed["content"], "def target():\n    return 42\n");
+    assert_eq!(observed["startLine"], 3_001);
+    assert_eq!(observed["endLine"], 3_002);
+    assert_eq!(observed["totalLines"], 3_002);
+    assert_eq!(observed["truncated"], false);
+}
+
+#[test]
 fn failed_write_still_stops_the_run() {
     let fixture = tempdir().expect("test directory should exist");
     let state_root = fixture.path().join("state");
@@ -1069,12 +1130,13 @@ fn public_cli_discovers_searches_stats_reads_and_replays_offline() {
     assert!(first_system_prompt.contains("always set dependsOn to an empty array"));
     assert!(first_system_prompt.contains("durable plan chronology"));
     assert!(first_system_prompt.contains("durable receipt-completion chronology"));
-    assert_eq!(first["capabilities"].as_array().unwrap().len(), 6);
+    assert_eq!(first["capabilities"].as_array().unwrap().len(), 7);
     assert_eq!(first["toolOutputs"], json!([]));
     assert!(capability_ids(&first).contains(&"xgeny.fs/list-directory"));
     assert!(capability_ids(&first).contains(&"xgeny.fs/search-text"));
     assert!(capability_ids(&first).contains(&"xgeny.fs/stat"));
     assert!(capability_ids(&first).contains(&"xgeny.fs/read-text"));
+    assert!(capability_ids(&first).contains(&"xgeny.fs/read-text-lines"));
     assert!(capability_ids(&first).contains(&"xgeny.fs/write-atomic"));
     assert!(capability_ids(&first).contains(&"xgeny.fs/apply-patch"));
     let path_description = capability(&first, "xgeny.fs/list-directory")["inputSchema"]

@@ -8,8 +8,9 @@ use thiserror::Error;
 use xgen_adapter_filesystem::{
     APPLY_PATCH_CAPABILITY_ID, APPLY_PATCH_CONTRACT_VERSION, FILESYSTEM_READ_SCOPE,
     LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION, MAX_APPLY_PATCH_BYTES,
-    MAX_APPLY_PATCH_EDITS, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_QUERY_UNICODE_SCALARS,
-    MAX_WRITE_ATOMIC_BYTES, READ_TEXT_CAPABILITY_ID, READ_TEXT_CONTRACT_VERSION,
+    MAX_APPLY_PATCH_EDITS, MAX_READ_TEXT_LINES_COUNT, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_QUERY_UNICODE_SCALARS, MAX_WRITE_ATOMIC_BYTES, READ_TEXT_CAPABILITY_ID,
+    READ_TEXT_CONTRACT_VERSION, READ_TEXT_LINES_CAPABILITY_ID, READ_TEXT_LINES_CONTRACT_VERSION,
     SEARCH_TEXT_CAPABILITY_ID, SEARCH_TEXT_CONTRACT_VERSION, STAT_CAPABILITY_ID,
     STAT_CONTRACT_VERSION, WRITE_ATOMIC_CAPABILITY_ID, WRITE_ATOMIC_CONTRACT_VERSION,
     WorkspaceResourceResolver,
@@ -102,6 +103,18 @@ impl WorkspaceReadAuthorization {
             | (STAT_CAPABILITY_ID, STAT_CONTRACT_VERSION) => {
                 object.len() == 1 && self.authorizes_file_or_descendant(path)
             }
+            (READ_TEXT_LINES_CAPABILITY_ID, READ_TEXT_LINES_CONTRACT_VERSION) => {
+                object.len() == 3
+                    && object
+                        .get("startLine")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|line| line >= 1)
+                    && object
+                        .get("lineCount")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|count| (1..=MAX_READ_TEXT_LINES_COUNT).contains(&count))
+                    && self.authorizes_file_or_descendant(path)
+            }
             (LIST_DIRECTORY_CAPABILITY_ID, LIST_DIRECTORY_CONTRACT_VERSION) => {
                 object.len() == 1 && self.authorizes_directory_or_descendant(path)
             }
@@ -137,6 +150,7 @@ impl WorkspaceReadAuthorization {
             capability.contract_version.as_str(),
         ) {
             (READ_TEXT_CAPABILITY_ID, READ_TEXT_CONTRACT_VERSION)
+            | (READ_TEXT_LINES_CAPABILITY_ID, READ_TEXT_LINES_CONTRACT_VERSION)
             | (STAT_CAPABILITY_ID, STAT_CONTRACT_VERSION) => {
                 self.authorizes_file_or_descendant(resource)
             }
@@ -436,6 +450,27 @@ mod tests {
             !catalog
                 .authorizes_material(&wrong, &json!({"path": "workspace:fixture", "query": "ok"}),)
         );
+    }
+
+    #[test]
+    fn line_range_reads_follow_file_scope_and_a_bounded_range() {
+        let catalog = authorization(&["big.py"], &["src"]);
+        let lines = capability(READ_TEXT_LINES_CAPABILITY_ID);
+        for path in ["workspace:fixture/big.py", "workspace:fixture/src/lib.rs"] {
+            assert!(catalog.authorizes_material(
+                &lines,
+                &json!({"path": path, "startLine": 1, "lineCount": 2000}),
+            ));
+        }
+        assert!(catalog.authorizes_resource(&lines, "workspace:fixture/big.py"));
+        for arguments in [
+            json!({"path": "workspace:fixture/other.py", "startLine": 1, "lineCount": 10}),
+            json!({"path": "workspace:fixture/big.py", "startLine": 0, "lineCount": 10}),
+            json!({"path": "workspace:fixture/big.py", "startLine": 1, "lineCount": 2001}),
+            json!({"path": "workspace:fixture/big.py", "startLine": 1}),
+        ] {
+            assert!(!catalog.authorizes_material(&lines, &arguments));
+        }
     }
 
     #[test]
