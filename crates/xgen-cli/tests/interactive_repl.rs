@@ -455,6 +455,48 @@ fn headless_run_keeps_the_legacy_contract_and_rejects_conversation_proposals() {
 }
 
 #[test]
+fn trust_flag_runs_a_tool_goal_without_any_approval_prompt() {
+    let fixture = tempdir().unwrap();
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    fs::write(workspace.join("README.md"), "trusted fixture\n").unwrap();
+    let server = SequentialServer::with_responses(vec![
+        plan_response(
+            "read",
+            "Read file",
+            "xgeny.fs/read-text",
+            &json!({"path":"README.md"}),
+        ),
+        completion_response(),
+    ]);
+    let output = bounded_scripted_output(
+        Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .arg("--trust")
+            .current_dir(&workspace)
+            .env("XGEN_STATE_HOME", &state_root)
+            .env("XGEN_CONFIG_HOME", fixture.path().join("config"))
+            .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+            .env("XGEN_OPENAI_MODEL", MODEL)
+            .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+            .env_remove("XGEN_OPENAI_API_KEY"),
+        b"Read README.md and report it.\n/status\n/exit\n",
+    )
+    .unwrap();
+    assert!(output.status.success(), "{}", stderr(&output));
+    server.handle.join().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("trust mode: model/read/write/execute run without asking"));
+    assert!(!stdout.contains("[y/a/N]"), "{stdout}");
+    assert!(stdout.contains("status: completed"), "{stdout}");
+    let run_id = extract_run_id(&stderr(&output));
+    let store =
+        SqliteRunStore::open_existing(state_root.join("runs").join(&run_id).join("run.sqlite3"))
+            .unwrap();
+    assert_eq!(store.load_execution_receipts().unwrap().len(), 1);
+}
+
+#[test]
 fn conversation_only_requests_need_no_tool_approvals_and_replay_offline() {
     let fixture = tempdir().unwrap();
     let state_root = fixture.path().join("state");

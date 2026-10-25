@@ -25,6 +25,10 @@ goal에만 허용한다. `a`는 그 종류를 남은 REPL session 동안 `allow`
 `/permissions KIND allow`와 같다. 바뀐 사실과 되돌리는 명령을 한 줄로 표시한다. 그 밖의 입력은 거절이다.
 Session 허용은 파일에 저장하지 않고 process가 끝나면 사라진다.
 
+`xgen --trust`는 네 종류를 모두 `allow`로 둔 채 session을 시작해 승인을 묻지 않는다
+([ADR-0059](../adr/0059-trust-mode.md)). 시작할 때 한 줄로 알리고, `/permissions KIND ask`로 일부를 다시
+묻게 할 수 있다. 기록, `Changes` 표시, Ctrl+C, `/resume`은 같다.
+
 ```text
 xgen> 프로젝트 구조를 보고 테스트 실패를 수정해줘.
 Allow sending the goal, session context, and tool observations to the model? [y/a/N] y

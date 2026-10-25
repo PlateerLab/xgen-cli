@@ -270,6 +270,7 @@ xgen
 workspace scope지만 승인이 없으면 실제 I/O를 수행하지 않는다. PATH에서 고정 allowlist에 해당하는 공통
 개발 executable을 logical catalog로 발견하되 catalog 등록은 실행 승인이 아니다.
 승인 prompt에 `a`로 답하면 그 종류를 이 REPL session 동안 다시 묻지 않는다.
+처음부터 묻지 않으려면 `xgen --trust`로 시작한다.
 
 ```text
 xgen> 프로젝트를 탐색하고 실패한 테스트를 수정해줘.
