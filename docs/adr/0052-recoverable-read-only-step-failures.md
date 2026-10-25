@@ -32,6 +32,8 @@ Step 하나가 `Failed`가 되면 frontier가 `failed_step_ids`를 보고하고,
 - read-only effect는 외부 상태를 바꾸지 않는다. 실패한 읽기를 지나쳐도 되돌릴 부작용이 없다.
 - `idempotent`, `non_idempotent`, `compensatable`, `unknown` 실패는 기존처럼 Run을 멈춘다.
   쓰기·실행 실패 뒤 계속하려면 부분 효과의 의미를 따로 정해야 하고, 이 ADR의 범위가 아니다.
+  인자가 어긋난 확정 쓰기 실패는 [ADR-0055](0055-recoverable-argument-mismatch-failures.md)가
+  settled로 넓힌다. frontier 필드도 그 ADR에서 `settled_failed_step_ids`로 바뀐다.
 
 ### 2. agent loop는 read-only 실패만 남았을 때 계속 계획한다
 

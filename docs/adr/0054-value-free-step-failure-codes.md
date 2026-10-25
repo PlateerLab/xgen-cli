@@ -64,6 +64,8 @@ field가 붙는 것은 실패한 Step이 있을 때뿐이다. 그래서 실패�
 ### 4. 사용자 표시
 
 read-only가 아닌 Step의 실패로 Run이 멈추면(ADR-0052) 그 Step의 code를 사용자에게도 보인다.
+[ADR-0055](0055-recoverable-argument-mismatch-failures.md) 이후 멈추는 실패는 상한·환경 실패와
+검증 실패(`verification_failed`)뿐이다.
 
 - `xgen run`은 `XGEN_REJECTED` 다음 줄에 `XGEN_STEP_FAILURE run_id=<id> code=<code>`를 출력한다.
 - 대화형 `xgen`은 `A step failed: <code>.`를 출력한다.
@@ -75,7 +77,8 @@ read-only가 아닌 Step의 실패로 Run이 멈추면(ADR-0052) 그 Step의 cod
 - 모델은 실패 이유에 맞춰 다음 단계를 고른다. 예를 들어 `too_large`이면 줄 범위 읽기로,
   `not_found`이면 목록·검색으로 넘어간다.
 - 쓰기 실패는 여전히 Run을 멈춘다(ADR-0052). 실패 이유는 이제 사용자에게 보인다. 확정 실패한
-  쓰기 뒤 계획을 이어 가는 것은 별도 결정이다.
+  쓰기 뒤 계획을 이어 가는 것은 [ADR-0055](0055-recoverable-argument-mismatch-failures.md)가
+  인자 불일치 실패에 한해 정한다.
 - 이 변경 이전 binary는 `failureCode`가 있는 journal을 읽지 못한다. 기존 journal은 새 binary에서
   그대로 읽힌다.
 - 같은 실패의 failure evidence digest 일부가 바뀐다. 예를 들어 없는 경로는 `open` 대신 `not-found`
@@ -93,6 +96,7 @@ read-only가 아닌 Step의 실패로 Run이 멈추면(ADR-0052) 그 Step의 cod
 - e2e:
   - 64 KiB 초과 읽기 실패 뒤 다음 planning context의 Step에 `failureCode: too_large`가 있다.
   - stale digest patch로 멈춘 `xgen run`이 `XGEN_STEP_FAILURE ... code=precondition_conflict`를 출력한다.
+    ADR-0055 이후 이 실패는 Run을 멈추지 않는다. 같은 검증은 `too_large` 쓰기 실패로 옮겼다.
 - 실사용: 대화형 `xgen`, 같은 planner model(default profile), 사례마다 이전 main과 이 변경을 3회씩
   실행했다. 두 사례 모두 이 ADR의 설계에 쓰지 않은 저장소다.
 

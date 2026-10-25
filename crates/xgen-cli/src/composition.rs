@@ -529,9 +529,9 @@ pub enum RejectionReason {
     MaterialRejected,
     /// The model call was rejected. The class is the same durable class the journal records.
     ModelRejected(ModelCallRejectionReason),
-    /// A Step with effects failed. The code is the value-free classification of that failure
-    /// (ADR-0054), when the adapter reported one.
-    FailedWork(Option<xgen_runtime::StepFailureCode>),
+    /// A failed Step may have left an effect, so the Run stopped. The label is the value-free
+    /// classification of that failure (ADR-0054), when one is known.
+    FailedWork(Option<&'static str>),
 }
 
 impl RejectionReason {
@@ -559,7 +559,7 @@ impl RejectionReason {
 
     /// Classification of the failed Step that stopped the Run.
     #[must_use]
-    pub const fn failure_code(self) -> Option<xgen_runtime::StepFailureCode> {
+    pub const fn failure_code(self) -> Option<&'static str> {
         match self {
             Self::FailedWork(code) => code,
             _ => None,
@@ -1766,8 +1766,8 @@ fn continue_incomplete(
     Ok(with_blocking_failure_code(result, store))
 }
 
-/// Attach the failure code of the Step that stopped the Run. Read-only failures never stop a Run
-/// (ADR-0052), so the blocking Step is a failed Step with any other effect class.
+/// Attach the failure label of the Step that stopped the Run. Settled failures never stop a Run
+/// (ADR-0052, ADR-0055), so the blocking Step is a failed Step that is not settled.
 fn with_blocking_failure_code(
     result: LocalCommandResult,
     store: &SqliteRunStore,
@@ -1781,12 +1781,9 @@ fn with_blocking_failure_code(
     };
     let code = store.load_current().ok().flatten().and_then(|state| {
         state.steps.values().find_map(|step| {
-            (step.status == StepStatus::Failed
-                && step.intent.as_ref().is_some_and(|intent| {
-                    intent.effect_class != xgen_workgraph::EffectClass::ReadOnly
-                }))
-            .then_some(step.failure_code)
-            .flatten()
+            (step.status == StepStatus::Failed && !step.failure_is_settled())
+                .then(|| step.failure_label())
+                .flatten()
         })
     });
     LocalCommandResult::Rejected {

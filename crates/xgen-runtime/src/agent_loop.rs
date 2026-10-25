@@ -15,8 +15,8 @@ use xgen_workgraph::{
     ModelCallAbandonmentReason, ModelCallBudget, ModelCallRejectionReason, ModelCallReservation,
     ModelCallSettlement, ModelCallStatus, ModelCallUnknownReason, PlannedExecutionProfile,
     PlannedInvocationMaterialRecord, PlannedInvocationSpec, PlanningContractError,
-    ReconstructableMaterialReference, RunEvent, RunEventBody, RunState, StepFailureCode, StepState,
-    StepStatus, ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
+    ReconstructableMaterialReference, RunEvent, RunEventBody, RunState, StepStatus,
+    ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
     receipt_releases_dependency, validate_completion_summary_candidate,
 };
 
@@ -198,6 +198,9 @@ pub struct PlanningStepSummary {
     /// failures recorded before classification existed.
     #[serde(skip_serializing_if = "Option::is_none")]
     failure_code: Option<&'static str>,
+    /// Fixed, value-free statement of what `failure_code` means (ADR-0055).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failure_meaning: Option<&'static str>,
 }
 
 /// One exact, receipt-completed local tool observation selected for the next planner turn.
@@ -317,6 +320,7 @@ impl fmt::Debug for PlanningStepSummary {
             .field("capability", &self.capability)
             .field("dependency_released", &self.dependency_released)
             .field("failure_code", &self.failure_code)
+            .field("failure_meaning", &self.failure_meaning)
             .finish()
     }
 }
@@ -2158,19 +2162,6 @@ fn build_context(
     )
 }
 
-/// Adapter failures carry their own code. A Step can also fail at verification, after a Receipt is
-/// recorded; that path has a fixed code.
-fn planning_failure_code(step: &StepState) -> Option<&'static str> {
-    if step.status != StepStatus::Failed {
-        return None;
-    }
-    step.failure_code.map(StepFailureCode::as_str).or_else(|| {
-        step.execution_receipt_digest
-            .is_some()
-            .then_some("verification_failed")
-    })
-}
-
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn build_context_ordered(
     state: &RunState,
@@ -2309,7 +2300,8 @@ fn build_context_ordered(
                     contract_version: invocation.contract_version().to_owned(),
                 }),
             dependency_released: receipt_releases_dependency(step),
-            failure_code: planning_failure_code(step),
+            failure_code: step.failure_label(),
+            failure_meaning: step.failure_meaning(),
         };
         let summary_size =
             canonical_size(&summary).map_err(|_| ContextBuildError::Canonicalization)?;
