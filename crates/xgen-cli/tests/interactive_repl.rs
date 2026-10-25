@@ -488,6 +488,14 @@ fn trust_flag_runs_a_tool_goal_without_any_approval_prompt() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("trust mode: model/read/write/execute run without asking"));
     assert!(!stdout.contains("[y/a/N]"), "{stdout}");
+    #[cfg(unix)]
+    assert!(
+        stdout.lines().any(|line| line.starts_with("executables:")
+            && line
+                .split_whitespace()
+                .any(|id| matches!(id, "bash" | "zsh" | "sh"))),
+        "trust mode should catalogue a shell: {stdout}"
+    );
     assert!(stdout.contains("status: completed"), "{stdout}");
     let run_id = extract_run_id(&stderr(&output));
     let store =

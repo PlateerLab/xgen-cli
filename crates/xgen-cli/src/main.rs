@@ -531,10 +531,26 @@ struct InteractiveHost {
 }
 
 impl InteractiveHost {
-    fn new(detailed_progress: bool, max_model_turns: u32) -> Result<Self, repl::ReplFailure> {
+    fn new(
+        detailed_progress: bool,
+        max_model_turns: u32,
+        trust: bool,
+    ) -> Result<Self, repl::ReplFailure> {
         let workspace = env::current_dir()
             .map_err(|_| repl::ReplFailure::new(PublicRunError::Configuration.code()))?;
-        let (executable_ids, executable_specs) = discovered_executables()
+        let mut executables = discovered_executables();
+        // ADR-0060: a trusted session also gets the user's shell, so pipelines and any
+        // installed command run through one catalogued executable.
+        if trust
+            && let Some((id, path)) = repl::discover_shell_executable()
+            && let Some(path) = path
+                .to_str()
+                .filter(|path| !path.chars().any(char::is_control))
+            && !executables.iter().any(|(existing, _)| *existing == id)
+        {
+            executables.push((id, path.to_owned()));
+        }
+        let (executable_ids, executable_specs) = executables
             .into_iter()
             .map(|(id, path)| (id.clone(), format!("{id}={path}")))
             .unzip();
@@ -727,7 +743,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
         eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
         return ExitCode::from(PublicRunError::Internal.exit_code());
     }
-    let Ok(mut host) = InteractiveHost::new(!terminal || debug, max_model_turns) else {
+    let Ok(mut host) = InteractiveHost::new(!terminal || debug, max_model_turns, trust) else {
         eprintln!("XGEN_ERROR code={}", PublicRunError::Configuration.code());
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };

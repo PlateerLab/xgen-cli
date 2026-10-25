@@ -6,6 +6,9 @@
 - 공개 protocol v0.1 schema 변경: `xgeny.process/execute@1.0.0` Definition 추가
 - local store schema 변경: 없음(schema 8 유지)
 
+> 신뢰 모드에서 사용자 shell을 catalog에 넣는 예외는 [ADR-0060](0060-trusted-shell-executable.md)이 정한다.
+> adapter는 여전히 shell 없이 argv로 실행하며, shell은 catalog의 한 실행 파일일 뿐이다.
+
 ## 문맥
 
 Workspace 탐색·읽기·쓰기·패치만으로는 실제 개발 작업을 완결할 수 없다. 에이전트가 변경 뒤 test,

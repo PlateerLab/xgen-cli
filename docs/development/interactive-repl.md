@@ -28,6 +28,9 @@ Session 허용은 파일에 저장하지 않고 process가 끝나면 사라진�
 `xgen --trust`는 네 종류를 모두 `allow`로 둔 채 session을 시작해 승인을 묻지 않는다
 ([ADR-0059](../adr/0059-trust-mode.md)). 시작할 때 한 줄로 알리고, `/permissions KIND ask`로 일부를 다시
 묻게 할 수 있다. 기록, `Changes` 표시, Ctrl+C, `/resume`은 같다.
+신뢰 모드는 사용자의 shell(`SHELL`이 bash·zsh·sh면 그것, 아니면 PATH의 bash→zsh→sh, Windows는
+pwsh→powershell)도 catalog에 넣는다([ADR-0060](../adr/0060-trusted-shell-executable.md)). 모델은 이것으로
+파이프와 catalog에 없는 명령을 실행한다.
 
 ```text
 xgen> 프로젝트 구조를 보고 테스트 실패를 수정해줘.
