@@ -119,6 +119,15 @@ impl Default for PermissionSettings {
 }
 
 impl PermissionSettings {
+    const fn trusted() -> Self {
+        Self {
+            model: PermissionMode::Allow,
+            read: PermissionMode::Allow,
+            write: PermissionMode::Allow,
+            execute: PermissionMode::Allow,
+        }
+    }
+
     const fn get(self, kind: PermissionKind) -> PermissionMode {
         match kind {
             PermissionKind::Model => self.model,
@@ -421,7 +430,7 @@ pub(crate) fn run<R: BufRead, W: Write + Send, H: ReplHost>(
     host: &mut H,
     cancellation: &Cancellation,
 ) -> io::Result<()> {
-    run_with_display(reader, output, host, cancellation, false)
+    run_with_display(reader, output, host, cancellation, false, false)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -431,18 +440,30 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
     host: &mut H,
     cancellation: &Cancellation,
     interactive_display: bool,
+    trust: bool,
 ) -> io::Result<()> {
     writeln!(output, "XGEN Developer Preview")?;
     writeln!(
         output,
         "Type a goal, or /help for commands. End a line with \\ for multiline input."
     )?;
-    writeln!(
-        output,
-        "Local tools are catalogued; every model/read/write/execute boundary keeps its own approval."
-    )?;
+    if !trust {
+        writeln!(
+            output,
+            "Local tools are catalogued; every model/read/write/execute boundary keeps its own approval."
+        )?;
+    }
 
-    let mut permissions = PermissionSettings::default();
+    let mut permissions = if trust {
+        // ADR-0059: the user started this session already consenting to every approval kind.
+        writeln!(
+            output,
+            "trust mode: model/read/write/execute run without asking (/permissions KIND ask to restore)"
+        )?;
+        PermissionSettings::trusted()
+    } else {
+        PermissionSettings::default()
+    };
     let mut active_run = None;
     let mut last_run = None;
     let mut session_context = SessionContext::default();
@@ -2175,6 +2196,7 @@ mod tests {
             &mut host,
             &Cancellation::default(),
             true,
+            false,
         )
         .unwrap();
         let output = String::from_utf8(output).unwrap();
@@ -2392,6 +2414,58 @@ mod tests {
     }
 
     #[test]
+    fn trust_mode_starts_with_every_kind_allowed_and_can_be_narrowed() {
+        let first = "run-11111111111111111111111111111111".to_owned();
+        let second = "run-22222222222222222222222222222222".to_owned();
+        let mut host = FakeHost::new([
+            LocalCommandResult::Paused {
+                run_id: Some(first.clone()),
+                reason: PauseReason::WriteApprovalRequired,
+            },
+            LocalCommandResult::Completed {
+                run_id: first,
+                summary: "done".to_owned(),
+            },
+            LocalCommandResult::Paused {
+                run_id: Some(second.clone()),
+                reason: PauseReason::WriteApprovalRequired,
+            },
+            LocalCommandResult::Completed {
+                run_id: second,
+                summary: "done".to_owned(),
+            },
+        ]);
+        let mut input = io::Cursor::new(
+            b"first goal\n/permissions write ask\nsecond goal\ny\n/permissions\n/exit\n",
+        );
+        let mut output = Vec::new();
+        run_with_display(
+            &mut input,
+            &mut output,
+            &mut host,
+            &Cancellation::default(),
+            false,
+            true,
+        )
+        .unwrap();
+        assert!(host.starts.iter().all(|(_, grants)| *grants
+            == InvocationGrants {
+                model: true,
+                read: true,
+                write: grants.write,
+                execute: true,
+            }));
+        assert!(host.starts[0].1.write);
+        assert!(!host.starts[1].1.write);
+        assert!(host.resumes[0].1.write && host.resumes[1].1.write);
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("trust mode: model/read/write/execute run without asking"));
+        assert_eq!(output.matches("[y/a/N]").count(), 1);
+        assert_eq!(output.matches("Allow write").count(), 1);
+        assert!(output.contains("permissions: model=allow read=allow write=ask execute=allow"));
+    }
+
+    #[test]
     fn session_answer_allows_the_kind_for_later_goals_and_once_does_not() {
         let first = "run-11111111111111111111111111111111".to_owned();
         let second = "run-22222222222222222222222222222222".to_owned();
@@ -2569,6 +2643,7 @@ mod tests {
             &mut host,
             &Cancellation::default(),
             true,
+            false,
         )
         .unwrap();
 

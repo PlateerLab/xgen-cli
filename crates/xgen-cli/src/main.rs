@@ -50,6 +50,9 @@ struct Cli {
         value_parser = clap::value_parser!(u32).range(1..=i64::from(xgen_cli::MAX_HOST_MODEL_TURNS))
     )]
     max_model_turns: u32,
+    /// Start the interactive session with model/read/write/execute allowed, asking nothing.
+    #[arg(long)]
+    trust: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -384,7 +387,7 @@ fn main() -> ExitCode {
     }
     match cli.command {
         Some(Command::Tools { command }) => tools::run(command),
-        None => interactive_command(cli.debug, cli.max_model_turns),
+        None => interactive_command(cli.debug, cli.max_model_turns, cli.trust),
         Some(Command::Licenses) => print_licenses(),
         Some(Command::Protocol {
             command: ProtocolCommand::Check,
@@ -710,7 +713,7 @@ impl repl::ReplHost for InteractiveHost {
     }
 }
 
-fn interactive_command(debug: bool, max_model_turns: u32) -> ExitCode {
+fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCode {
     let terminal = std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal()
         && std::io::stderr().is_terminal();
@@ -736,6 +739,7 @@ fn interactive_command(debug: bool, max_model_turns: u32) -> ExitCode {
         &mut host,
         &cancellation,
         terminal && !debug,
+        trust,
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) if error.kind() == ErrorKind::BrokenPipe => ExitCode::SUCCESS,
