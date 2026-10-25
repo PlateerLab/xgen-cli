@@ -1,7 +1,8 @@
 # Developer Preview RC3 후보
 
-- 후보 version: `0.1.0-rc.4`
+- 후보 version: `0.1.0-rc.5`
 - version 이력: `v0.1.0-rc.3` tag는 release workflow가 bundle 조립 단계에서 멈춰 게시되지 않았다. Tag는 immutable이라 같은 번호를 다시 쓸 수 없으므로, 같은 RC3 내용에 Windows 체크아웃의 LICENSE 줄바꿈 수정 하나를 더해 `0.1.0-rc.4`로 올린다. 문서의 "RC3"는 이 Developer Preview 세대 이름이고 게시되는 artifact version은 `v0.1.0-rc.4`다.
+- `v0.1.0-rc.5`: `v0.1.0-rc.4`는 GitHub Release와 npm `next`로 게시됐다. 같은 RC3 세대에 Node 버전 가드, REPL 턴 예산, 확정된 읽기 실패 복구(ADR-0052), 줄 범위 읽기(ADR-0053), 실패 원인 code(ADR-0054)를 더해 `0.1.0-rc.5`로 올린다.
 - protocol: `xgeny.io/v1alpha1`, bundled/offline protocol check
 - local store: embedded SQLite physical schema 8와 CLI material catalog schema 1
 - 상태: version PR의 필수 CI가 모두 통과하고 main에 merge되기 전에는 게시 가능한 tag가 아니다
@@ -114,6 +115,6 @@ install smoke를 수행한다.
 
 이 문서를 merge하는 것만으로 release를 게시하지 않는다. Merge 뒤 npm scope/bootstrap, repository secret
 `NPM_TOKEN`과 `XGEN_NPM_PUBLISH_ENABLED=true`를 확인하고, 현재 `origin/main` head와 package version이
-정확히 일치할 때 별도 보호 tag `v0.1.0-rc.4`를 만들면 release workflow가 모든 release gate를 다시
+정확히 일치할 때 별도 보호 tag `v0.1.0-rc.5`를 만들면 release workflow가 모든 release gate를 다시
 실행한다. GitHub Release 전 실패한 tag나 asset은 이동·교체·재사용하지 않고 더 높은 새 version으로
 수정한다. Immutable GitHub Release 뒤 동일 npm bundle의 부분 실패만 SRI 검증 아래 재실행한다.

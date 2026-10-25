@@ -34,7 +34,7 @@ require(
     getting_started,
     (
         "## 5분 빠른 시작",
-        "@xgen-ai/cli@0.1.0-rc.4",
+        "@xgen-ai/cli@0.1.0-rc.5",
         "xgen model setup",
         "xgen model check --compatibility",
         "## 업데이트와 RC2 rollback",
