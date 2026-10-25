@@ -89,7 +89,8 @@ pub const MAX_GOAL_BYTES: usize = 64 * 1024;
 /// Windows command lines have a lower OS bound; retain the legacy allowance.
 #[cfg(windows)]
 pub const MAX_GOAL_BYTES: usize = 16 * 1024;
-const MAX_TICKS: u32 = 1_024;
+/// Upper bound for one foreground invocation's tick budget.
+pub const MAX_TICKS: u32 = 1_024;
 const MODEL_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 const LOCAL_EXECUTION_PROFILE_DOMAIN: &str = "xgeny.cli.local-execution-profile/v1";
 const WORKSPACE_DISCOVERY_PROFILE_DOMAIN: &str =
@@ -476,7 +477,8 @@ pub enum PauseReason {
     ExecuteApprovalRequired,
     UserCancelled,
     TickBudgetExhausted,
-    Quiescent,
+    /// The agent loop stopped making progress; the payload says why.
+    Quiescent(AgentLoopQuiescence),
 }
 
 impl PauseReason {
@@ -489,8 +491,30 @@ impl PauseReason {
             Self::ExecuteApprovalRequired => "execute_approval_required",
             Self::UserCancelled => "user_cancelled",
             Self::TickBudgetExhausted => "tick_budget_exhausted",
-            Self::Quiescent => "quiescent",
+            Self::Quiescent(_) => "quiescent",
         }
+    }
+
+    /// Stable code for why a quiescent Run stopped; `None` for every other pause.
+    #[must_use]
+    pub const fn quiescence_code(self) -> Option<&'static str> {
+        let Self::Quiescent(reason) = self else {
+            return None;
+        };
+        Some(match reason {
+            AgentLoopQuiescence::FailedSteps => "failed_steps",
+            AgentLoopQuiescence::ManualIntervention => "manual_intervention",
+            AgentLoopQuiescence::UnverifiedCompletion => "unverified_completion",
+            AgentLoopQuiescence::BlockedDependencies => "blocked_dependencies",
+            AgentLoopQuiescence::WaitingDependencies => "waiting_dependencies",
+            AgentLoopQuiescence::ModelTurnBudgetExhausted => "model_turn_budget_exhausted",
+            AgentLoopQuiescence::ModelCallBudgetExhausted => "model_call_budget_exhausted",
+            AgentLoopQuiescence::PlannedStepBudgetExhausted => "planned_step_budget_exhausted",
+            AgentLoopQuiescence::ToolCallBudgetExhausted => "tool_call_budget_exhausted",
+            AgentLoopQuiescence::ContextBudgetExceeded => "context_budget_exceeded",
+            AgentLoopQuiescence::ContextInputLimitExceeded => "context_input_limit_exceeded",
+            AgentLoopQuiescence::NoActionableWork => "no_actionable_work",
+        })
     }
 }
 
@@ -2315,9 +2339,9 @@ fn map_driver_outcome(
                 run_id,
                 reason: RecoveryReason::EffectOutcomeUnknown,
             },
-            _ => LocalCommandResult::Paused {
+            reason => LocalCommandResult::Paused {
                 run_id: Some(run_id),
-                reason: PauseReason::Quiescent,
+                reason: PauseReason::Quiescent(reason),
             },
         },
         DriverOutcome::ApprovalDenied { .. } => LocalCommandResult::Rejected {

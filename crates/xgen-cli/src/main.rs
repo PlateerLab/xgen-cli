@@ -42,6 +42,14 @@ struct Cli {
     /// Show durable progress events instead of the interactive Thinking display.
     #[arg(long)]
     debug: bool,
+    /// Model turns each interactive goal may use before it stops without an answer.
+    #[arg(
+        long,
+        value_name = "TURNS",
+        default_value_t = REPL_MODEL_TURNS,
+        value_parser = clap::value_parser!(u32).range(1..=i64::from(xgen_cli::MAX_HOST_MODEL_TURNS))
+    )]
+    max_model_turns: u32,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -376,7 +384,7 @@ fn main() -> ExitCode {
     }
     match cli.command {
         Some(Command::Tools { command }) => tools::run(command),
-        None => interactive_command(cli.debug),
+        None => interactive_command(cli.debug, cli.max_model_turns),
         Some(Command::Licenses) => print_licenses(),
         Some(Command::Protocol {
             command: ProtocolCommand::Check,
@@ -494,10 +502,25 @@ fn executable_catalog(named: Vec<String>, include_path: bool) -> Vec<String> {
     named.iter().cloned().chain(discovered).collect()
 }
 
-const REPL_MAX_TICKS: u32 = 32;
+// The bare workspace budget (8 turns) ends a read-edit-test task before it can answer.
+// 24 turns is the budget the project evals already use for Node.js and Python work.
+const REPL_MODEL_TURNS: u32 = 24;
+// Ticks only bound one foreground invocation; the manifest budget bounds the Run. Ten
+// per turn covers plan, admission, effect and verification with room for recovery.
+const REPL_TICKS_PER_MODEL_TURN: u32 = 10;
+
+const fn repl_max_ticks(max_model_turns: u32) -> u32 {
+    let ticks = max_model_turns.saturating_mul(REPL_TICKS_PER_MODEL_TURN);
+    if ticks > xgen_cli::MAX_TICKS {
+        xgen_cli::MAX_TICKS
+    } else {
+        ticks
+    }
+}
 
 struct InteractiveHost {
     detailed_progress: bool,
+    max_model_turns: u32,
     workspace: PathBuf,
     executable_specs: Vec<String>,
     executable_ids: Vec<String>,
@@ -505,7 +528,7 @@ struct InteractiveHost {
 }
 
 impl InteractiveHost {
-    fn new(detailed_progress: bool) -> Result<Self, repl::ReplFailure> {
+    fn new(detailed_progress: bool, max_model_turns: u32) -> Result<Self, repl::ReplFailure> {
         let workspace = env::current_dir()
             .map_err(|_| repl::ReplFailure::new(PublicRunError::Configuration.code()))?;
         let (executable_ids, executable_specs) = discovered_executables()
@@ -514,6 +537,7 @@ impl InteractiveHost {
             .unzip();
         Ok(Self {
             detailed_progress,
+            max_model_turns,
             workspace,
             executable_specs,
             executable_ids,
@@ -610,8 +634,8 @@ impl repl::ReplHost for InteractiveHost {
                 allow_read: grants.read,
                 allow_write: grants.write,
                 allow_execute: grants.execute,
-                max_ticks: REPL_MAX_TICKS,
-                max_model_turns: None,
+                max_ticks: repl_max_ticks(self.max_model_turns),
+                max_model_turns: Some(self.max_model_turns),
                 final_response_schema: None,
                 completion_checks: None,
                 // The interactive driver admits this contract regardless; said
@@ -654,7 +678,7 @@ impl repl::ReplHost for InteractiveHost {
             allow_read: grants.read,
             allow_write: grants.write,
             allow_execute: grants.execute,
-            max_ticks: REPL_MAX_TICKS,
+            max_ticks: repl_max_ticks(self.max_model_turns),
         };
         let mut resolution_error = None;
         let result = {
@@ -686,7 +710,7 @@ impl repl::ReplHost for InteractiveHost {
     }
 }
 
-fn interactive_command(debug: bool) -> ExitCode {
+fn interactive_command(debug: bool, max_model_turns: u32) -> ExitCode {
     let terminal = std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal()
         && std::io::stderr().is_terminal();
@@ -700,7 +724,7 @@ fn interactive_command(debug: bool) -> ExitCode {
         eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
         return ExitCode::from(PublicRunError::Internal.exit_code());
     }
-    let Ok(mut host) = InteractiveHost::new(!terminal || debug) else {
+    let Ok(mut host) = InteractiveHost::new(!terminal || debug, max_model_turns) else {
         eprintln!("XGEN_ERROR code={}", PublicRunError::Configuration.code());
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };
