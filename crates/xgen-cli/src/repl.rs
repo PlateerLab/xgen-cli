@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::env;
 use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -206,6 +206,12 @@ pub(crate) trait ReplHost {
 
     fn executable_ids(&self) -> &[String];
 
+    /// Catalog one more executable, named `LOGICAL_ID=ABSOLUTE_PATH`, for this session.
+    ///
+    /// A Run is pinned to the executable catalog it started with, so this takes effect on the
+    /// next Run and the caller refuses the change while one is paused.
+    fn allow_executable(&mut self, specification: &str) -> Result<(), ReplFailure>;
+
     fn usage(&mut self, run_id: &str) -> Result<xgen_cli::UsageReport, ReplFailure> {
         xgen_cli::inspect_local_usage(run_id).map_err(ReplFailure::from_run_error)
     }
@@ -355,6 +361,7 @@ enum ReplCommand {
     Status,
     Usage(Option<String>),
     Permissions(Option<(PermissionKind, PermissionMode)>),
+    AllowExecutable(String),
     Resume(Option<String>),
     Clear,
     Help,
@@ -532,13 +539,16 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     permissions.set(kind, mode);
                 }
                 print_permissions(output, permissions)?;
-                if !host.executable_ids().is_empty() {
-                    write!(output, "executables:")?;
-                    for id in host.executable_ids() {
-                        write!(output, " ")?;
-                        write_terminal_text(output, id)?;
-                    }
-                    writeln!(output)?;
+                print_executables(output, host.executable_ids())?;
+            }
+            ReplEntry::Command(ReplCommand::AllowExecutable(specification)) => {
+                if active_run.is_some() {
+                    writeln!(output, "error: active_run_paused; use /resume or /clear")?;
+                    continue;
+                }
+                match host.allow_executable(&specification) {
+                    Ok(()) => print_executables(output, host.executable_ids())?,
+                    Err(failure) => print_failure(output, &failure)?,
                 }
             }
             ReplEntry::Command(ReplCommand::Clear) => {
@@ -560,10 +570,14 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     session_context.pending_goal = None;
                 }
                 let grants = permissions.grants();
-                let result =
-                    invoke_with_progress(output, cancellation, interactive_display, |progress| {
-                        host.resume(&run_id, grants, progress)
-                    })?;
+                let mut tally = RunTally::default();
+                let result = invoke_with_progress(
+                    output,
+                    cancellation,
+                    interactive_display,
+                    &mut tally,
+                    |progress| host.resume(&run_id, grants, progress),
+                )?;
                 handle_result(
                     reader,
                     output,
@@ -577,7 +591,16 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     &mut last_run,
                     &mut session_context,
                     &mut outcome,
+                    &mut tally,
                 )?;
+                if interactive_display
+                    && matches!(
+                        outcome,
+                        SessionOutcome::Completed | SessionOutcome::Responded
+                    )
+                {
+                    print_run_footer(output, tally)?;
+                }
             }
             ReplEntry::Goal(goal) => {
                 if active_run.is_some() {
@@ -601,10 +624,14 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                 }
                 let contextual_goal = compose_session_goal(&goal, &session_context);
                 session_context.pending_goal = Some(goal);
-                let result =
-                    invoke_with_progress(output, cancellation, interactive_display, |progress| {
-                        host.start(contextual_goal, grants, progress)
-                    })?;
+                let mut tally = RunTally::default();
+                let result = invoke_with_progress(
+                    output,
+                    cancellation,
+                    interactive_display,
+                    &mut tally,
+                    |progress| host.start(contextual_goal, grants, progress),
+                )?;
                 handle_result(
                     reader,
                     output,
@@ -618,7 +645,16 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     &mut last_run,
                     &mut session_context,
                     &mut outcome,
+                    &mut tally,
                 )?;
+                if interactive_display
+                    && matches!(
+                        outcome,
+                        SessionOutcome::Completed | SessionOutcome::Responded
+                    )
+                {
+                    print_run_footer(output, tally)?;
+                }
             }
         }
     }
@@ -638,6 +674,7 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
     last_run: &mut Option<String>,
     session_context: &mut SessionContext,
     outcome: &mut SessionOutcome,
+    tally: &mut RunTally,
 ) -> io::Result<()> {
     loop {
         let conversation = matches!(result, Ok(LocalCommandResult::Responded { .. }));
@@ -665,10 +702,7 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                 if !interactive_display {
                     writeln!(output, "{}: {run_id}", outcome.label())?;
                 }
-                write_terminal_text(output, &summary)?;
-                if !summary.ends_with('\n') {
-                    writeln!(output)?;
-                }
+                write_answer(output, &summary, interactive_display)?;
                 return Ok(());
             }
             Ok(LocalCommandResult::Paused { run_id, reason }) => {
@@ -700,10 +734,16 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                     return Ok(());
                 }
                 grants = grants.with(kind);
-                result =
-                    invoke_with_progress(output, cancellation, interactive_display, |progress| {
-                        host.resume(&run_id, grants, progress)
-                    })?;
+                let mut leg = RunTally::default();
+                result = invoke_with_progress(
+                    output,
+                    cancellation,
+                    interactive_display,
+                    &mut leg,
+                    |progress| host.resume(&run_id, grants, progress),
+                )?;
+                tally.committed_steps = tally.committed_steps.saturating_add(leg.committed_steps);
+                tally.elapsed = tally.elapsed.saturating_add(leg.elapsed);
             }
             Ok(LocalCommandResult::Rejected { run_id, reason }) => {
                 cancellation.clear();
@@ -846,6 +886,7 @@ fn invoke_with_progress<W: Write + Send, F>(
     output: &mut W,
     cancellation: &Cancellation,
     interactive_display: bool,
+    tally: &mut RunTally,
     invoke: F,
 ) -> io::Result<Result<LocalCommandResult, ReplFailure>>
 where
@@ -854,10 +895,14 @@ where
     ) -> Result<LocalCommandResult, ReplFailure>,
 {
     if interactive_display {
-        return invoke_with_thinking(output, cancellation, invoke);
+        return invoke_with_thinking(output, cancellation, tally, invoke);
     }
+    let started = Instant::now();
     let mut output_failure = None;
     let mut progress = |event| {
+        if matches!(event, DriverProgress::EffectCommitted { .. }) {
+            tally.committed_steps = tally.committed_steps.saturating_add(1);
+        }
         if output_failure.is_none()
             && let Err(error) = print_progress(output, event)
         {
@@ -870,6 +915,7 @@ where
         }
     };
     let result = invoke(&mut progress);
+    tally.elapsed = started.elapsed();
     if let Some(error) = output_failure {
         return Err(error);
     }
@@ -877,9 +923,91 @@ where
 }
 
 /// Presentation only: the driver remains on the calling thread and owns every durable boundary.
+/// What one invocation of the driver did, for the line printed under its answer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct RunTally {
+    committed_steps: usize,
+    elapsed: Duration,
+}
+
+/// What the live one-line display says while a Run is in flight.
+///
+/// The display thread repaints on its own clock while the driver blocks on the network or on a
+/// tool, so the phase crosses threads as a number rather than a lock the driver would have to take
+/// between steps. Vocabulary follows `effect_label`, so the live line and `--debug` agree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Thinking,
+    Planning,
+    Approval,
+    Reading,
+    Writing,
+    Executing,
+    Working,
+    Verifying,
+    Finishing,
+}
+
+impl Phase {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Thinking => "Thinking",
+            Self::Planning => "Planning",
+            Self::Approval => "Waiting for approval",
+            Self::Reading => "Reading",
+            Self::Writing => "Writing",
+            Self::Executing => "Executing",
+            Self::Working => "Working",
+            Self::Verifying => "Verifying",
+            Self::Finishing => "Finishing",
+        }
+    }
+
+    const fn code(self) -> u8 {
+        self as u8
+    }
+
+    const fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::Planning,
+            2 => Self::Approval,
+            3 => Self::Reading,
+            4 => Self::Writing,
+            5 => Self::Executing,
+            6 => Self::Working,
+            7 => Self::Verifying,
+            8 => Self::Finishing,
+            _ => Self::Thinking,
+        }
+    }
+
+    /// The phase an event puts the Run in; a committed step returns it to the model.
+    const fn of(progress: DriverProgress) -> Self {
+        match progress {
+            DriverProgress::ModelCallStarting
+            | DriverProgress::EffectCommitted { .. }
+            | DriverProgress::VerificationCommitted => Self::Thinking,
+            DriverProgress::PlanCommitted => Self::Planning,
+            DriverProgress::ApprovalRequired { .. } => Self::Approval,
+            DriverProgress::ActionAuthorized { .. } => Self::Working,
+            DriverProgress::EffectStarting { effect_class } => match effect_class {
+                xgen_domain::EffectClass::ReadOnly => Self::Reading,
+                xgen_domain::EffectClass::Idempotent => Self::Writing,
+                xgen_domain::EffectClass::NonIdempotent => Self::Executing,
+                _ => Self::Working,
+            },
+            DriverProgress::VerificationStarting => Self::Verifying,
+            DriverProgress::CompletionCommitted | DriverProgress::ResponseCommitted => {
+                Self::Finishing
+            }
+        }
+    }
+}
+
 fn invoke_with_thinking<W: Write + Send, F>(
     output: &mut W,
     cancellation: &Cancellation,
+    tally: &mut RunTally,
     invoke: F,
 ) -> io::Result<Result<LocalCommandResult, ReplFailure>>
 where
@@ -887,25 +1015,30 @@ where
         &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
     ) -> Result<LocalCommandResult, ReplFailure>,
 {
-    write!(output, "Thinking… · 0s")?;
+    let started = Instant::now();
+    write!(output, "{}… · 0s", Phase::Thinking.label())?;
     output.flush()?;
     let output = Mutex::new(output);
     let failed = AtomicBool::new(false);
+    let phase = AtomicU8::new(Phase::Thinking.code());
+    let committed_steps = AtomicUsize::new(0);
     let (stop, stopped) = mpsc::channel();
-    thread::scope(|scope| {
+    let result = thread::scope(|scope| {
         let output = &output;
         let failed = &failed;
+        let phase = &phase;
+        let committed_steps = &committed_steps;
         let display = scope.spawn(move || -> io::Result<()> {
-            let started = Instant::now();
             while stopped.recv_timeout(Duration::from_millis(250)) == Err(RecvTimeoutError::Timeout)
             {
                 let mut output = output
                     .lock()
                     .map_err(|_| io::Error::other("display unavailable"))?;
-                if let Err(error) = write!(
-                    output,
-                    "\r\x1b[2KThinking… · {}s",
-                    started.elapsed().as_secs()
+                if let Err(error) = write_live_line(
+                    &mut *output,
+                    Phase::from_code(phase.load(Ordering::Relaxed)),
+                    started.elapsed().as_secs(),
+                    committed_steps.load(Ordering::Relaxed),
                 )
                 .and_then(|()| output.flush())
                 {
@@ -919,7 +1052,11 @@ where
             write!(output, "\r\x1b[2K")?;
             output.flush()
         });
-        let mut progress = |_| {
+        let mut progress = |event| {
+            if matches!(event, DriverProgress::EffectCommitted { .. }) {
+                committed_steps.fetch_add(1, Ordering::Relaxed);
+            }
+            phase.store(Phase::of(event).code(), Ordering::Relaxed);
             if cancellation.is_requested() || failed.load(Ordering::SeqCst) {
                 DriverProgressControl::Cancel
             } else {
@@ -932,7 +1069,39 @@ where
             .join()
             .map_err(|_| io::Error::other("display thread failed"))??;
         Ok(result)
-    })
+    });
+    tally.committed_steps = committed_steps.load(Ordering::Relaxed);
+    tally.elapsed = started.elapsed();
+    result
+}
+
+/// The line under an answer: how long the Run took and how much of it is durable. The live line
+/// is erased when the Run ends, so without this the only trace of a long Run is the answer itself.
+fn print_run_footer(output: &mut impl Write, tally: RunTally) -> io::Result<()> {
+    let seconds = tally.elapsed.as_secs();
+    if seconds == 0 && tally.committed_steps == 0 {
+        return Ok(());
+    }
+    write!(output, "{DIM}\u{b7} {seconds}s")?;
+    if tally.committed_steps > 0 {
+        write!(output, " \u{b7} {} committed", tally.committed_steps)?;
+    }
+    writeln!(output, "{PLAIN}")
+}
+
+/// Repaint the single live line: what the Run is doing, for how long, and how much it has
+/// durably committed so far.
+fn write_live_line(
+    output: &mut impl Write,
+    phase: Phase,
+    seconds: u64,
+    committed_steps: usize,
+) -> io::Result<()> {
+    write!(output, "\r\x1b[2K{}… · {seconds}s", phase.label())?;
+    if committed_steps > 0 {
+        write!(output, " · {committed_steps} committed")?;
+    }
+    Ok(())
 }
 
 pub(crate) fn print_progress(output: &mut impl Write, progress: DriverProgress) -> io::Result<()> {
@@ -1182,6 +1351,14 @@ fn parse_command(value: &str) -> Result<ReplCommand, InputFailure> {
             PermissionKind::parse(kind).ok_or(InputFailure::InvalidCommand)?,
             PermissionMode::parse(mode).ok_or(InputFailure::InvalidCommand)?,
         )))),
+        ["/allow-executable", ..] => {
+            let specification = value
+                .split_once("/allow-executable")
+                .map(|(_, rest)| rest.trim())
+                .filter(|rest| !rest.is_empty())
+                .ok_or(InputFailure::InvalidCommand)?;
+            Ok(ReplCommand::AllowExecutable(specification.to_owned()))
+        }
         ["/resume"] => Ok(ReplCommand::Resume(None)),
         ["/resume", run_id] => Ok(ReplCommand::Resume(Some((*run_id).to_owned()))),
         ["/clear"] => Ok(ReplCommand::Clear),
@@ -1189,6 +1366,19 @@ fn parse_command(value: &str) -> Result<ReplCommand, InputFailure> {
         ["/exit" | "/quit"] => Ok(ReplCommand::Exit),
         _ => Err(InputFailure::InvalidCommand),
     }
+}
+
+/// Print the executable catalog the planner is told about, or nothing when it is empty.
+fn print_executables(output: &mut impl Write, ids: &[String]) -> io::Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    write!(output, "executables:")?;
+    for id in ids {
+        write!(output, " ")?;
+        write_terminal_text(output, id)?;
+    }
+    writeln!(output)
 }
 
 fn print_help(output: &mut impl Write) -> io::Result<()> {
@@ -1211,6 +1401,10 @@ fn print_help(output: &mut impl Write) -> io::Result<()> {
     writeln!(
         output,
         "/permissions KIND ask|allow|deny change model/read/write/execute mode"
+    )?;
+    writeln!(
+        output,
+        "/allow-executable ID=PATH        catalog one more executable for this session"
     )?;
     writeln!(
         output,
@@ -1260,6 +1454,96 @@ fn print_failure(output: &mut impl Write, failure: &ReplFailure) -> io::Result<(
         writeln!(output, "{hint}")?;
     }
     Ok(())
+}
+
+/// Every styling escape below is ours. Model text reaches the terminal only through
+/// `write_terminal_text`, which escapes control characters, so a model cannot move the cursor,
+/// repaint the screen or hide what it did by writing escapes of its own.
+const BOLD: &str = "\x1b[1m";
+const UNDERLINE: &str = "\x1b[4m";
+const DIM: &str = "\x1b[2m";
+const PLAIN: &str = "\x1b[0m";
+
+/// Write the Run's answer.
+///
+/// Piped output and `--debug` keep the exact sanitized bytes, because scripts and the tests read
+/// them. The interactive display also renders the light Markdown models reach for, so a bulleted
+/// list reads as a list instead of as asterisks.
+fn write_answer(output: &mut impl Write, summary: &str, styled: bool) -> io::Result<()> {
+    if styled {
+        write_styled_markdown(output, summary)?;
+    } else {
+        write_terminal_text(output, summary)?;
+    }
+    if !summary.ends_with('\n') {
+        writeln!(output)?;
+    }
+    Ok(())
+}
+
+/// Headings, bullets, fenced blocks and inline spans; everything else passes through as text.
+fn write_styled_markdown(output: &mut impl Write, text: &str) -> io::Result<()> {
+    let mut fenced = false;
+    let mut first = true;
+    for line in text.split('\n') {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if !first {
+            writeln!(output)?;
+        }
+        first = false;
+        if fenced {
+            write!(output, "    ")?;
+            write_terminal_text(output, line)?;
+            continue;
+        }
+        write_styled_line(output, line)?;
+    }
+    Ok(())
+}
+
+fn write_styled_line(output: &mut impl Write, line: &str) -> io::Result<()> {
+    let trimmed = line.trim_start();
+    write!(output, "{}", &line[..line.len() - trimmed.len()])?;
+    if let Some(heading) = trimmed.strip_prefix('#') {
+        // A heading is bold as a whole, so an inline span inside it cannot end the bold early.
+        write!(output, "{BOLD}")?;
+        write_terminal_text(output, heading.trim_start_matches('#').trim_start())?;
+        return write!(output, "{PLAIN}");
+    }
+    if let Some(item) = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+    {
+        write!(output, "\u{2022} ")?;
+        return write_inline(output, item);
+    }
+    write_inline(output, trimmed)
+}
+
+/// `**bold**` and `` `code` ``. An unclosed delimiter is text, which is what the model meant if it
+/// wrote one, and keeps the loop from advancing past the end of the line.
+fn write_inline(output: &mut impl Write, text: &str) -> io::Result<()> {
+    let mut rest = text;
+    loop {
+        let (at, delimiter, style) = match (rest.find("**"), rest.find('`')) {
+            (Some(bold), Some(code)) if bold <= code => (bold, "**", BOLD),
+            (_, Some(code)) => (code, "`", UNDERLINE),
+            (Some(bold), None) => (bold, "**", BOLD),
+            (None, None) => return write_terminal_text(output, rest),
+        };
+        let after = &rest[at.saturating_add(delimiter.len())..];
+        let Some(end) = after.find(delimiter) else {
+            return write_terminal_text(output, rest);
+        };
+        write_terminal_text(output, &rest[..at])?;
+        write!(output, "{style}")?;
+        write_terminal_text(output, &after[..end])?;
+        write!(output, "{PLAIN}")?;
+        rest = &after[end.saturating_add(delimiter.len())..];
+    }
 }
 
 fn write_terminal_text(output: &mut impl Write, value: &str) -> io::Result<()> {
@@ -1454,6 +1738,19 @@ mod tests {
             &self.tools
         }
 
+        fn allow_executable(&mut self, specification: &str) -> Result<(), ReplFailure> {
+            let (logical_id, path) = specification
+                .split_once('=')
+                .filter(|(id, path)| !id.is_empty() && path.starts_with('/'))
+                .ok_or_else(|| ReplFailure::new("executable_specification_invalid"))?;
+            let _ = path;
+            if self.tools.iter().any(|id| id == logical_id) {
+                return Err(ReplFailure::new("executable_already_catalogued"));
+            }
+            self.tools.push(logical_id.to_owned());
+            Ok(())
+        }
+
         fn start(
             &mut self,
             goal: String,
@@ -1522,17 +1819,79 @@ mod tests {
     fn thinking_clears_before_error_and_respects_cancellation() {
         let cancellation = Cancellation::default();
         let mut output = Vec::new();
-        let result = invoke_with_progress(&mut output, &cancellation, true, |progress| {
-            cancellation.request();
-            assert_eq!(
-                progress(DriverProgress::ModelCallStarting),
-                DriverProgressControl::Cancel
-            );
-            Err(ReplFailure::new("fixture_failure"))
-        })
+        let result = invoke_with_progress(
+            &mut output,
+            &cancellation,
+            true,
+            &mut RunTally::default(),
+            |progress| {
+                cancellation.request();
+                assert_eq!(
+                    progress(DriverProgress::ModelCallStarting),
+                    DriverProgressControl::Cancel
+                );
+                Err(ReplFailure::new("fixture_failure"))
+            },
+        )
         .unwrap();
         assert_eq!(result, Err(ReplFailure::new("fixture_failure")));
         assert!(String::from_utf8(output).unwrap().ends_with("\r\x1b[2K"));
+    }
+
+    /// The live line said "Thinking" for the whole Run, including the minutes spent inside a
+    /// tool. The driver already announces every boundary, so the line can say which one it is on
+    /// and how much work is already durable.
+    #[test]
+    fn the_live_line_names_the_phase_and_counts_committed_steps() {
+        struct ObservedOutput {
+            bytes: Vec<u8>,
+            tick: mpsc::Sender<()>,
+        }
+        impl Write for ObservedOutput {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.bytes.extend_from_slice(bytes);
+                if self.bytes.windows(3).any(|window| window == b"\r\x1b[") {
+                    let _ = self.tick.send(());
+                }
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let (tick, ticks) = mpsc::channel();
+        let mut output = ObservedOutput {
+            bytes: Vec::new(),
+            tick,
+        };
+        let cancellation = Cancellation::default();
+
+        invoke_with_progress(
+            &mut output,
+            &cancellation,
+            true,
+            &mut RunTally::default(),
+            |progress| {
+                progress(DriverProgress::EffectCommitted {
+                    effect_class: xgen_domain::EffectClass::Idempotent,
+                });
+                progress(DriverProgress::EffectStarting {
+                    effect_class: xgen_domain::EffectClass::NonIdempotent,
+                });
+                while ticks.try_recv().is_ok() {}
+                ticks
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("the display should repaint after the phase changed");
+                Err(ReplFailure::new("fixture_finished"))
+            },
+        )
+        .unwrap()
+        .unwrap_err();
+
+        let rendered = String::from_utf8(output.bytes).unwrap();
+        assert!(rendered.contains("Executing… ·"), "{rendered}");
+        assert!(rendered.contains(" · 1 committed"), "{rendered}");
+        assert!(rendered.ends_with("\r\x1b[2K"));
     }
 
     #[test]
@@ -1559,12 +1918,18 @@ mod tests {
             tick,
         };
         let cancellation = Cancellation::default();
-        invoke_with_progress(&mut output, &cancellation, true, |_| {
-            ticks
-                .recv_timeout(Duration::from_secs(5))
-                .expect("display should refresh during blocking I/O");
-            Err(ReplFailure::new("fixture_finished"))
-        })
+        invoke_with_progress(
+            &mut output,
+            &cancellation,
+            true,
+            &mut RunTally::default(),
+            |_| {
+                ticks
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("display should refresh during blocking I/O");
+                Err(ReplFailure::new("fixture_finished"))
+            },
+        )
         .unwrap()
         .unwrap_err();
         assert!(
@@ -1708,6 +2073,45 @@ mod tests {
         assert!(output.contains("active_run: none"));
     }
 
+    /// The catalog is fixed at the 25 developer tools found on PATH, so a session that needs one
+    /// more program had no way out but to quit and start over with `xgen run`.
+    #[test]
+    fn an_executable_can_be_catalogued_without_leaving_the_session() {
+        let mut host = FakeHost::new([]);
+        let mut input = io::Cursor::new(
+            b"/allow-executable wdutil=/usr/bin/wdutil\n/allow-executable wdutil\n/status\n/exit\n",
+        );
+        let mut output = Vec::new();
+
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("executables: cargo wdutil"));
+        // The second line names no path, so it is refused and the catalog is left alone.
+        assert!(output.contains("error: executable_specification_invalid"));
+        assert!(output.contains("catalogued_executables: 2"));
+    }
+
+    /// A paused Run is pinned to the catalog it started with and fails closed when it resumes
+    /// against another, so the change waits rather than stranding the Run.
+    #[test]
+    fn a_paused_run_keeps_the_catalog_it_started_with() {
+        let mut host = FakeHost::new([LocalCommandResult::Paused {
+            run_id: Some("run-55555555555555555555555555555555".to_owned()),
+            reason: PauseReason::WriteApprovalRequired,
+        }]);
+        let mut input = io::Cursor::new(
+            b"/permissions model allow\n/permissions write deny\nchange file\n/allow-executable wdutil=/usr/bin/wdutil\n/exit\n",
+        );
+        let mut output = Vec::new();
+
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("error: active_run_paused; use /resume or /clear"));
+        assert_eq!(host.executable_ids(), ["cargo"]);
+    }
+
     #[test]
     fn leading_utf8_bom_does_not_turn_the_first_command_into_a_goal() {
         let mut host = FakeHost::new([]);
@@ -1721,6 +2125,65 @@ mod tests {
         assert!(output.contains("status: idle"));
         assert!(!output.contains("Allow sending"));
         assert!(output.contains("bye"));
+    }
+
+    /// Answers arrived as raw Markdown, so a list read as asterisks and emphasis as stars. The
+    /// styling is ours and the model's own escapes stay escaped, so it cannot repaint the screen.
+    #[test]
+    fn the_interactive_answer_renders_light_markdown_without_letting_escapes_through() {
+        let mut host = FakeHost::new([LocalCommandResult::Completed {
+            run_id: "run-66666666666666666666666666666666".to_owned(),
+            summary: "## Result\n- **first**: run `cargo test`\n```\ncargo test\n```\n\u{1b}[31m"
+                .to_owned(),
+        }]);
+        let mut input = io::Cursor::new(b"goal\ny\n/exit\n");
+        let mut output = Vec::new();
+
+        run_with_display(
+            &mut input,
+            &mut output,
+            &mut host,
+            &Cancellation::default(),
+            true,
+        )
+        .unwrap();
+
+        let rendered = String::from_utf8(output).unwrap();
+        assert!(
+            rendered.contains("\u{1b}[1mResult\u{1b}[0m"),
+            "{rendered:?}"
+        );
+        assert!(
+            rendered.contains("\u{2022} \u{1b}[1mfirst\u{1b}[0m: run \u{1b}[4mcargo test\u{1b}[0m"),
+            "{rendered:?}"
+        );
+        assert!(rendered.contains("    cargo test"), "{rendered:?}");
+        assert!(!rendered.contains("```"), "{rendered:?}");
+        assert!(rendered.contains("\\u{1b}[31m"), "{rendered:?}");
+    }
+
+    /// The live line is erased when the Run ends, so a Run that took a minute and committed three
+    /// steps left no trace of either. A Run that did nothing measurable still says nothing.
+    #[test]
+    fn the_footer_reports_the_work_and_stays_quiet_when_there_was_none() {
+        let mut output = Vec::new();
+        print_run_footer(
+            &mut output,
+            RunTally {
+                committed_steps: 3,
+                elapsed: Duration::from_secs(41),
+            },
+        )
+        .unwrap();
+        let rendered = String::from_utf8(output).unwrap();
+        assert!(
+            rendered.contains("\u{b7} 41s \u{b7} 3 committed"),
+            "{rendered:?}"
+        );
+
+        let mut quiet = Vec::new();
+        print_run_footer(&mut quiet, RunTally::default()).unwrap();
+        assert!(quiet.is_empty());
     }
 
     #[test]
