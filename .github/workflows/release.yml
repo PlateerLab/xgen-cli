@@ -1046,8 +1046,22 @@ jobs:
             sleep 5
           done
           global_root=$(npm root --global --prefix "$test_root/install")
+          # A global install keeps the launcher's optional platform dependency under the launcher
+          # instead of hoisting it to the global root, and npm is free to choose either layout.
+          # Pinning one spelling failed every platform of v0.1.0-rc.4 while the published packages
+          # were correct, so accept both and let the version/licenses checks below judge the install.
+          platform_package_root() {
+            for candidate in \
+              "$global_root/@xgen-ai/$PLATFORM_PACKAGE" \
+              "$global_root/@xgen-ai/cli/node_modules/@xgen-ai/$PLATFORM_PACKAGE"; do
+              if [ -f "$candidate/package.json" ]; then
+                printf '%s\n' "$candidate"
+                return 0
+              fi
+            done
+          }
           test -f "$global_root/@xgen-ai/cli/package.json"
-          test -f "$global_root/@xgen-ai/$PLATFORM_PACKAGE/package.json"
+          test -n "$(platform_package_root)"
           HOME="$test_root/home" \
           XGEN_STATE_HOME="$test_root/state" \
             "$test_root/install/bin/xgen" --version > "$test_root/version.txt"
@@ -1074,7 +1088,7 @@ jobs:
               --registry=https://registry.npmjs.org/ \
               "@xgen-ai/cli@$version"
           test -f "$global_root/@xgen-ai/cli/package.json"
-          test -f "$global_root/@xgen-ai/$PLATFORM_PACKAGE/package.json"
+          test -n "$(platform_package_root)"
           test "$(HOME="$test_root/home" XGEN_STATE_HOME="$test_root/state" \
             "$test_root/install/bin/xgen" --version)" = "xgen $version"
           test ! -e "$test_root/state"
@@ -1084,7 +1098,7 @@ jobs:
             npm uninstall --global --prefix "$test_root/install" \
               --ignore-scripts --no-audit --no-fund '@xgen-ai/cli'
           test ! -e "$global_root/@xgen-ai/cli"
-          test ! -e "$global_root/@xgen-ai/$PLATFORM_PACKAGE"
+          test -z "$(platform_package_root)"
           test ! -e "$test_root/install/bin/xgen"
 
       - name: Install and verify exact npm package on Windows
@@ -1123,10 +1137,21 @@ jobs:
               }
               if (-not $Installed) { throw "npm install failed" }
               $GlobalRoot = (& npm.cmd root --global --prefix $InstallRoot | Out-String).Trim()
+              # npm may hoist the launcher's optional platform dependency to the global root or
+              # keep it under the launcher; both are a correct install, so accept either.
+              function Get-PlatformPackageRoot {
+                  foreach ($Candidate in @(
+                      (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE"),
+                      (Join-Path $GlobalRoot "@xgen-ai/cli/node_modules/@xgen-ai/$env:PLATFORM_PACKAGE")
+                  )) {
+                      if (Test-Path -LiteralPath (Join-Path $Candidate "package.json")) { return $Candidate }
+                  }
+                  return $null
+              }
               if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli/package.json"))) {
                   throw "launcher package is missing"
               }
-              if (-not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE/package.json"))) {
+              if (-not (Get-PlatformPackageRoot)) {
                   throw "platform package is missing"
               }
               $Shim = Join-Path $InstallRoot "xgen.cmd"
@@ -1166,7 +1191,7 @@ jobs:
               }
               if (
                   -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli/package.json")) -or
-                  -not (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE/package.json"))
+                  -not (Get-PlatformPackageRoot)
               ) {
                   throw "npm reinstall is missing an exact package"
               }
@@ -1179,7 +1204,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "npm uninstall failed" }
               if (
                   (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/cli")) -or
-                  (Test-Path -LiteralPath (Join-Path $GlobalRoot "@xgen-ai/$env:PLATFORM_PACKAGE"))
+                  (Get-PlatformPackageRoot)
               ) {
                   throw "npm uninstall left package artifacts"
               }

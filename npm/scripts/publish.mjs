@@ -100,7 +100,10 @@ async function publishOne(report, version, distTag) {
     '--ignore-scripts',
     report.tarball,
   ]);
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  // The registry needs longer than a minute to serve a new version's integrity, dist-tag and
+  // provenance together. At twelve attempts v0.1.0-rc.4 timed out on every run: each re-run
+  // published one more package and then failed, so six packages took six manual re-runs.
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     remote = await remoteMetadata(report.name, version);
     if (
       remote &&
