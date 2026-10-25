@@ -533,7 +533,7 @@ fn model_call_may_be_next<S: RunStore>(store: &S) -> Result<bool, RunDriverError
     }
     let frontier = derive_frontier(&state)?;
     if frontier.next_action().is_some()
-        || !frontier.failed_step_ids.is_empty()
+        || frontier.has_blocking_failures()
         || !frontier.manual_required_step_ids.is_empty()
         || agent.accepted_model_turns >= agent.budget.max_model_turns
         || model_calls.reserved_calls >= model_calls.budget.max_model_calls()

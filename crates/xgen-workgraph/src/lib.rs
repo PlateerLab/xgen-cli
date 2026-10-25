@@ -3030,6 +3030,8 @@ pub struct WorkFrontier {
     pub verified_completed_step_ids: Vec<String>,
     pub unverified_completed_step_ids: Vec<String>,
     pub failed_step_ids: Vec<String>,
+    /// Subset of `failed_step_ids` whose durable intent is read-only (ADR-0052).
+    pub read_only_failed_step_ids: Vec<String>,
     pub manual_required_step_ids: Vec<String>,
 }
 
@@ -3047,6 +3049,22 @@ impl WorkFrontier {
     #[must_use]
     pub fn all_steps_receipt_completed(&self) -> bool {
         self.total_steps > 0 && self.verified_completed_step_ids.len() == self.total_steps
+    }
+
+    /// Report whether a failed Step has side effects that must stop the Run.
+    #[must_use]
+    pub fn has_blocking_failures(&self) -> bool {
+        self.failed_step_ids.len() > self.read_only_failed_step_ids.len()
+    }
+
+    /// Report whether every planned Step is receipt-completed or a definite read-only failure.
+    ///
+    /// A failed read has no effect to undo, so a task may complete past it (ADR-0052).
+    #[must_use]
+    pub fn all_steps_settled(&self) -> bool {
+        self.total_steps > 0
+            && self.verified_completed_step_ids.len() + self.read_only_failed_step_ids.len()
+                == self.total_steps
     }
 }
 
@@ -3148,6 +3166,7 @@ struct FrontierAssembly<'a> {
     verified_completed_step_ids: Vec<String>,
     unverified_completed_step_ids: Vec<String>,
     failed_step_ids: Vec<String>,
+    read_only_failed_step_ids: Vec<String>,
     manual_required_step_ids: Vec<String>,
     processed: usize,
 }
@@ -3281,6 +3300,13 @@ impl<'a> FrontierAssembly<'a> {
             }
             StepStatus::Failed => {
                 self.failed_step_ids.push(step_id.to_owned());
+                if step
+                    .intent
+                    .as_ref()
+                    .is_some_and(|intent| intent.effect_class == EffectClass::ReadOnly)
+                {
+                    self.read_only_failed_step_ids.push(step_id.to_owned());
+                }
                 DependencyOutcome::Blocked
             }
             StepStatus::ManualRequired => {
@@ -3308,6 +3334,7 @@ impl<'a> FrontierAssembly<'a> {
         self.verified_completed_step_ids.sort();
         self.unverified_completed_step_ids.sort();
         self.failed_step_ids.sort();
+        self.read_only_failed_step_ids.sort();
         self.manual_required_step_ids.sort();
 
         WorkFrontier {
@@ -3322,6 +3349,7 @@ impl<'a> FrontierAssembly<'a> {
             verified_completed_step_ids: self.verified_completed_step_ids,
             unverified_completed_step_ids: self.unverified_completed_step_ids,
             failed_step_ids: self.failed_step_ids,
+            read_only_failed_step_ids: self.read_only_failed_step_ids,
             manual_required_step_ids: self.manual_required_step_ids,
         }
     }
@@ -4143,7 +4171,7 @@ fn record_completion_candidate(
     }
     let frontier = derive_frontier(state).map_err(map_plan_frontier_error)?;
     match response_kind {
-        ResponseKind::TaskCompletion if !frontier.all_steps_receipt_completed() => {
+        ResponseKind::TaskCompletion if !frontier.all_steps_settled() => {
             return Err(TransitionError::CompletionCandidateRequiresReceiptCompletedPlan);
         }
         ResponseKind::Conversation if frontier.total_steps != 0 => {
@@ -5376,6 +5404,41 @@ mod tests {
             authorization_digest(&intent.authorization.binding, intent.authorization.max_uses)
                 .expect("authorization should canonicalize");
         *intent
+    }
+
+    #[test]
+    fn frontier_settles_definite_read_only_failures_but_not_other_failures() {
+        let mut records = Vec::new();
+        let state = planned_state(&mut records);
+        let RunEventBody::EffectIntentCommitted { intent, .. } =
+            intent(&state, "step-material", "effect-material", 1)
+        else {
+            panic!("helper must create an intent")
+        };
+        let failed_with = |effect_class| {
+            let mut failed = state.clone();
+            let step = failed.steps.get_mut("step-material").unwrap();
+            step.status = StepStatus::Failed;
+            let mut step_intent = (*intent).clone();
+            step_intent.effect_class = effect_class;
+            step.intent = Some(step_intent);
+            derive_frontier(&failed).expect("frontier should derive")
+        };
+
+        let read = failed_with(EffectClass::ReadOnly);
+        assert_eq!(read.failed_step_ids, ["step-material"]);
+        assert_eq!(read.read_only_failed_step_ids, ["step-material"]);
+        assert!(!read.has_blocking_failures());
+        assert!(read.all_steps_settled());
+        assert!(!read.all_steps_receipt_completed());
+
+        for effect_class in [EffectClass::Idempotent, EffectClass::NonIdempotent] {
+            let other = failed_with(effect_class);
+            assert_eq!(other.failed_step_ids, ["step-material"]);
+            assert!(other.read_only_failed_step_ids.is_empty());
+            assert!(other.has_blocking_failures());
+            assert!(!other.all_steps_settled());
+        }
     }
 
     #[test]

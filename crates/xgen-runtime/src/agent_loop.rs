@@ -1189,7 +1189,7 @@ impl AgentLoop {
         }
         if state.steps.len()
             >= usize::try_from(loop_state.budget.max_planned_steps).unwrap_or(usize::MAX)
-            && !frontier.all_steps_receipt_completed()
+            && !frontier.all_steps_settled()
         {
             return Ok(AgentLoopTick::Quiescent {
                 reason: AgentLoopQuiescence::PlannedStepBudgetExhausted,
@@ -1590,7 +1590,7 @@ impl AgentLoop {
         F: EventFactory,
     {
         if (response_kind == xgen_workgraph::ResponseKind::TaskCompletion
-            && !frontier.all_steps_receipt_completed())
+            && !frontier.all_steps_settled())
             || (response_kind == xgen_workgraph::ResponseKind::Conversation
                 && frontier.total_steps != 0)
         {
@@ -1976,7 +1976,7 @@ fn action_would_issue_new_tool_call(state: &RunState, action: &FrontierAction) -
 fn terminal_quiescence(frontier: &WorkFrontier) -> Option<AgentLoopQuiescence> {
     if !frontier.manual_required_step_ids.is_empty() {
         Some(AgentLoopQuiescence::ManualIntervention)
-    } else if !frontier.failed_step_ids.is_empty() {
+    } else if frontier.has_blocking_failures() {
         Some(AgentLoopQuiescence::FailedSteps)
     } else if !frontier.unverified_completed_step_ids.is_empty() {
         Some(AgentLoopQuiescence::UnverifiedCompletion)
@@ -1984,7 +1984,7 @@ fn terminal_quiescence(frontier: &WorkFrontier) -> Option<AgentLoopQuiescence> {
         Some(AgentLoopQuiescence::BlockedDependencies)
     } else if !frontier.waiting.is_empty() {
         Some(AgentLoopQuiescence::WaitingDependencies)
-    } else if frontier.total_steps > 0 && !frontier.all_steps_receipt_completed() {
+    } else if frontier.total_steps > 0 && !frontier.all_steps_settled() {
         Some(AgentLoopQuiescence::NoActionableWork)
     } else {
         None
