@@ -2,7 +2,8 @@ name: CI
 
 # Pull requests run only the fast Linux gate (about a minute with a warm cache). The full
 # quality and five-platform jobs run after merge on main, on manual dispatch, and again in the
-# release workflow before anything is published.
+# release workflow before anything is published. Every job restores a dependency build cache that
+# only main saves; the release workflow builds without any cache.
 on:
   pull_request:
   push:
@@ -82,6 +83,11 @@ jobs:
 
       - name: Show active Rust toolchain
         run: rustup show active-toolchain
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install pinned Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -196,6 +202,12 @@ jobs:
 
       - name: Show active Rust toolchain
         run: rustup show active-toolchain
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test workspace
         run: cargo test --workspace --locked --no-fail-fast
