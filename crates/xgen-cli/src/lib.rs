@@ -3,6 +3,7 @@
 mod allow_file;
 mod allow_path;
 mod allow_process;
+mod change_report;
 mod composition;
 mod driver;
 mod environment;
@@ -17,6 +18,7 @@ mod run_layout;
 pub mod tools;
 mod usage;
 
+pub use change_report::{CommittedChange, TextEdit, edit_lines, inspect_local_changes};
 pub use composition::*;
 pub use driver::*;
 pub use manifest::MAX_HOST_MODEL_TURNS;

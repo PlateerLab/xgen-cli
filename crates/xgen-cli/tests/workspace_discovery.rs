@@ -1067,6 +1067,16 @@ fn rejected_write_is_shown_to_the_planner_and_a_corrected_write_completes() {
         fs::read_to_string(workspace.join("src/lib.rs")).unwrap(),
         source.replace("41", "42")
     );
+    // Only the applied patch is reported, from the journal, not the rejected one (ADR-0057).
+    let changes = stderr(&output)
+        .lines()
+        .filter(|line| line.starts_with("XGEN_CHANGE "))
+        .map(|line| line.split_once(" kind=").unwrap().1.to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        changes,
+        ["patch path=\"src/lib.rs\" changed=true added=1 removed=1"]
+    );
 
     let requests = (0..3)
         .map(|_| {

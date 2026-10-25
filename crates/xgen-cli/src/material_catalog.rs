@@ -263,6 +263,27 @@ impl RunMaterialCatalog {
         Ok(record.arguments)
     }
 
+    /// Arguments of a workspace Step exactly as planned and approved, bound to its material digest.
+    pub(crate) fn workspace_arguments(
+        &self,
+        reference: &ReconstructableMaterialReference,
+        step_id: &str,
+        material_digest: &str,
+        capability_id: &str,
+    ) -> Result<Value, MaterialProviderFailure> {
+        if reference.provider_id() != WORKSPACE_READ_MATERIAL_PROVIDER_ID {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        let record = self.reconstruct_record(reference.reference_id(), reference.revision())?;
+        if record.step_id != step_id
+            || record.material_digest != material_digest
+            || record.capability.capability_id != capability_id
+        {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        Ok(record.arguments)
+    }
+
     fn reconstruct_record(
         &self,
         reference_id: &str,
