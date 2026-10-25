@@ -9,14 +9,14 @@ use xgen_runtime::{
     AdapterPrepareFailure, AdapterPrepareRequest, AdapterReconcileRequest,
     AdapterReconciliationInconclusiveReason, AdapterReconciliationObservation, AdapterToolOutput,
     EffectAdapter, EffectVerifier, PreparedAdapterInvocation, RuleVerificationObservation,
-    VerificationPortFailure, VerificationReport, VerificationRequest, VerifiedArtifactDescriptor,
-    VerifierOutputDigest,
+    StepFailureCode, VerificationPortFailure, VerificationReport, VerificationRequest,
+    VerifiedArtifactDescriptor, VerifierOutputDigest,
 };
 use xgen_workgraph::EffectClass;
 
 use crate::atomic_commit::{AtomicCommitFailure, MAX_ATOMIC_TEXT_BYTES, commit_atomic};
 use crate::path::{RelativePath, parse_canonical};
-use crate::read_text::{ReadTextLimits, read_text, sha256_digest};
+use crate::read_text::{ReadFailure, ReadTextLimits, read_text, sha256_digest};
 use crate::{APPLY_PATCH_CAPABILITY_ID, APPLY_PATCH_CONTRACT_VERSION, WorkspaceRoot};
 
 /// Maximum total UTF-8 bytes across every `oldText` and `newText` patch field.
@@ -214,6 +214,7 @@ impl PreparedAdapterInvocation for PreparedApplyPatch {
             Err(failure) => AdapterExecutionObservation::Failed {
                 evidence_digest: AdapterEvidenceDigest::new(failure.evidence_digest())
                     .expect("a SHA-256 digest is canonical"),
+                failure_code: failure.failure_code(),
             },
         }
     }
@@ -234,7 +235,7 @@ struct InspectedOutput {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PatchFailure {
-    ReadSource,
+    ReadSource(ReadFailure),
     PreconditionConflict,
     ContextMissing,
     ContextAmbiguous,
@@ -246,7 +247,7 @@ enum PatchFailure {
 impl PatchFailure {
     fn evidence_digest(self) -> String {
         let code = match self {
-            Self::ReadSource => "read-source",
+            Self::ReadSource(_) => "read-source",
             Self::PreconditionConflict => "precondition-conflict",
             Self::ContextMissing => "context-missing",
             Self::ContextAmbiguous => "context-ambiguous",
@@ -255,6 +256,18 @@ impl PatchFailure {
             Self::Atomic(failure) => failure.code(),
         };
         sha256_digest(format!("xgeny.fs/apply-patch/failure/v1/{code}").as_bytes())
+    }
+
+    const fn failure_code(self) -> StepFailureCode {
+        match self {
+            Self::ReadSource(failure) => failure.failure_code(),
+            Self::PreconditionConflict => StepFailureCode::PreconditionConflict,
+            Self::ContextMissing => StepFailureCode::PatchContextMissing,
+            Self::ContextAmbiguous => StepFailureCode::PatchContextAmbiguous,
+            Self::OverlappingEdits => StepFailureCode::PatchEditsOverlap,
+            Self::ResultTooLarge => StepFailureCode::TooLarge,
+            Self::Atomic(failure) => failure.failure_code(),
+        }
     }
 }
 
@@ -426,7 +439,7 @@ fn apply_patch_to_file(
     edits: &[PatchEdit],
 ) -> Result<PatchCommit, PatchFailure> {
     let observed = read_text(root, relative_path, ReadTextLimits::default())
-        .map_err(|_| PatchFailure::ReadSource)?;
+        .map_err(PatchFailure::ReadSource)?;
     if observed.digest != expected_digest {
         return Err(PatchFailure::PreconditionConflict);
     }
@@ -575,29 +588,35 @@ mod tests {
                 sha256_digest(b"stale"),
                 vec![edit("two", "TWO")],
                 PatchFailure::PreconditionConflict,
+                StepFailureCode::PreconditionConflict,
             ),
             (
                 "one two one",
                 sha256_digest(b"one two one"),
                 vec![edit("missing", "new")],
                 PatchFailure::ContextMissing,
+                StepFailureCode::PatchContextMissing,
             ),
             (
                 "one two one",
                 sha256_digest(b"one two one"),
                 vec![edit("one", "ONE")],
                 PatchFailure::ContextAmbiguous,
+                StepFailureCode::PatchContextAmbiguous,
             ),
             (
                 "abcdef",
                 sha256_digest(b"abcdef"),
                 vec![edit("abc", ""), edit("cde", "")],
                 PatchFailure::OverlappingEdits,
+                StepFailureCode::PatchEditsOverlap,
             ),
         ];
-        for (source, expected, edits, failure) in cases {
+        for (source, expected, edits, failure, code) in cases {
             let fixture = Fixture::new(source);
-            assert_eq!(fixture.apply(&expected, &edits).unwrap_err(), failure);
+            let observed = fixture.apply(&expected, &edits).unwrap_err();
+            assert_eq!(observed, failure);
+            assert_eq!(observed.failure_code(), code);
             assert_eq!(fixture.content(), source);
         }
     }

@@ -529,7 +529,9 @@ pub enum RejectionReason {
     MaterialRejected,
     /// The model call was rejected. The class is the same durable class the journal records.
     ModelRejected(ModelCallRejectionReason),
-    FailedWork,
+    /// A Step with effects failed. The code is the value-free classification of that failure
+    /// (ADR-0054), when the adapter reported one.
+    FailedWork(Option<xgen_runtime::StepFailureCode>),
 }
 
 impl RejectionReason {
@@ -551,7 +553,16 @@ impl RejectionReason {
             Self::ProposalRejected(rejection) => proposal_rejection_code(rejection),
             Self::MaterialRejected => "material_rejected",
             Self::ModelRejected(reason) => model_rejection_code(reason),
-            Self::FailedWork => "failed_work",
+            Self::FailedWork(_) => "failed_work",
+        }
+    }
+
+    /// Classification of the failed Step that stopped the Run.
+    #[must_use]
+    pub const fn failure_code(self) -> Option<xgen_runtime::StepFailureCode> {
+        match self {
+            Self::FailedWork(code) => code,
+            _ => None,
         }
     }
 }
@@ -1751,7 +1762,37 @@ fn continue_incomplete(
     ) else {
         return classify_durable_boundary_after_driver_error(store, manifest);
     };
-    map_driver_outcome(manifest.run_id(), outcome)
+    let result = map_driver_outcome(manifest.run_id(), outcome)?;
+    Ok(with_blocking_failure_code(result, store))
+}
+
+/// Attach the failure code of the Step that stopped the Run. Read-only failures never stop a Run
+/// (ADR-0052), so the blocking Step is a failed Step with any other effect class.
+fn with_blocking_failure_code(
+    result: LocalCommandResult,
+    store: &SqliteRunStore,
+) -> LocalCommandResult {
+    let LocalCommandResult::Rejected {
+        run_id,
+        reason: RejectionReason::FailedWork(None),
+    } = result
+    else {
+        return result;
+    };
+    let code = store.load_current().ok().flatten().and_then(|state| {
+        state.steps.values().find_map(|step| {
+            (step.status == StepStatus::Failed
+                && step.intent.as_ref().is_some_and(|intent| {
+                    intent.effect_class != xgen_workgraph::EffectClass::ReadOnly
+                }))
+            .then_some(step.failure_code)
+            .flatten()
+        })
+    });
+    LocalCommandResult::Rejected {
+        run_id,
+        reason: RejectionReason::FailedWork(code),
+    }
 }
 
 fn classify_durable_boundary_after_driver_error(
@@ -2335,7 +2376,7 @@ fn map_driver_outcome(
         DriverOutcome::Quiescent(reason) => match reason {
             AgentLoopQuiescence::FailedSteps => LocalCommandResult::Rejected {
                 run_id,
-                reason: RejectionReason::FailedWork,
+                reason: RejectionReason::FailedWork(None),
             },
             AgentLoopQuiescence::ManualIntervention => LocalCommandResult::RecoveryRequired {
                 run_id,

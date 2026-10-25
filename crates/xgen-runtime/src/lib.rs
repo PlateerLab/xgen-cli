@@ -26,6 +26,7 @@ pub use registry::*;
 pub use router::*;
 pub use runtime::*;
 pub use verification::*;
+pub use xgen_workgraph::StepFailureCode;
 
 pub(crate) const LOCAL_EXECUTOR_ID: &str = "xgeny-local";
 

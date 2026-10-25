@@ -842,6 +842,7 @@ fn transitive_blocked_existing_dependency_cannot_consume_another_plan_turn() {
             step_id: "step-a".to_owned(),
             effect_id: "effect-a".to_owned(),
             evidence_digest: digest('7'),
+            failure_code: None,
         },
     );
     let second_proposal = digest('9');

@@ -385,6 +385,7 @@ fn completed_output_store() -> (OutputSnapshotStore, AgentLoopBudget, Value) {
         execution_receipt_digest: Some(receipt_digest),
         uncertainty_reason: None,
         reconciliation_evidence_digest: None,
+        failure_code: None,
     };
     let state = RunState {
         run_id: RUN_ID.to_owned(),

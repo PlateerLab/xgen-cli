@@ -262,6 +262,7 @@ impl PreparedAdapterInvocation for Invocation {
         if self.fail_operation.as_deref() == self.output["operation"].as_str() {
             return AdapterExecutionObservation::Failed {
                 evidence_digest: AdapterEvidenceDigest::new(digest(&self.output)).unwrap(),
+                failure_code: xgen_runtime::StepFailureCode::IoError,
             };
         }
         // No UNIQUE constraint or deduplication: an unsafe replay must remain visible.

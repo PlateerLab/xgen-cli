@@ -6,7 +6,9 @@ use cap_fs_ext::OpenOptionsMaybeDirExt as _;
 use cap_fs_ext::{DirExt as _, FollowSymlinks, OpenOptionsFollowExt as _, OpenOptionsSyncExt as _};
 use cap_std::fs::{Dir, File, OpenOptions, Permissions};
 
-use crate::path::RelativePath;
+use xgen_runtime::StepFailureCode;
+
+use crate::path::{OpenErrorClass, RelativePath, classify_open_error};
 use crate::read_text::sha256_digest;
 
 pub(crate) const MAX_ATOMIC_TEXT_BYTES: usize = 64 * 1024;
@@ -14,6 +16,7 @@ const TEMP_CREATE_ATTEMPTS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AtomicCommitFailure {
+    ParentNotFound,
     OpenParent,
     InspectTarget,
     Conflict,
@@ -27,6 +30,7 @@ pub(crate) enum AtomicCommitFailure {
 impl AtomicCommitFailure {
     pub(crate) const fn code(self) -> &'static str {
         match self {
+            Self::ParentNotFound => "parent-not-found",
             Self::OpenParent => "open-parent",
             Self::InspectTarget => "inspect-target",
             Self::Conflict => "precondition-conflict",
@@ -35,6 +39,21 @@ impl AtomicCommitFailure {
             Self::CommitRenameUnknown => "commit-rename-unknown",
             Self::CommitSyncUnknown => "commit-sync-unknown",
             Self::CommitVerifyUnknown => "commit-verify-unknown",
+        }
+    }
+
+    /// Classification of a definite failure. Every definite failure happens before the commit
+    /// rename, so the target is unchanged.
+    pub(crate) const fn failure_code(self) -> StepFailureCode {
+        match self {
+            Self::ParentNotFound => StepFailureCode::NotFound,
+            Self::OpenParent | Self::InspectTarget => StepFailureCode::Unavailable,
+            Self::Conflict => StepFailureCode::PreconditionConflict,
+            Self::CreateTemporary
+            | Self::WriteTemporary
+            | Self::CommitRenameUnknown
+            | Self::CommitSyncUnknown
+            | Self::CommitVerifyUnknown => StepFailureCode::IoError,
         }
     }
 
@@ -122,9 +141,14 @@ fn open_parent(root: &Dir, path: &RelativePath) -> Result<(Dir, String), AtomicC
         .try_clone()
         .map_err(|_| AtomicCommitFailure::OpenParent)?;
     for component in parents {
-        directory = directory
-            .open_dir_nofollow(component)
-            .map_err(|_| AtomicCommitFailure::OpenParent)?;
+        directory = directory.open_dir_nofollow(component).map_err(|error| {
+            match classify_open_error(&directory, component, &error) {
+                OpenErrorClass::Missing | OpenErrorClass::NotADirectory => {
+                    AtomicCommitFailure::ParentNotFound
+                }
+                OpenErrorClass::Refused => AtomicCommitFailure::OpenParent,
+            }
+        })?;
         if is_windows_reparse_point(
             &directory
                 .dir_metadata()
