@@ -1,3 +1,10 @@
 # Generated from upstream license texts; preserve their original whitespace and line endings.
 THIRD_PARTY_LICENSES.txt -text -whitespace
 crates/xgen-cli/licenses/* -text
+
+# Packed into every npm platform package and then verified byte-for-byte against
+# this copy on the runner that assembles the release, so its bytes must not
+# depend on the platform that checked it out. The Windows runner's
+# `core.autocrlf=true` rewrote it and only the win32-x64 tarball disagreed,
+# which failed v0.1.0-rc.3 at the bundle step (2026-10-24).
+LICENSE -text

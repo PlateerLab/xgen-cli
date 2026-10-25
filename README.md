@@ -6,7 +6,7 @@ Local-first general-purpose agent CLI and harness.
 
 ## 설치와 첫 모델 연결
 
-`v0.1.0-rc.3` release artifact가 게시되면 Linux x86-64/ARM64, macOS Intel/Apple Silicon, Windows
+`v0.1.0-rc.4` release artifact가 게시되면 Linux x86-64/ARM64, macOS Intel/Apple Silicon, Windows
 x86-64용 동일 native binary를 GitHub checksum installer와 npm 두 경로로 제공합니다. Native installer는
 Rust, Node.js, Python, SQLite 실행 파일이나 XGEN state용 별도 daemon을 요구하지 않습니다. npm 경로만
 얇은 launcher를 위해 Node.js 22.14 이상이 필요하며 install script, GitHub 추가 download와 native
@@ -18,7 +18,7 @@ Node.js가 이미 있다면 exact RC를 npm으로 설치할 수 있습니다. `-
 제거하므로 사용하지 않습니다.
 
 ```bash
-npm install --global @xgen-ai/cli@0.1.0-rc.3
+npm install --global @xgen-ai/cli@0.1.0-rc.4
 xgen --version
 ```
 
@@ -30,8 +30,8 @@ Linux/macOS:
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.3/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.3
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.4/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.4
 rm -f "$installer"
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -40,9 +40,9 @@ Windows PowerShell:
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.3/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.4/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.3
+& $installer -Version v0.1.0-rc.4
 Remove-Item -LiteralPath $installer
 $env:Path = "$env:LOCALAPPDATA\XGEN\bin;$env:Path"
 ```

@@ -62,7 +62,7 @@ XGEN Intel macOS binary와 installer 검증 범위에는 영향이 없다.
 Version을 올린 변경을 먼저 PR로 merge한 뒤 main head에 tag를 만든다. `main`에는 직접 push하지 않는다.
 
 ```bash
-release_version=0.1.0-rc.3
+release_version=0.1.0-rc.4
 release_tag="v$release_version"
 git fetch origin main
 git tag -a "$release_tag" origin/main -m "XGEN $release_version"
