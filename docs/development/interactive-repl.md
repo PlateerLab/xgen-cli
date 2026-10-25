@@ -20,11 +20,17 @@ observation이 포함될 수 있다. Read, write와 process execute는 각각 �
 한 goal을 처리하는 동안 승인한 종류는 이후 continuation에서도 유지하며, 다음 goal이나 명시적인
 `/resume`에서는 다시 기본 approval mode를 적용한다. `deny`는 계속 실행을 차단한다.
 
+승인 prompt의 답은 세 가지다([ADR-0058](../adr/0058-session-approval-answer.md)). `y`는 지금처럼 이번
+goal에만 허용한다. `a`는 그 종류를 남은 REPL session 동안 `allow`로 바꾸며
+`/permissions KIND allow`와 같다. 바뀐 사실과 되돌리는 명령을 한 줄로 표시한다. 그 밖의 입력은 거절이다.
+Session 허용은 파일에 저장하지 않고 process가 끝나면 사라진다.
+
 ```text
 xgen> 프로젝트 구조를 보고 테스트 실패를 수정해줘.
-Allow sending the goal, session context, and tool observations to the model? [y/N] y
+Allow sending the goal, session context, and tool observations to the model? [y/a/N] y
 Thinking… · 2s
-Allow read for this durable continuation? [y/N] y
+Allow read for this durable continuation? [y/a/N] a
+read allowed for this session (/permissions read ask to undo)
 ```
 
 줄 끝에 unescaped `\`를 쓰면 다음 줄을 같은 goal로 입력한다.

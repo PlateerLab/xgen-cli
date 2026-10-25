@@ -591,7 +591,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     host,
                     cancellation,
                     result,
-                    permissions,
+                    &mut permissions,
                     grants,
                     interactive_display,
                     &mut active_run,
@@ -623,7 +623,8 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                         continue;
                     }
                     PermissionMode::Ask => {
-                        if !prompt_approval(reader, output, PermissionKind::Model)? {
+                        let answer = prompt_approval(reader, output, PermissionKind::Model)?;
+                        if !answer.record(output, &mut permissions, PermissionKind::Model)? {
                             writeln!(output, "cancelled before model egress")?;
                             continue;
                         }
@@ -646,7 +647,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     host,
                     cancellation,
                     result,
-                    permissions,
+                    &mut permissions,
                     grants,
                     interactive_display,
                     &mut active_run,
@@ -676,7 +677,7 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
     host: &mut H,
     cancellation: &Cancellation,
     mut result: Result<LocalCommandResult, ReplFailure>,
-    permissions: PermissionSettings,
+    permissions: &mut PermissionSettings,
     mut grants: InvocationGrants,
     interactive_display: bool,
     active_run: &mut Option<String>,
@@ -757,7 +758,9 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                 let approved = match permissions.get(kind) {
                     PermissionMode::Allow => true,
                     PermissionMode::Deny => false,
-                    PermissionMode::Ask => prompt_approval(reader, output, kind)?,
+                    PermissionMode::Ask => {
+                        prompt_approval(reader, output, kind)?.record(output, permissions, kind)?
+                    }
                 };
                 if !approved {
                     writeln!(output, "paused: {}", reason.code())?;
@@ -1390,30 +1393,71 @@ const fn exhausted_quiescence_hint(reason: PauseReason) -> Option<&'static str> 
     }
 }
 
+/// The answer to one approval prompt (ADR-0058).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApprovalAnswer {
+    /// Grant only the current continuation.
+    Once,
+    /// Grant this continuation and switch the kind to `allow` for the rest of the REPL session.
+    Session,
+    Denied,
+}
+
+impl ApprovalAnswer {
+    fn parse(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => Self::Once,
+            "a" | "always" => Self::Session,
+            _ => Self::Denied,
+        }
+    }
+
+    /// Apply a session answer to the REPL modes and report whether the continuation is granted.
+    fn record(
+        self,
+        output: &mut impl Write,
+        permissions: &mut PermissionSettings,
+        kind: PermissionKind,
+    ) -> io::Result<bool> {
+        match self {
+            Self::Once => Ok(true),
+            Self::Session => {
+                permissions.set(kind, PermissionMode::Allow);
+                writeln!(
+                    output,
+                    "{0} allowed for this session (/permissions {0} ask to undo)",
+                    kind.label()
+                )?;
+                Ok(true)
+            }
+            Self::Denied => Ok(false),
+        }
+    }
+}
+
 fn prompt_approval<R: BufRead, W: Write>(
     reader: &mut R,
     output: &mut W,
     kind: PermissionKind,
-) -> io::Result<bool> {
+) -> io::Result<ApprovalAnswer> {
     if kind == PermissionKind::Model {
         write!(
             output,
-            "Allow sending the goal, session context, and tool observations to the model? [y/N] "
+            "Allow sending the goal, session context, and tool observations to the model? [y/a/N] "
         )?;
     } else {
         write!(
             output,
-            "Allow {} for this durable continuation? [y/N] ",
+            "Allow {} for this durable continuation? [y/a/N] ",
             kind.label()
         )?;
     }
     output.flush()?;
     match read_bounded_line(reader) {
-        Ok(Some(value)) => Ok(matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "y" | "yes"
-        )),
-        Ok(None) | Err(InputFailure::TooLarge | InputFailure::InvalidCommand) => Ok(false),
+        Ok(Some(value)) => Ok(ApprovalAnswer::parse(&value)),
+        Ok(None) | Err(InputFailure::TooLarge | InputFailure::InvalidCommand) => {
+            Ok(ApprovalAnswer::Denied)
+        }
         Err(InputFailure::Unavailable) => Err(io::Error::other("approval input unavailable")),
     }
 }
@@ -1620,6 +1664,10 @@ fn print_help(output: &mut impl Write) -> io::Result<()> {
     writeln!(
         output,
         "/permissions KIND ask|allow|deny change model/read/write/execute mode"
+    )?;
+    writeln!(
+        output,
+        "approval prompts: y = this request, a = rest of this session, N = deny"
     )?;
     writeln!(
         output,
@@ -2341,6 +2389,56 @@ mod tests {
         assert_eq!(output.matches("Allow read").count(), 2);
         assert_eq!(output.matches("Allow write").count(), 1);
         assert_eq!(output.matches("Allow execute").count(), 1);
+    }
+
+    #[test]
+    fn session_answer_allows_the_kind_for_later_goals_and_once_does_not() {
+        let first = "run-11111111111111111111111111111111".to_owned();
+        let second = "run-22222222222222222222222222222222".to_owned();
+        let mut host = FakeHost::new([
+            LocalCommandResult::Paused {
+                run_id: Some(first.clone()),
+                reason: PauseReason::ReadApprovalRequired,
+            },
+            LocalCommandResult::Paused {
+                run_id: Some(first.clone()),
+                reason: PauseReason::WriteApprovalRequired,
+            },
+            LocalCommandResult::Completed {
+                run_id: first,
+                summary: "done".to_owned(),
+            },
+            LocalCommandResult::Paused {
+                run_id: Some(second.clone()),
+                reason: PauseReason::WriteApprovalRequired,
+            },
+            LocalCommandResult::Completed {
+                run_id: second,
+                summary: "done".to_owned(),
+            },
+        ]);
+        let mut input =
+            io::Cursor::new(b"first goal\nA\nalways\ny\nsecond goal\nyes\n/permissions\n/exit\n");
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        assert_eq!(host.starts.len(), 2);
+        assert!(host.starts[0].1.model && !host.starts[0].1.read);
+        assert!(host.starts[1].1.model && host.starts[1].1.read);
+        assert!(!host.starts[1].1.write);
+        assert!(
+            host.resumes
+                .iter()
+                .all(|(_, grants)| grants.model && grants.read)
+        );
+        assert!(host.resumes[1].1.write && host.resumes[2].1.write);
+        let output = String::from_utf8(output).unwrap();
+        assert_eq!(output.matches("Allow sending").count(), 1);
+        assert_eq!(output.matches("Allow read").count(), 1);
+        assert_eq!(output.matches("Allow write").count(), 2);
+        assert!(output.contains("model allowed for this session (/permissions model ask to undo)"));
+        assert!(output.contains("read allowed for this session"));
+        assert!(!output.contains("write allowed for this session"));
+        assert!(output.contains("permissions: model=allow read=allow write=ask execute=ask"));
     }
 
     #[test]

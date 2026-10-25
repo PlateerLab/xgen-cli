@@ -41,6 +41,7 @@ Model egress, read, write, execute는 각각 `ask`, `allow`, `deny` session mode
 `ask`다. `ask`의 yes는 현재 bounded continuation에만 기존 boolean grant를 전달한다. `allow`는 사용자가
 REPL에서 명시한 session 동의이며 기존 Core의 exact action-bound authorization을 대체하지 않는다.
 `deny`는 effect를 수행하지 않고 Run을 pause 상태로 남긴다.
+승인 prompt에서 바로 session `allow`로 바꾸는 답 `a`는 [ADR-0058](0058-session-approval-answer.md)이 정한다.
 
 Workspace discovery scope는 `.`이다. Process executable은 PATH의 임의 이름을 허용하지 않고 설치된 공통
 개발 도구의 고정 allowlist만 host catalog에 넣는다. 현재 family는 Git, Rust, Node, Python, Go,

@@ -160,10 +160,10 @@ fn bare_xgen_streams_durable_progress_prompts_separate_approvals_and_replays_off
 
     assert!(stdout.contains("XGEN Developer Preview"));
     assert!(stdout.contains(
-        "Allow sending the goal, session context, and tool observations to the model? [y/N]"
+        "Allow sending the goal, session context, and tool observations to the model? [y/a/N]"
     ));
-    assert!(stdout.contains("Allow read for this durable continuation? [y/N]"));
-    assert!(stdout.contains("Allow execute for this durable continuation? [y/N]"));
+    assert!(stdout.contains("Allow read for this durable continuation? [y/a/N]"));
+    assert!(stdout.contains("Allow execute for this durable continuation? [y/a/N]"));
     assert_eq!(
         stdout
             .matches("Allow sending the goal, session context, and tool observations to the model?")
