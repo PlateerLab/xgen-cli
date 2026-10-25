@@ -67,6 +67,9 @@ xgen model check --compatibility
 
 # 상세 durable progress 로그가 필요할 때
 xgen --debug
+
+# 요청 하나가 쓸 수 있는 model turn 수를 바꿀 때 (기본 24)
+xgen --max-model-turns 48
 ```
 
 RC3의 workspace mode는 다음처럼 프로젝트 root와 실행 가능한 개발 도구를 명시적으로 허용한다.

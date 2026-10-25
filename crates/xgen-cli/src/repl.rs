@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use xgen_cli::{
     DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason, RejectionReason,
 };
+use xgen_runtime::AgentLoopQuiescence;
 
 const MAX_REPL_LINE_BYTES: usize = 16 * 1024;
 const MAX_REPL_GOAL_BYTES: usize = 16 * 1024;
@@ -716,8 +717,29 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                     writeln!(output, "paused: user_cancelled")?;
                     return Ok(());
                 }
+                if let Some(detail) = reason.quiescence_code() {
+                    writeln!(output, "paused: {} ({detail})", reason.code())?;
+                    if let Some(hint) = exhausted_quiescence_hint(reason) {
+                        // The budget is recorded in the manifest, so /resume would stop at
+                        // once. Detach so the next goal starts without /clear.
+                        *active_run = None;
+                        session_context.pending_goal = None;
+                        writeln!(output, "{hint}")?;
+                        writeln!(
+                            output,
+                            "Changes already made stay in the workspace, but the next goal does not see this goal's steps; restate what is left."
+                        )?;
+                    }
+                    return Ok(());
+                }
                 let Some(kind) = pause_permission(reason) else {
                     writeln!(output, "paused: {}", reason.code())?;
+                    if reason == PauseReason::TickBudgetExhausted {
+                        writeln!(
+                            output,
+                            "The goal is within its budget; /resume continues it."
+                        )?;
+                    }
                     return Ok(());
                 };
                 let Some(run_id) = active_run.clone() else {
@@ -1165,9 +1187,28 @@ const fn pause_permission(reason: PauseReason) -> Option<PermissionKind> {
         PauseReason::ReadApprovalRequired => Some(PermissionKind::Read),
         PauseReason::WriteApprovalRequired => Some(PermissionKind::Write),
         PauseReason::ExecuteApprovalRequired => Some(PermissionKind::Execute),
-        PauseReason::UserCancelled | PauseReason::TickBudgetExhausted | PauseReason::Quiescent => {
-            None
-        }
+        PauseReason::UserCancelled
+        | PauseReason::TickBudgetExhausted
+        | PauseReason::Quiescent(_) => None,
+    }
+}
+
+const fn exhausted_quiescence_hint(reason: PauseReason) -> Option<&'static str> {
+    match reason {
+        PauseReason::Quiescent(
+            AgentLoopQuiescence::ModelTurnBudgetExhausted
+            | AgentLoopQuiescence::ModelCallBudgetExhausted
+            | AgentLoopQuiescence::PlannedStepBudgetExhausted
+            | AgentLoopQuiescence::ToolCallBudgetExhausted,
+        ) => Some(
+            "The goal used its whole budget before answering; /resume cannot extend it. \
+             Start xgen with --max-model-turns N for a larger budget.",
+        ),
+        PauseReason::Quiescent(
+            AgentLoopQuiescence::ContextBudgetExceeded
+            | AgentLoopQuiescence::ContextInputLimitExceeded,
+        ) => Some("The goal's context no longer fits the model input; /resume cannot shrink it."),
+        _ => None,
     }
 }
 
@@ -2275,6 +2316,62 @@ mod tests {
         run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
         assert!(host.starts[1].0.contains("different answer"));
         assert!(!host.starts[1].0.contains("paused request"));
+    }
+
+    #[test]
+    fn exhausted_budget_names_the_reason_and_lets_the_next_goal_start() {
+        let mut host = FakeHost::new([
+            LocalCommandResult::Paused {
+                run_id: Some("run-a".to_owned()),
+                reason: PauseReason::Quiescent(AgentLoopQuiescence::ModelTurnBudgetExhausted),
+            },
+            LocalCommandResult::Responded {
+                run_id: "run-b".to_owned(),
+                summary: "done".to_owned(),
+            },
+        ]);
+        let mut input =
+            io::Cursor::new(b"/permissions model allow\nlong task\nfollow-up\n/status\n/exit\n");
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("paused: quiescent (model_turn_budget_exhausted)"));
+        assert!(output.contains("--max-model-turns N"));
+        assert!(!output.contains("active_run_paused"));
+        assert_eq!(host.starts.len(), 2);
+        assert!(host.starts[1].0.contains("follow-up"));
+        assert!(!host.starts[1].0.contains("long task"));
+        assert!(output.contains("last_run: run-b"));
+        assert!(host.resumes.is_empty());
+    }
+
+    #[test]
+    fn other_quiescence_keeps_the_run_attached() {
+        let mut host = FakeHost::new([LocalCommandResult::Paused {
+            run_id: Some("run-a".to_owned()),
+            reason: PauseReason::Quiescent(AgentLoopQuiescence::WaitingDependencies),
+        }]);
+        let mut input = io::Cursor::new(b"/permissions model allow\ntask\nnext\n/exit\n");
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("paused: quiescent (waiting_dependencies)"));
+        assert!(output.contains("error: active_run_paused; use /resume or /clear"));
+        assert_eq!(host.starts.len(), 1);
+    }
+
+    #[test]
+    fn tick_budget_pause_points_to_resume() {
+        let mut host = FakeHost::new([LocalCommandResult::Paused {
+            run_id: Some("run-a".to_owned()),
+            reason: PauseReason::TickBudgetExhausted,
+        }]);
+        let mut input = io::Cursor::new(b"/permissions model allow\ntask\n/exit\n");
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("paused: tick_budget_exhausted"));
+        assert!(output.contains("/resume continues it"));
     }
 
     #[test]
