@@ -3,7 +3,7 @@
 `@xgen-ai/cli` is the npm distribution wrapper for the native XGEN CLI.
 
 ```bash
-npm install --global @xgen-ai/cli@0.1.0-rc.4
+npm install --global @xgen-ai/cli@0.1.0-rc.5
 xgen --version
 ```
 

@@ -6,7 +6,7 @@ XGEN는 Developer Preview다. 새 보안 수정은 원칙적으로 가장 최근
 더 높은 새 version으로 제공한다. 이미 게시된 GitHub tag, Release asset 또는 npm package version을
 이동·교체·재사용하지 않는다.
 
-`v0.1.0-rc.4`가 게시되기 전의 최신 immutable release는 `v0.1.0-rc.2`다. RC3가 게시된 뒤에는 RC2에 새
+`v0.1.0-rc.5`가 게시되기 전의 최신 immutable release는 `v0.1.0-rc.4`다. RC3가 게시된 뒤에는 RC2에 새
 기능이나 보안 수정을 backport한다고 약속하지 않는다. RC2/RC3 Run의 호환·rollback 경계는
 [시작하기](docs/getting-started.md#업데이트와-rc2-rollback)를 따른다.
 

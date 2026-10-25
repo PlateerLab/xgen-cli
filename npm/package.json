@@ -1,6 +1,6 @@
 {
   "name": "xgen-npm-distribution-workspace",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.19.0",
