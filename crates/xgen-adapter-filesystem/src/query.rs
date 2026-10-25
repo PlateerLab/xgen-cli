@@ -1009,7 +1009,7 @@ fn open_directory(root: &Dir, path: &RelativePath) -> Result<Dir, QueryFailure> 
                 // means the requested path does not exist.
                 OpenErrorClass::NotADirectory if index == last => QueryFailure::NotADirectory,
                 OpenErrorClass::Missing | OpenErrorClass::NotADirectory => QueryFailure::NotFound,
-                OpenErrorClass::Refused => QueryFailure::Open,
+                OpenErrorClass::Directory | OpenErrorClass::Refused => QueryFailure::Open,
             }
         })?;
         if is_windows_reparse_point(&directory.dir_metadata().map_err(|_| QueryFailure::Open)?) {
@@ -1035,6 +1035,7 @@ fn open_regular_file(root: &Dir, path: &RelativePath) -> Result<File, QueryFailu
     let file = directory.open_with(leaf, &options).map_err(|error| {
         match classify_open_error(&directory, leaf, &error) {
             OpenErrorClass::Missing | OpenErrorClass::NotADirectory => QueryFailure::NotFound,
+            OpenErrorClass::Directory => QueryFailure::NotAFile,
             OpenErrorClass::Refused => QueryFailure::Open,
         }
     })?;
