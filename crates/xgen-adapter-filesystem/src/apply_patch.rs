@@ -14,15 +14,20 @@ use xgen_runtime::{
 };
 use xgen_workgraph::EffectClass;
 
-use crate::atomic_commit::{AtomicCommitFailure, MAX_ATOMIC_TEXT_BYTES, commit_atomic};
+use crate::atomic_commit::{
+    AtomicCommitFailure, MAX_ATOMIC_TARGET_BYTES, MAX_ATOMIC_TEXT_BYTES, commit_atomic,
+};
 use crate::path::{RelativePath, parse_canonical};
-use crate::read_text::{ReadFailure, ReadTextLimits, read_text, sha256_digest};
+use crate::read_text::{ReadFailure, is_canonical_digest, read_text_up_to, sha256_digest};
 use crate::{APPLY_PATCH_CAPABILITY_ID, APPLY_PATCH_CONTRACT_VERSION, WorkspaceRoot};
 
 /// Maximum total UTF-8 bytes across every `oldText` and `newText` patch field.
 pub const MAX_APPLY_PATCH_BYTES: usize = MAX_ATOMIC_TEXT_BYTES;
 /// Maximum number of exact contextual edits in one atomic patch.
 pub const MAX_APPLY_PATCH_EDITS: usize = 32;
+/// Maximum UTF-8 bytes of the patched file, before and after the edits. The output never carries
+/// file content, so this follows the read-text-lines file ceiling instead of the 64 KiB bound.
+pub const MAX_APPLY_PATCH_TARGET_BYTES: usize = MAX_ATOMIC_TARGET_BYTES;
 
 #[derive(Clone)]
 pub struct ApplyPatchAdapter {
@@ -103,8 +108,12 @@ impl EffectVerifier for ApplyPatchVerifier {
             inspect_output(output.output(), request.outcome_evidence_digest().as_str())?;
         let relative = parse_canonical(&self.root.workspace_id, &inspected.path)
             .map_err(|_| VerificationPortFailure::ResponseUnverifiable)?;
-        let observed = read_text(&self.root.directory, &relative, ReadTextLimits::default())
-            .map_err(|_| VerificationPortFailure::EvidenceUnavailable)?;
+        let observed = read_text_up_to(
+            &self.root.directory,
+            &relative,
+            MAX_APPLY_PATCH_TARGET_BYTES,
+        )
+        .map_err(|_| VerificationPortFailure::EvidenceUnavailable)?;
         let postcondition = inspected.digest == observed.digest
             && inspected.byte_size == observed.content.len()
             && request.outcome_evidence_digest().as_str() == observed.digest;
@@ -346,7 +355,7 @@ fn parse_arguments(
     let expected_digest = object
         .get("expectedDigest")
         .and_then(Value::as_str)
-        .filter(|digest| canonical_digest(digest))
+        .filter(|digest| is_canonical_digest(digest))
         .ok_or(AdapterPrepareFailure::InvalidMaterial)?
         .to_owned();
     let values = object
@@ -406,13 +415,13 @@ fn inspect_output(
     let digest = object
         .get("digest")
         .and_then(Value::as_str)
-        .filter(|digest| canonical_digest(digest))
+        .filter(|digest| is_canonical_digest(digest))
         .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
     let byte_size = object
         .get("byteSize")
         .and_then(Value::as_u64)
         .and_then(|size| usize::try_from(size).ok())
-        .filter(|size| *size <= MAX_ATOMIC_TEXT_BYTES)
+        .filter(|size| *size <= MAX_APPLY_PATCH_TARGET_BYTES)
         .ok_or(VerificationPortFailure::ResponseUnverifiable)?;
     let edit_count = object
         .get("editCount")
@@ -438,7 +447,7 @@ fn apply_patch_to_file(
     expected_digest: &str,
     edits: &[PatchEdit],
 ) -> Result<PatchCommit, PatchFailure> {
-    let observed = read_text(root, relative_path, ReadTextLimits::default())
+    let observed = read_text_up_to(root, relative_path, MAX_APPLY_PATCH_TARGET_BYTES)
         .map_err(PatchFailure::ReadSource)?;
     if observed.digest != expected_digest {
         return Err(PatchFailure::PreconditionConflict);
@@ -487,7 +496,7 @@ fn apply_exact_edits(source: &str, edits: &[PatchEdit]) -> Result<String, PatchF
         .len()
         .checked_sub(removed_bytes)
         .and_then(|size| size.checked_add(inserted_bytes))
-        .filter(|size| *size <= MAX_ATOMIC_TEXT_BYTES)
+        .filter(|size| *size <= MAX_APPLY_PATCH_TARGET_BYTES)
         .ok_or(PatchFailure::ResultTooLarge)?;
     let mut result = source.to_owned();
     result.reserve(result_size.saturating_sub(source.len()));
@@ -507,15 +516,6 @@ fn unique_range(source: &str, needle: &str) -> Result<Range<usize>, PatchFailure
         return Err(PatchFailure::ContextAmbiguous);
     }
     Ok(start..start + needle.len())
-}
-
-fn canonical_digest(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|hex| {
-        hex.len() == 64
-            && hex
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    })
 }
 
 #[cfg(test)]
@@ -622,6 +622,30 @@ mod tests {
     }
 
     #[test]
+    fn files_beyond_the_read_text_limit_are_patched_up_to_the_target_limit() {
+        let large = format!("{}\nneedle = 1\n", "x".repeat(MAX_ATOMIC_TEXT_BYTES * 2));
+        let fixture = Fixture::new(&large);
+        let committed = fixture
+            .apply(
+                &sha256_digest(large.as_bytes()),
+                &[edit("needle = 1", "needle = 2")],
+            )
+            .unwrap();
+        let expected = large.replace("needle = 1", "needle = 2");
+        assert_eq!(fixture.content(), expected);
+        assert_eq!(committed.digest, sha256_digest(expected.as_bytes()));
+        assert_eq!(committed.byte_size, expected.len());
+
+        let oversized = format!("{}x", "a".repeat(MAX_APPLY_PATCH_TARGET_BYTES));
+        let fixture = Fixture::new(&oversized);
+        let failure = fixture
+            .apply(&sha256_digest(oversized.as_bytes()), &[edit("x", "y")])
+            .unwrap_err();
+        assert_eq!(failure.failure_code(), StepFailureCode::TooLarge);
+        assert_eq!(fixture.content(), oversized);
+    }
+
+    #[test]
     fn overlapping_occurrences_are_ambiguous() {
         assert_eq!(
             unique_range("aaa", "aa"),
@@ -630,8 +654,8 @@ mod tests {
     }
 
     #[test]
-    fn result_cannot_expand_beyond_the_atomic_file_limit() {
-        let source = format!("{}x", "a".repeat(MAX_ATOMIC_TEXT_BYTES - 1));
+    fn result_cannot_expand_beyond_the_target_file_limit() {
+        let source = format!("{}x", "a".repeat(MAX_APPLY_PATCH_TARGET_BYTES - 1));
         assert_eq!(
             apply_exact_edits(&source, &[edit("x", "xx")]),
             Err(PatchFailure::ResultTooLarge)
@@ -640,9 +664,9 @@ mod tests {
 
     #[test]
     fn simultaneous_edits_use_the_final_size_not_an_ordered_intermediate_size() {
-        let source = format!("x{}y", "a".repeat(MAX_ATOMIC_TEXT_BYTES - 2));
+        let source = format!("x{}y", "a".repeat(MAX_APPLY_PATCH_TARGET_BYTES - 2));
         let result = apply_exact_edits(&source, &[edit("x", "xx"), edit("y", "")]).unwrap();
-        assert_eq!(result.len(), MAX_ATOMIC_TEXT_BYTES);
+        assert_eq!(result.len(), MAX_APPLY_PATCH_TARGET_BYTES);
         assert!(result.starts_with("xx"));
         assert!(!result.ends_with('y'));
     }

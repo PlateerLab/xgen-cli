@@ -3,12 +3,12 @@
   "kind": "CapabilityDefinition",
   "metadata": {
     "id": "xgeny.fs/apply-patch",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "displayName": "Apply exact text edits atomically",
     "labels": {"xgeny.io/pack": "core-os"}
   },
   "spec": {
-    "summary": "Apply non-overlapping exact contextual edits to one existing UTF-8 text file atomically.",
+    "summary": "Apply non-overlapping exact contextual edits to one existing UTF-8 text file of up to 8 MiB atomically. expectedDigest is the whole-file digest from read-text digest or read-text-lines fileDigest.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -40,7 +40,7 @@
       "properties": {
         "path": {"type": "string", "minLength": 1},
         "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
-        "byteSize": {"type": "integer", "minimum": 0, "maximum": 65536},
+        "byteSize": {"type": "integer", "minimum": 0, "maximum": 8388608},
         "changed": {"type": "boolean"},
         "editCount": {"type": "integer", "minimum": 1, "maximum": 32}
       },
@@ -68,7 +68,7 @@
     ],
     "discovery": {
       "keywords": ["file", "patch", "edit", "atomic", "text"],
-      "examples": ["Replace one exact function body previously observed with read-text without rewriting the whole file."]
+      "examples": ["Replace one exact function body previously observed with read-text or read-text-lines without rewriting the whole file."]
     }
   }
 }

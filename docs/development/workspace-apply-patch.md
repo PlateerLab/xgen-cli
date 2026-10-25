@@ -1,6 +1,6 @@
 # Workspace apply patch
 
-`xgeny.fs/apply-patch@1.0.0`은 앞서 읽은 기존 UTF-8 file에 exact contextual edit를 적용하고 전체 결과를
+`xgeny.fs/apply-patch@2.0.0`은 앞서 읽은 기존 UTF-8 file에 exact contextual edit를 적용하고 전체 결과를
 한 번에 atomic commit한다. 정본 의미와 비보장은
 [ADR-0026](../adr/0026-strict-single-file-atomic-patch.md)을 따른다.
 
@@ -18,7 +18,8 @@ xgen run \
   '구현을 읽고 필요한 부분만 수정해줘.'
 ```
 
-모델은 먼저 `read-text`에서 받은 exact digest와 content를 사용해 patch를 계획한다. 입력 예시는 다음과
+모델은 먼저 `read-text`에서 받은 exact digest와 content를 사용해 patch를 계획한다. 64 KiB를 넘는 file은
+`read-text-lines`로 범위를 읽고 그 출력의 `fileDigest`를 쓴다([ADR-0056](../adr/0056-large-file-patch.md)). 입력 예시는 다음과
 같다.
 
 ```json
@@ -50,7 +51,7 @@ xgen resume <run-id> \
 - 각 oldText는 원본에 byte-exact하게 정확히 한 번 있어야 한다.
 - edit range끼리 겹치면 전체 patch를 거부한다.
 - fuzzy match, line-number 보정, regex와 부분 적용은 없다.
-- 원본 또는 결과 file이 64 KiB를 넘으면 거부한다.
+- 원본 또는 결과 file이 8 MiB를 넘으면 거부한다. 2.0.0 이전에는 64 KiB였다([ADR-0056](../adr/0056-large-file-patch.md)).
 
 성공 output에는 path/digest/byte size/changed/edit count만 들어간다. Raw edit는 process 재개를 위해 private
 `materials.sqlite3`에 저장되며 Receipt나 tool output에는 복사하지 않는다. State root는 source와 같은

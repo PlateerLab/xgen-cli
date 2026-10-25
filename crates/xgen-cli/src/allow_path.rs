@@ -219,7 +219,7 @@ fn planner_scope_hint(
     let files = serde_json::to_string(&files)
         .map_err(|_| WorkspaceReadAuthorizationError::Canonicalization)?;
     let hint = format!(
-        "Caller-authorized directory roots (list/search targets and descendant stat/read/write-atomic/apply-patch targets): {directories}. Additional exact files (stat/read only): {files}. write-atomic requires expectedDigest=null for creation or the exact digest previously read for replacement. apply-patch requires the exact digest previously read and 1..={MAX_APPLY_PATCH_EDITS} non-overlapping edits; every oldText must occur exactly once."
+        "Caller-authorized directory roots (list/search targets and descendant stat/read/write-atomic/apply-patch targets): {directories}. Additional exact files (stat/read only): {files}. write-atomic requires expectedDigest=null for creation or the exact digest previously read for replacement. apply-patch requires the exact whole-file digest previously read (read-text digest or read-text-lines fileDigest) and 1..={MAX_APPLY_PATCH_EDITS} non-overlapping edits; every oldText must occur exactly once."
     );
     if hint.len() > MAX_PLANNER_SCOPE_HINT_BYTES {
         return Err(WorkspaceReadAuthorizationError::PlannerHintTooLarge);
@@ -382,9 +382,14 @@ mod tests {
     }
 
     fn capability(id: &str) -> CapabilityRef {
+        let contract_version = match id {
+            READ_TEXT_LINES_CAPABILITY_ID => READ_TEXT_LINES_CONTRACT_VERSION,
+            APPLY_PATCH_CAPABILITY_ID => APPLY_PATCH_CONTRACT_VERSION,
+            _ => "1.0.0",
+        };
         CapabilityRef {
             capability_id: id.to_owned(),
-            contract_version: "1.0.0".to_owned(),
+            contract_version: contract_version.to_owned(),
         }
     }
 

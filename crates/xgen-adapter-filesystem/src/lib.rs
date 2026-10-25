@@ -19,6 +19,7 @@ use xgen_policy::{ResourceResolutionFailure, ResourceResolver};
 
 pub use apply_patch::{
     ApplyPatchAdapter, ApplyPatchVerifier, MAX_APPLY_PATCH_BYTES, MAX_APPLY_PATCH_EDITS,
+    MAX_APPLY_PATCH_TARGET_BYTES,
 };
 pub use query::{
     FilesystemQueryAdapter, FilesystemQueryVerifier, MAX_DIRECTORY_SCAN_ENTRIES,
@@ -42,7 +43,7 @@ pub const READ_TEXT_OPERATION_REF: &str = "readText";
 /// Exact public Capability identifier for strict single-file contextual patching.
 pub const APPLY_PATCH_CAPABILITY_ID: &str = "xgeny.fs/apply-patch";
 /// Exact immutable apply-patch contract version.
-pub const APPLY_PATCH_CONTRACT_VERSION: &str = "1.0.0";
+pub const APPLY_PATCH_CONTRACT_VERSION: &str = "2.0.0";
 /// Exact operation name used in the root-bound patch Instance.
 pub const APPLY_PATCH_OPERATION_REF: &str = "applyPatch";
 /// Exact public Capability identifier for one-level directory observation.
@@ -66,7 +67,7 @@ pub const SEARCH_TEXT_OPERATION_REF: &str = "searchText";
 /// Exact public Capability identifier for one bounded line range of a UTF-8 text file.
 pub const READ_TEXT_LINES_CAPABILITY_ID: &str = "xgeny.fs/read-text-lines";
 /// Exact immutable read-text-lines contract version.
-pub const READ_TEXT_LINES_CONTRACT_VERSION: &str = "1.0.0";
+pub const READ_TEXT_LINES_CONTRACT_VERSION: &str = "2.0.0";
 /// Exact operation name used in the root-bound line-range read Instance.
 pub const READ_TEXT_LINES_OPERATION_REF: &str = "readTextLines";
 /// Exact public Capability identifier for one atomic UTF-8 file replacement.

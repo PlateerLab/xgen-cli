@@ -395,19 +395,25 @@ pub(crate) fn read_text(
     relative_path: &RelativePath,
     limits: ReadTextLimits,
 ) -> Result<ReadObservation, ReadFailure> {
-    let file = open_file(root, relative_path)?;
-    read_opened_file(file, limits)
+    read_text_up_to(root, relative_path, limits.max_bytes())
 }
 
-fn read_opened_file(
-    mut file: File,
-    limits: ReadTextLimits,
+/// Read a whole file for an effect that never returns its content, such as patching, so the
+/// ceiling is not bound by the read-text output limit.
+pub(crate) fn read_text_up_to(
+    root: &Dir,
+    relative_path: &RelativePath,
+    maximum: usize,
 ) -> Result<ReadObservation, ReadFailure> {
+    let file = open_file(root, relative_path)?;
+    read_opened_file(file, maximum)
+}
+
+fn read_opened_file(mut file: File, maximum: usize) -> Result<ReadObservation, ReadFailure> {
     let metadata = file.metadata().map_err(|_| ReadFailure::Open)?;
     if !metadata.is_file() || is_windows_reparse_point(&metadata) {
         return Err(ReadFailure::NonRegular);
     }
-    let maximum = limits.max_bytes();
     let mut bytes = Vec::with_capacity(
         usize::try_from(metadata.len())
             .unwrap_or(maximum)
@@ -467,6 +473,15 @@ pub(crate) fn sha256_digest(bytes: &[u8]) -> String {
         write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
     }
     format!("sha256:{encoded}")
+}
+
+pub(crate) fn is_canonical_digest(value: &str) -> bool {
+    value.strip_prefix("sha256:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    })
 }
 
 #[cfg(test)]
@@ -621,7 +636,7 @@ mod tests {
         fs::rename(&target, &moved)
             .expect("the path entry must be replaced while the original handle remains open");
         fs::write(&target, replacement).expect("replacement fixture should write");
-        let observation = read_opened_file(file, ReadTextLimits::default())
+        let observation = read_opened_file(file, MAX_READ_TEXT_BYTES)
             .expect("opened handle should remain readable");
 
         assert_eq!(observation.content, original);
