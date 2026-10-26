@@ -546,6 +546,8 @@ struct InteractiveHost {
     executable_specs: Vec<String>,
     executable_ids: Vec<String>,
     process_session: Option<LocalProcessSession>,
+    /// ADR-0063: where the file tools stop and how to reach the rest, appended to trusted goals.
+    environment_note: Option<String>,
 }
 
 impl InteractiveHost {
@@ -557,6 +559,7 @@ impl InteractiveHost {
         let workspace = env::current_dir()
             .map_err(|_| repl::ReplFailure::new(PublicRunError::Configuration.code()))?;
         let mut executables = discovered_executables();
+        let mut environment_note = None;
         // ADR-0060: a trusted session also gets the user's shell, so pipelines and any
         // installed command run through one catalogued executable.
         if trust
@@ -564,9 +567,12 @@ impl InteractiveHost {
             && let Some(path) = path
                 .to_str()
                 .filter(|path| !path.chars().any(char::is_control))
-            && !executables.iter().any(|(existing, _)| *existing == id)
         {
-            executables.push((id, path.to_owned()));
+            environment_note =
+                repl::trusted_environment_note(&workspace, env::home_dir().as_deref(), &id);
+            if !executables.iter().any(|(existing, _)| *existing == id) {
+                executables.push((id, path.to_owned()));
+            }
         }
         let (executable_ids, executable_specs) = executables
             .into_iter()
@@ -579,6 +585,7 @@ impl InteractiveHost {
             executable_specs,
             executable_ids,
             process_session: None,
+            environment_note,
         })
     }
 
@@ -653,6 +660,12 @@ impl repl::ReplHost for InteractiveHost {
         let model = resolve_model(None, None, None, None, false, RequestOptionArgs::default())
             .map_err(|error| repl::ReplFailure::new(error.code()))?;
         let process_session = self.process_session()?;
+        let goal = match &self.environment_note {
+            Some(note) if goal.len() + note.len() + 2 <= xgen_cli::MAX_GOAL_BYTES => {
+                format!("{goal}\n\n{note}")
+            }
+            _ => goal,
+        };
         run_interactive_with_process_session_progress(
             LocalRunRequest {
                 goal,

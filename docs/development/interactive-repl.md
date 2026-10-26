@@ -33,6 +33,8 @@ pwsh→powershell)도 catalog에 넣는다([ADR-0060](../adr/0060-trusted-shell-
 파이프와 catalog에 없는 명령을 실행한다.
 신뢰 모드의 goal당 model turn 기본값은 24가 아니라 96이다([ADR-0062](../adr/0062-trusted-turn-budget.md)).
 `--max-model-turns`를 주면 그 값이 우선한다.
+신뢰 모드는 goal 뒤에 workspace 절대 경로, home, workspace 밖은 shell로 가라는 안내 한 단락을 붙인다
+([ADR-0063](../adr/0063-trusted-environment-note.md)).
 
 ```text
 xgen> 프로젝트 구조를 보고 테스트 실패를 수정해줘.
