@@ -1570,6 +1570,47 @@ pub enum ModelCallRejectionReason {
     StaleHead,
 }
 
+/// Closed, value-free class of a proposal Core rejected (ADR-0064).
+///
+/// It names the rule the proposal broke, never its content, so it is safe to journal and to show
+/// the planner on its next turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProposalRejectionCode {
+    EmptyPlan,
+    TooManySteps,
+    TooManyEdges,
+    ProposalTooLarge,
+    InvalidStepKey,
+    DuplicateStepKey,
+    InvalidObjective,
+    InvalidDependency,
+    DuplicateDependency,
+    UnknownDependency,
+    BlockedExistingDependency,
+    SelfDependency,
+    DependencyCycle,
+    CapabilityUnavailable,
+    CapabilityUnsupported,
+    InvocationInvalid,
+    DuplicateSemanticAction,
+    RepeatedFinishedAction,
+    PlannedStepBudgetExceeded,
+    ToolCallBudgetExhausted,
+    CompletionWithoutReceiptCompletedPlan,
+    ConversationResponseWithPlan,
+    InvalidCompletionSummary,
+}
+
+/// The latest settled model call, kept only while it was a rejection and no call followed it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModelCallRejectionFeedback {
+    pub reason: ModelCallRejectionReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<ProposalRejectionCode>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelCallAbandonmentReason {
@@ -1594,8 +1635,16 @@ pub enum ModelCallStatus {
     rename_all_fields = "camelCase"
 )]
 pub enum ModelCallSettlement {
-    Rejected { reason: ModelCallRejectionReason },
-    Abandoned { reason: ModelCallAbandonmentReason },
+    Rejected {
+        reason: ModelCallRejectionReason,
+        /// Fixed Core class of a `proposal_rejected` settlement (ADR-0064); absent for other
+        /// reasons and for settlements recorded before it existed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        proposal: Option<ProposalRejectionCode>,
+    },
+    Abandoned {
+        reason: ModelCallAbandonmentReason,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1614,6 +1663,10 @@ pub struct ModelCallLifecycleState {
     pub unknown_calls: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_call: Option<ModelCallState>,
+    /// Rejection the next planner call should learn about (ADR-0064). Set when a call settles
+    /// as rejected and cleared when the next call is reserved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_rejection: Option<ModelCallRejectionFeedback>,
 }
 
 /// Durable limits for the model-owned portion of one local Runtime-mode Run.
@@ -3862,6 +3915,7 @@ fn configure_model_call_lifecycle(
         settled_calls: loop_state.accepted_model_turns,
         unknown_calls: 0,
         active_call: None,
+        last_rejection: None,
     });
     validate_model_call_counters(loop_state)
 }
@@ -3917,6 +3971,7 @@ fn reserve_model_call(
         return Err(TransitionError::ModelCallBaseHeadMismatch);
     }
     calls.reserved_calls = expected_call_index;
+    calls.last_rejection = None;
     calls.active_call = Some(ModelCallState {
         reservation: reservation.clone(),
         status: ModelCallStatus::Reserved,
@@ -3978,7 +4033,7 @@ fn settle_model_call(
         return Err(TransitionError::ModelCallIdMismatch);
     }
     match settlement {
-        ModelCallSettlement::Rejected { reason } => {
+        ModelCallSettlement::Rejected { reason, .. } => {
             if active.status != ModelCallStatus::Reserved {
                 return Err(TransitionError::ModelCallNotReserved);
             }
@@ -3994,6 +4049,14 @@ fn settle_model_call(
         }
         ModelCallSettlement::Abandoned { .. } => {}
     }
+    calls.last_rejection = match settlement {
+        ModelCallSettlement::Rejected { reason, proposal }
+            if reason != ModelCallRejectionReason::StaleHead =>
+        {
+            Some(ModelCallRejectionFeedback { reason, proposal })
+        }
+        _ => None,
+    };
     calls.settled_calls = calls
         .settled_calls
         .checked_add(1)

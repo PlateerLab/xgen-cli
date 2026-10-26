@@ -488,6 +488,7 @@ fn rejected_calls_consume_call_budget_but_not_accepted_turn_budget() {
             call_id: call.call_id().to_owned(),
             settlement: ModelCallSettlement::Rejected {
                 reason: ModelCallRejectionReason::PlannerInvalidResponse,
+                proposal: None,
             },
         },
     );
@@ -783,6 +784,7 @@ fn unknown_call_blocks_late_response_until_explicit_abandonment() {
                 call_id: call.call_id().to_owned(),
                 settlement: ModelCallSettlement::Rejected {
                     reason: ModelCallRejectionReason::ProposalRejected,
+                    proposal: None,
                 },
             },
         ),
@@ -853,6 +855,7 @@ fn stale_head_requires_stale_rejection_and_other_rejections_require_immediate_he
                 call_id: call.call_id().to_owned(),
                 settlement: ModelCallSettlement::Rejected {
                     reason: ModelCallRejectionReason::ProposalRejected,
+                    proposal: None,
                 },
             },
         ),
@@ -865,6 +868,7 @@ fn stale_head_requires_stale_rejection_and_other_rejections_require_immediate_he
             call_id: call.call_id().to_owned(),
             settlement: ModelCallSettlement::Rejected {
                 reason: ModelCallRejectionReason::StaleHead,
+                proposal: None,
             },
         },
     );
@@ -896,6 +900,7 @@ fn stale_head_requires_stale_rejection_and_other_rejections_require_immediate_he
                 call_id: immediate_call.call_id().to_owned(),
                 settlement: ModelCallSettlement::Rejected {
                     reason: ModelCallRejectionReason::StaleHead,
+                    proposal: None,
                 },
             },
         ),

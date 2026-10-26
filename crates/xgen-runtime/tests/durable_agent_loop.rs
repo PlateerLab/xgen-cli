@@ -612,6 +612,7 @@ impl RunStore for StalePlanOutcomeStore {
                     call_id,
                     settlement: ModelCallSettlement::Rejected {
                         reason: ModelCallRejectionReason::PlannerInvalidResponse,
+                        proposal: None,
                     },
                 },
             };
@@ -1081,6 +1082,7 @@ fn projected_state(
                 settled_calls: accepted_model_turns,
                 unknown_calls: 0,
                 active_call: None,
+                last_rejection: None,
             }),
             completion_candidate: None,
         }),
@@ -1658,6 +1660,77 @@ fn duplicate_batch_actions_are_rejected_but_a_completed_action_may_recur() {
         initial_action_digest
     );
     assert_model_call_counters(&after_replan, 2, 2, 0, 2);
+}
+
+#[test]
+fn an_immediate_repeat_of_a_finished_read_only_action_is_rejected() {
+    // ADR-0064: the same read-only input with nothing in between returns the known result.
+    let definition = read_only_definition_fixture("xgeny.test/read-marker");
+    let cap = capability(&definition);
+    let registry = registry_with(definition);
+    let run_id = "run-agent-loop-read-repeat";
+    let mut initial_store = MemoryRunStore::new();
+    create_run(&mut initial_store, run_id);
+    let agent_loop = configure(&mut initial_store, run_id, &budget(4, 8, 8, 262_144));
+    let proposal = || {
+        PlanProposal::plan(vec![proposed_step(
+            "read",
+            Vec::new(),
+            cap.clone(),
+            CANONICAL_PATH,
+            "same-read",
+        )])
+    };
+    let initial = agent_loop
+        .tick(
+            &mut initial_store,
+            &mut DeterministicEvents,
+            &FixedLease(run_id.to_owned()),
+            &registry,
+            &CanonicalResolver::default(),
+            &mut ScriptedPlanner::returning(proposal()),
+            &mut RecordingMaterializer::default(),
+        )
+        .expect("initial read should plan");
+    let AgentLoopTick::PlanAccepted { step_ids, .. } = initial else {
+        panic!("expected initial plan")
+    };
+    let mut finished = initial_store.load_current().unwrap().unwrap();
+    let step = finished.steps.get_mut(&step_ids[0]).unwrap();
+    step.status = StepStatus::Completed;
+    step.execution_receipt_id = Some("receipt-read-repeat".to_owned());
+    step.execution_receipt_digest = Some(format!("sha256:{}", "d".repeat(64)));
+    let mut store = ProjectionStore::new(finished.clone());
+    let repeat = agent_loop
+        .tick(
+            &mut store,
+            &mut DeterministicEvents,
+            &FixedLease(run_id.to_owned()),
+            &registry,
+            &CanonicalResolver::default(),
+            &mut ScriptedPlanner::returning(proposal()),
+            &mut RecordingMaterializer::default(),
+        )
+        .expect("a repeat should be classified");
+    assert!(matches!(
+        repeat,
+        AgentLoopTick::ProposalRejected {
+            reason: ProposalRejection::RepeatedFinishedAction,
+            ..
+        }
+    ));
+    let after = store.load_current().unwrap().unwrap();
+    assert_workgraph_unchanged(&finished, &after);
+    let feedback = after
+        .agent_loop
+        .as_ref()
+        .and_then(|loop_state| loop_state.model_calls.as_ref())
+        .and_then(|calls| calls.last_rejection)
+        .expect("the rejection should be kept for the next call");
+    assert_eq!(
+        feedback.proposal,
+        Some(xgen_workgraph::ProposalRejectionCode::RepeatedFinishedAction)
+    );
 }
 
 #[test]

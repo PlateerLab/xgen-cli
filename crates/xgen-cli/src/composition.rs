@@ -606,6 +606,7 @@ const fn proposal_rejection_code(rejection: ProposalRejection) -> &'static str {
             "proposal_rejected.invocation_invalid"
         }
         ProposalRejection::DuplicateSemanticAction => "proposal_rejected.duplicate_semantic_action",
+        ProposalRejection::RepeatedFinishedAction => "proposal_rejected.repeated_finished_action",
         ProposalRejection::PlannedStepBudgetExceeded => {
             "proposal_rejected.planned_step_budget_exceeded"
         }

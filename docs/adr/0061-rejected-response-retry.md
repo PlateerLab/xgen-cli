@@ -33,7 +33,8 @@ Claude Code와 같은 작업 6개를 비교한 실험(devhub-social 사본, deep
    provider 한도·4xx·rate limit, 그리고 예산 소진 거절(`tool_call_budget_exhausted`,
    `planned_step_budget_exceeded`)도 다시 보내도 결과가 같으므로 재시도하지 않는다.
 5. 재시도할 때 거절 이유를 모델 context에 넣지 않는다. 지금 `/resume`과 같은 재표본이다. 이유를 넣으려면
-   planning context 계약을 바꿔야 하므로 별도 결정으로 미룬다.
+   planning context 계약을 바꿔야 하므로 별도 결정으로 미룬다. 이후 [ADR-0064](0064-planning-feedback.md)에서
+   거절 이유를 다음 context에 넣도록 바꿨다.
 
 `xgen run`(headless)도 같은 driver를 쓰므로 거절 exit code 20은 세 번 연속 거절된 뒤에 나온다.
 

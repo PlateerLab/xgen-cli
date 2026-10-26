@@ -498,10 +498,28 @@ fn one_invalid_response_is_retried_and_the_run_completes_without_resume() {
         .unwrap();
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     // plan, discarded invalid completion, accepted completion
-    for _ in 0..3 {
-        server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
-    }
+    let requests: Vec<_> = (0..3)
+        .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+        .collect();
     server.handle.join().unwrap();
+    // ADR-0064: only the call after the discarded response learns why it was discarded.
+    assert!(
+        planning_context(&requests[1])
+            .get("previousResponseRejection")
+            .is_none()
+    );
+    let rejection = &planning_context(&requests[2])["previousResponseRejection"];
+    assert_eq!(
+        rejection["reason"], "planner_invalid_response",
+        "{rejection}"
+    );
+    assert!(rejection.get("proposalRejection").is_none());
+    assert!(
+        rejection["meaning"]
+            .as_str()
+            .unwrap()
+            .starts_with("The previous response was discarded")
+    );
     assert!(
         !stderr(&output).contains("model_rejected"),
         "{}",
