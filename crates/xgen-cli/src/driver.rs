@@ -141,6 +141,11 @@ pub enum DriverProgressControl {
     Cancel,
 }
 
+/// Consecutive model responses the driver may discard before it stops the Run (ADR-0061).
+///
+/// Each retry is a new journaled model call and spends the Run's model-call budget.
+pub const MAX_REJECTED_RESPONSE_RETRIES: u32 = 2;
+
 /// Provider-neutral bounded coordinator used by CLI composition roots and hermetic tests.
 #[derive(Debug, Clone)]
 pub struct RunDriver {
@@ -312,6 +317,7 @@ impl RunDriver {
         AP: ApprovalPort,
         O: FnMut(DriverProgress) -> DriverProgressControl,
     {
+        let mut rejected_responses_in_a_row = 0_u32;
         for _ in 0..self.max_ticks.get() {
             if model_call_may_be_next(store)? {
                 if !model_egress_allowed {
@@ -335,6 +341,7 @@ impl RunDriver {
                 | AgentLoopTick::ModelCallLifecycleConfigured { .. }
                 | AgentLoopTick::ModelCallAbandoned { .. } => {}
                 AgentLoopTick::PlanAccepted { .. } => {
+                    rejected_responses_in_a_row = 0;
                     if observer(DriverProgress::PlanCommitted) == DriverProgressControl::Cancel {
                         return Ok(DriverOutcome::Cancelled);
                     }
@@ -487,9 +494,28 @@ impl RunDriver {
                     return Ok(DriverOutcome::Quiescent(reason));
                 }
                 AgentLoopTick::PlannerUnavailable { failure, .. } => {
+                    // ADR-0061: the rejected call is already settled in the journal, so the next
+                    // tick reserves a fresh call exactly like `/resume` would.
+                    if failure == PlannerPortFailure::InvalidResponse
+                        && rejected_responses_in_a_row < MAX_REJECTED_RESPONSE_RETRIES
+                    {
+                        rejected_responses_in_a_row += 1;
+                        continue;
+                    }
                     return Ok(DriverOutcome::PlannerUnavailable(failure));
                 }
                 AgentLoopTick::ProposalRejected { reason, .. } => {
+                    // A spent budget rejects every later proposal the same way.
+                    let budget_spent = matches!(
+                        reason,
+                        ProposalRejection::ToolCallBudgetExhausted
+                            | ProposalRejection::PlannedStepBudgetExceeded
+                    );
+                    if !budget_spent && rejected_responses_in_a_row < MAX_REJECTED_RESPONSE_RETRIES
+                    {
+                        rejected_responses_in_a_row += 1;
+                        continue;
+                    }
                     return Ok(DriverOutcome::ProposalRejected(reason));
                 }
                 AgentLoopTick::MaterializerUnavailable { failure, .. } => {

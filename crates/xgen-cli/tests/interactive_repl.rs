@@ -259,6 +259,12 @@ fn changed_safe_environment_is_named_and_blocks_resume_until_restored() {
             provider_response(
                 &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
             ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
             completion_response(),
         ]);
         let command = |value| {
@@ -345,7 +351,7 @@ fn rejected_final_response_resumes_after_restart_without_replaying_writes_or_fai
             &json!({"executable": "git", "args": ["--definitely-invalid-option"],
                 "cwd": ".", "env": {}, "timeoutMs": 30000, "maxOutputBytes": 32768}),
         ));
-        responses.push(provider_response(&invalid));
+        responses.extend(rejected_responses(&invalid));
         responses.push(provider_response(&json!({"formatVersion": 1,
             "kind": "completion_candidate", "steps": [], "summary": "Files saved; command failed."})));
         let server = SequentialServer::with_responses(responses);
@@ -402,11 +408,11 @@ fn rejected_final_response_resumes_after_restart_without_replaying_writes_or_fai
         for name in ["first.txt", "second.txt"] {
             assert_eq!(fs::read_to_string(workspace.join(name)).unwrap(), name);
         }
-        let requests: Vec<_> = (0..5)
+        let requests: Vec<_> = (0..7)
             .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
             .collect();
         server.handle.join().unwrap();
-        let context = planning_context(&requests[4]);
+        let context = planning_context(&requests[6]);
         let outputs = context["toolOutputs"].as_array().unwrap();
         assert_eq!(outputs.len(), 3);
         let process = outputs
@@ -420,9 +426,10 @@ fn rejected_final_response_resumes_after_restart_without_replaying_writes_or_fai
 #[test]
 fn headless_run_keeps_the_legacy_contract_and_rejects_conversation_proposals() {
     let fixture = tempdir().unwrap();
-    let server = SequentialServer::with_responses(vec![provider_response(&json!({
+    // The driver discards up to MAX_REJECTED_RESPONSE_RETRIES invalid responses (ADR-0061).
+    let server = SequentialServer::with_responses(rejected_responses(&json!({
         "formatVersion": 1, "kind": "response_candidate", "steps": [], "summary": "not a task completion"
-    }))]);
+    })));
     let output = Command::new(env!("CARGO_BIN_EXE_xgen"))
         .args([
             "run",
@@ -451,6 +458,54 @@ fn headless_run_keeps_the_legacy_contract_and_rejects_conversation_proposals() {
             .as_str()
             .unwrap()
             .contains("CONVERSATION_RESPONSE_V1")
+    );
+}
+
+#[test]
+fn one_invalid_response_is_retried_and_the_run_completes_without_resume() {
+    let fixture = tempdir().unwrap();
+    fs::write(fixture.path().join("README.md"), "retry fixture\n").unwrap();
+    let server = SequentialServer::with_responses(vec![
+        plan_response(
+            "read",
+            "Read README",
+            "xgeny.fs/read-text",
+            &json!({"path":"README.md"}),
+        ),
+        provider_response(
+            &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+        ),
+        completion_response(),
+    ]);
+    let output = Command::new(env!("CARGO_BIN_EXE_xgen"))
+        .args([
+            "run",
+            "Read README",
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--allow-read",
+        ])
+        .current_dir(fixture.path())
+        .env("XGEN_STATE_HOME", fixture.path().join("state"))
+        .env("XGEN_CONFIG_HOME", fixture.path().join("config"))
+        .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+        .env("XGEN_OPENAI_MODEL", MODEL)
+        .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+        .env("XGEN_OPENAI_RESPONSE_FORMAT", "json_object")
+        .env_remove("XGEN_OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    // plan, discarded invalid completion, accepted completion
+    for _ in 0..3 {
+        server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+    }
+    server.handle.join().unwrap();
+    assert!(
+        !stderr(&output).contains("model_rejected"),
+        "{}",
+        stderr(&output)
     );
 }
 
@@ -760,6 +815,13 @@ fn completion_response() -> Vec<u8> {
     }))
 }
 
+/// One invalid model response per call the driver makes before it stops the Run.
+fn rejected_responses(content: &Value) -> Vec<Vec<u8>> {
+    (0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES)
+        .map(|_| provider_response(content))
+        .collect()
+}
+
 fn provider_response(content: &Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "id": "repl-test-response",
@@ -793,9 +855,15 @@ fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay
             provider_response(
                 &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
             ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
+            provider_response(
+                &json!({"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":""}),
+            ),
             completion_response(),
         ];
-        for (index, response) in responses.iter_mut().take(2).enumerate() {
+        for (index, response) in responses.iter_mut().take(4).enumerate() {
             let mut envelope: Value = serde_json::from_slice(response).unwrap();
             let input = if index == 0 { 100 } else { 200 };
             let output = if index == 0 { 20 } else { 30 };
@@ -825,7 +893,7 @@ fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay
         let run_id = extract_run_id(&stderr(&initial));
         let stdout = String::from_utf8_lossy(&initial.stdout);
         assert!(
-            stdout.contains("usage: calls=2/2 input=300 output=50 cached=180 partial=false"),
+            stdout.contains("usage: calls=4/4 input=700 output=110 cached=420 partial=false"),
             "{stdout}"
         );
         assert!(stdout.contains("model_rejected.planner_invalid_response"));
@@ -848,10 +916,10 @@ fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay
         let stdout = String::from_utf8_lossy(&resumed.stdout);
         assert!(stdout.contains(COMPLETION));
         assert!(
-            stdout.contains("usage: calls=3/3 input=300 output=50 cached=unknown partial=true"),
+            stdout.contains("usage: calls=5/5 input=700 output=110 cached=unknown partial=true"),
             "{stdout}"
         );
-        for _ in 0..3 {
+        for _ in 0..5 {
             server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
         }
         server.handle.join().unwrap();
@@ -868,11 +936,11 @@ fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay
             .unwrap();
         assert!(offline.status.success(), "{}", stderr(&offline));
         let report: Value = serde_json::from_slice(&offline.stdout).unwrap();
-        assert_eq!(report["observedCalls"], 3);
-        assert_eq!(report["callsWithTokenUsage"], 2);
-        assert_eq!(report["tokenSubtotal"]["totalTokens"], 350);
+        assert_eq!(report["observedCalls"], 5);
+        assert_eq!(report["callsWithTokenUsage"], 4);
+        assert_eq!(report["tokenSubtotal"]["totalTokens"], 810);
         assert_eq!(report["calls"][1]["outcome"], "response_rejected");
-        assert_eq!(report["calls"][2]["usage"], Value::Null);
+        assert_eq!(report["calls"][4]["usage"], Value::Null);
         let priced = Command::new(env!("CARGO_BIN_EXE_xgen"))
             .args([
                 "usage",
@@ -892,7 +960,7 @@ fn usage_counts_rejected_responses_and_survives_resume_without_recounting_replay
         let priced: Value = serde_json::from_slice(&priced.stdout).unwrap();
         assert_eq!(
             priced["costEstimate"]["estimatedUsdSubtotal"],
-            "0.000238000"
+            "0.000542000"
         );
         assert_eq!(priced["costEstimate"]["partial"], true);
         assert_eq!(

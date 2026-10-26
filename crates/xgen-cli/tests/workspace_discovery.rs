@@ -59,12 +59,19 @@ fn invocation_diagnostics_distinguish_schema_and_resource_failures_without_value
         let state_root = fixture.path().join("state");
         let workspace = fixture.path().join("workspace");
         fs::create_dir(&workspace).unwrap();
-        let server = SequentialServer::spawn_responses(vec![plan_response(
-            "write",
-            "Write fixture",
-            "xgeny.fs/write-atomic",
-            &arguments,
-        )]);
+        // Each rejected proposal is retried up to MAX_REJECTED_RESPONSE_RETRIES times (ADR-0061).
+        let server = SequentialServer::spawn_responses(
+            (0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES)
+                .map(|_| {
+                    plan_response(
+                        "write",
+                        "Write fixture",
+                        "xgeny.fs/write-atomic",
+                        &arguments,
+                    )
+                })
+                .collect(),
+        );
         let output = bounded_output(xgen(&state_root).args([
             "run",
             "--workspace",
@@ -97,7 +104,9 @@ fn invocation_diagnostics_distinguish_schema_and_resource_failures_without_value
         let db = state_root.join("runs").join(run_id).join("run.sqlite3");
         let store = SqliteRunStore::open_existing(db).unwrap();
         assert!(store.load_execution_receipts().unwrap().is_empty());
-        server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        for _ in 0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES {
+            server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        }
         server.handle.join().unwrap();
         assert!(server.requests.try_recv().is_err());
     }
@@ -1828,12 +1837,18 @@ fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
         let runtime = fixture.path().join("runtime");
         fs::create_dir(&workspace).unwrap();
         discovery_runtime(&state, &runtime);
-        let server = SequentialServer::spawn_responses(vec![plan_response(
-            "invalid",
-            "Attempt unavailable operation",
-            capability_id,
-            &input,
-        )]);
+        let server = SequentialServer::spawn_responses(
+            (0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES)
+                .map(|_| {
+                    plan_response(
+                        "invalid",
+                        "Attempt unavailable operation",
+                        capability_id,
+                        &input,
+                    )
+                })
+                .collect(),
+        );
         let result = bounded_output(xgen(&state).env("PATH", runtime).args([
             "run",
             "--workspace",
