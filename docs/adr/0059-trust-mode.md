@@ -26,7 +26,8 @@ session에서 승인은 각각 3회였다. 매번 `/permissions KIND allow`를 �
 바뀌지 않는 것:
 
 - journal, Receipt 검증, 끝난 뒤 `Changes` 표시(ADR-0057), Ctrl+C, `/resume`.
-- 실행 파일 catalog. 이 옵션은 이미 catalog에 있는 것의 승인만 생략한다.
+- 실행 파일 catalog. 이 옵션은 이미 catalog에 있는 것의 승인만 생략한다. (이후 ADR-0060이 shell을,
+  ADR-0062가 더 큰 기본 turn 예산을 신뢰 모드에 더했다.)
 - Core의 action 단위 authorization. 각 effect는 실행 직전에 기존 검증을 거친다.
 - 비대화형 `xgen run`/`resume`의 승인 플래그.
 
