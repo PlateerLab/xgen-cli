@@ -2801,6 +2801,10 @@ mod tests {
     }
 
     fn read_test_request_headers(stream: &mut TcpStream) {
+        // Windows hands out accepted sockets in the listener's nonblocking mode; Linux does not.
+        stream
+            .set_nonblocking(false)
+            .expect("accepted stream should become blocking");
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("request timeout should configure");
