@@ -406,6 +406,7 @@ fn completed_output_store() -> (OutputSnapshotStore, AgentLoopBudget, Value) {
                 settled_calls: 1,
                 unknown_calls: 0,
                 active_call: None,
+                last_rejection: None,
             }),
             completion_candidate: None,
         }),
@@ -1147,7 +1148,8 @@ fn deterministic_provider_rejection_is_closed_without_raw_error_body() {
         &last.event.body,
         RunEventBody::ModelCallSettled {
             settlement: ModelCallSettlement::Rejected {
-                reason: ModelCallRejectionReason::ProviderRejected
+                reason: ModelCallRejectionReason::ProviderRejected,
+                proposal: None,
             },
             ..
         }

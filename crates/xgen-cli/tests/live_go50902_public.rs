@@ -1324,7 +1324,11 @@ fn require_workspace_completion(output: &Output, state_root: &Path) {
             }
             if let Some(reason) = snapshot.records.iter().rev().find_map(|record| {
                 if let RunEventBody::ModelCallSettled {
-                    settlement: ModelCallSettlement::Rejected { reason },
+                    settlement:
+                        ModelCallSettlement::Rejected {
+                            reason,
+                            proposal: None,
+                        },
                     ..
                 } = record.event.body
                 {

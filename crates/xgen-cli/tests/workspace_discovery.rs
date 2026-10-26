@@ -1824,12 +1824,17 @@ fn tool_discovery_is_approved_receipted_and_frozen_across_resume() {
 #[test]
 #[cfg(unix)]
 fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
-    for (capability_id, input) in [
+    for (capability_id, input, code) in [
         (
             "xgen.tools/search",
             json!({"collection":"unknown","query":"record","topK":1}),
+            "invocation_invalid",
         ),
-        ("readAsset", json!({"asset_id":"one"})),
+        (
+            "readAsset",
+            json!({"asset_id":"one"}),
+            "capability_unavailable",
+        ),
     ] {
         let fixture = tempdir().unwrap();
         let state = fixture.path().join("state");
@@ -1873,8 +1878,14 @@ fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
                 .unwrap();
         assert!(store.load_execution_receipts().unwrap().is_empty());
         assert!(!state.join("tool-collections/invocations").exists());
-        server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        let requests: Vec<_> = (0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES)
+            .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+            .collect();
         server.handle.join().unwrap();
+        // ADR-0064: each retry carries the Core class of the rejection before it.
+        let rejection = &planning_context(&requests[1])["previousResponseRejection"];
+        assert_eq!(rejection["reason"], "proposal_rejected", "{rejection}");
+        assert_eq!(rejection["proposalRejection"], code, "{rejection}");
     }
 }
 

@@ -15,8 +15,8 @@ use xgen_workgraph::{
     ModelCallAbandonmentReason, ModelCallBudget, ModelCallRejectionReason, ModelCallReservation,
     ModelCallSettlement, ModelCallStatus, ModelCallUnknownReason, PlannedExecutionProfile,
     PlannedInvocationMaterialRecord, PlannedInvocationSpec, PlanningContractError,
-    ReconstructableMaterialReference, RunEvent, RunEventBody, RunState, StepStatus,
-    ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
+    ProposalRejectionCode, ReconstructableMaterialReference, RunEvent, RunEventBody, RunState,
+    StepStatus, ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
     receipt_releases_dependency, validate_completion_summary_candidate,
 };
 
@@ -201,7 +201,19 @@ pub struct PlanningStepSummary {
     /// Fixed, value-free statement of what `failure_code` means (ADR-0055).
     #[serde(skip_serializing_if = "Option::is_none")]
     failure_meaning: Option<&'static str>,
+    /// Earlier finished Step with the same capability and arguments (ADR-0064).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repeats_step: Option<String>,
+    /// Fixed statement of what `repeats_step` means.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repeat_meaning: Option<&'static str>,
 }
+
+/// Fixed fact attached to a Step that repeats a finished one (ADR-0064).
+const REPEAT_MEANING: &str = "This Step used the same capability with the same arguments as \
+     repeatsStep, which had already finished. Its result is already known; repeating it again \
+     returns the same result unless something changed the target in between. If the known \
+     results already answer the goal, return a completion_candidate instead of planning again.";
 
 /// One exact, receipt-completed local tool observation selected for the next planner turn.
 ///
@@ -306,6 +318,12 @@ impl PlanningStepSummary {
     pub const fn dependency_released(&self) -> bool {
         self.dependency_released
     }
+
+    /// Earlier finished Step this one repeats exactly, if any (ADR-0064).
+    #[must_use]
+    pub fn repeats_step(&self) -> Option<&str> {
+        self.repeats_step.as_deref()
+    }
 }
 
 impl fmt::Debug for PlanningStepSummary {
@@ -321,6 +339,8 @@ impl fmt::Debug for PlanningStepSummary {
             .field("dependency_released", &self.dependency_released)
             .field("failure_code", &self.failure_code)
             .field("failure_meaning", &self.failure_meaning)
+            .field("repeats_step", &self.repeats_step)
+            .field("repeat_meaning", &self.repeat_meaning)
             .finish()
     }
 }
@@ -421,11 +441,87 @@ struct PlanningContextPayload {
     tool_outputs: Vec<PlanningToolOutput>,
     total_steps: usize,
     verified_completed_steps: usize,
+    /// Why the previous response was discarded, when it was (ADR-0064).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_response_rejection: Option<PreviousResponseRejection>,
     run_id: String,
     authority: String,
     authority_epoch: u64,
     journal_sequence: u64,
     journal_head_digest: String,
+}
+
+/// Journal-derived fact about the discarded previous response (ADR-0064).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviousResponseRejection {
+    reason: ModelCallRejectionReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proposal_rejection: Option<ProposalRejectionCode>,
+    meaning: &'static str,
+}
+
+impl PreviousResponseRejection {
+    fn from_feedback(feedback: xgen_workgraph::ModelCallRejectionFeedback) -> Self {
+        Self {
+            reason: feedback.reason,
+            proposal_rejection: feedback.proposal,
+            meaning: rejection_meaning(feedback.reason, feedback.proposal),
+        }
+    }
+}
+
+/// Fixed statement of what a rejection means for the next proposal. Never echoes the response.
+const fn rejection_meaning(
+    reason: ModelCallRejectionReason,
+    proposal: Option<ProposalRejectionCode>,
+) -> &'static str {
+    match (reason, proposal) {
+        (ModelCallRejectionReason::PlannerInvalidResponse, _) => {
+            "The previous response was discarded: it did not match the response contract, or its \
+             completion failed a host completion check. Nothing was changed."
+        }
+        (
+            ModelCallRejectionReason::ProposalRejected,
+            Some(
+                ProposalRejectionCode::CapabilityUnavailable
+                | ProposalRejectionCode::CapabilityUnsupported,
+            ),
+        ) => {
+            "The previous proposal named a capability or contract version that is not offered \
+             here. Use only capabilityId and contractVersion values listed in capabilities. \
+             Nothing was changed."
+        }
+        (
+            ModelCallRejectionReason::ProposalRejected,
+            Some(ProposalRejectionCode::InvocationInvalid),
+        ) => {
+            "The previous proposal's arguments did not satisfy the capability inputSchema or the \
+             allowed scope. Nothing was changed."
+        }
+        (
+            ModelCallRejectionReason::ProposalRejected,
+            Some(ProposalRejectionCode::RepeatedFinishedAction),
+        ) => {
+            "The previous proposal repeated the read-only capability and arguments of the last \
+             finished Step, and nothing ran in between. That result is already in steps and \
+             toolOutputs. Use it: return a \
+             completion_candidate if it answers the goal, or choose a different action. Nothing \
+             was changed."
+        }
+        (
+            ModelCallRejectionReason::ProposalRejected,
+            Some(ProposalRejectionCode::DuplicateSemanticAction),
+        ) => {
+            "The previous proposal contained two Steps with the same capability and arguments. \
+             Nothing was changed."
+        }
+        (ModelCallRejectionReason::ProposalRejected, _) => {
+            "Core rejected the previous proposal for the rule named in proposalRejection. Nothing \
+             was changed."
+        }
+        _ => "The previous model call was rejected for the reason given. Nothing was changed.",
+    }
 }
 
 /// Deterministic provider-neutral input for one planner call.
@@ -443,6 +539,17 @@ pub struct PlanningContext {
     payload: PlanningContextPayload,
     context_digest: String,
     canonical_size_bytes: u64,
+    /// Host-owned: the action of the last finished Step in plan order (ADR-0064). Not part of
+    /// the provider payload; Core uses it to reject an immediate exact repeat.
+    last_finished_action: Option<FinishedAction>,
+}
+
+/// Capability and argument digest of one finished Step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FinishedAction {
+    capability_id: String,
+    contract_version: String,
+    plan_input_digest: String,
 }
 
 impl PlanningContext {
@@ -574,6 +681,7 @@ impl fmt::Debug for PlanningContext {
             .field("omitted_capabilities", &self.payload.omitted_capabilities)
             .field("context_digest", &self.context_digest)
             .field("canonical_size_bytes", &self.canonical_size_bytes)
+            .field("last_finished_action", &self.last_finished_action)
             .finish()
     }
 }
@@ -903,11 +1011,51 @@ pub enum ProposalRejection {
     InvocationDiagnosed(crate::InvocationDiagnostic),
     /// Two Steps in the same proposal resolve to one canonical semantic action.
     DuplicateSemanticAction,
+    /// A read-only Step repeats the capability and arguments of the last finished Step (ADR-0064).
+    RepeatedFinishedAction,
     PlannedStepBudgetExceeded,
     ToolCallBudgetExhausted,
     CompletionWithoutReceiptCompletedPlan,
     ConversationResponseWithPlan,
     InvalidCompletionSummary,
+}
+
+impl ProposalRejection {
+    /// Journal-safe class of this rejection (ADR-0064). Diagnostics keep only their coarse class.
+    #[must_use]
+    pub const fn code(self) -> ProposalRejectionCode {
+        match self {
+            Self::EmptyPlan => ProposalRejectionCode::EmptyPlan,
+            Self::TooManySteps => ProposalRejectionCode::TooManySteps,
+            Self::TooManyEdges => ProposalRejectionCode::TooManyEdges,
+            Self::ProposalTooLarge => ProposalRejectionCode::ProposalTooLarge,
+            Self::InvalidStepKey => ProposalRejectionCode::InvalidStepKey,
+            Self::DuplicateStepKey => ProposalRejectionCode::DuplicateStepKey,
+            Self::InvalidObjective => ProposalRejectionCode::InvalidObjective,
+            Self::InvalidDependency => ProposalRejectionCode::InvalidDependency,
+            Self::DuplicateDependency => ProposalRejectionCode::DuplicateDependency,
+            Self::UnknownDependency => ProposalRejectionCode::UnknownDependency,
+            Self::BlockedExistingDependency => ProposalRejectionCode::BlockedExistingDependency,
+            Self::SelfDependency => ProposalRejectionCode::SelfDependency,
+            Self::DependencyCycle => ProposalRejectionCode::DependencyCycle,
+            Self::CapabilityUnavailable => ProposalRejectionCode::CapabilityUnavailable,
+            Self::CapabilityUnsupported => ProposalRejectionCode::CapabilityUnsupported,
+            Self::InvocationInvalid | Self::InvocationDiagnosed(_) => {
+                ProposalRejectionCode::InvocationInvalid
+            }
+            Self::DuplicateSemanticAction => ProposalRejectionCode::DuplicateSemanticAction,
+            Self::RepeatedFinishedAction => ProposalRejectionCode::RepeatedFinishedAction,
+            Self::PlannedStepBudgetExceeded => ProposalRejectionCode::PlannedStepBudgetExceeded,
+            Self::ToolCallBudgetExhausted => ProposalRejectionCode::ToolCallBudgetExhausted,
+            Self::CompletionWithoutReceiptCompletedPlan => {
+                ProposalRejectionCode::CompletionWithoutReceiptCompletedPlan
+            }
+            Self::ConversationResponseWithPlan => {
+                ProposalRejectionCode::ConversationResponseWithPlan
+            }
+            Self::InvalidCompletionSummary => ProposalRejectionCode::InvalidCompletionSummary,
+        }
+    }
 }
 
 /// Result of exactly one bounded orchestration tick.
@@ -1527,6 +1675,7 @@ impl AgentLoop {
                             reserved_state,
                             call_id,
                             ModelCallRejectionReason::MaterializationFailed,
+                            None,
                         ) {
                             Ok(commit) => commit,
                             Err(AgentLoopError::Store(StoreError::HeadConflict { .. })) => {
@@ -1691,6 +1840,7 @@ impl AgentLoop {
             reserved_state,
             call_id,
             ModelCallRejectionReason::ProposalRejected,
+            Some(reason.code()),
         ) {
             Ok(commit) => commit,
             Err(AgentLoopError::Store(StoreError::HeadConflict { .. })) => {
@@ -1748,6 +1898,7 @@ impl AgentLoop {
                     reserved_state,
                     call_id,
                     ModelCallRejectionReason::PlannerInvalidResponse,
+                    None,
                 ),
                 ModelCallConflictIntent::RejectStale,
             ),
@@ -1770,6 +1921,7 @@ impl AgentLoop {
                         }
                         _ => ModelCallRejectionReason::ProviderLimit,
                     },
+                    None,
                 ),
                 ModelCallConflictIntent::RejectStale,
             ),
@@ -1780,6 +1932,7 @@ impl AgentLoop {
                     reserved_state,
                     call_id,
                     ModelCallRejectionReason::ProviderRejected,
+                    None,
                 ),
                 ModelCallConflictIntent::RejectStale,
             ),
@@ -1896,6 +2049,7 @@ impl AgentLoop {
                         &current,
                         call_id,
                         ModelCallRejectionReason::StaleHead,
+                        None,
                     )?;
                     Ok(AgentLoopTick::ModelCallRejected {
                         reason: ModelCallRejectionReason::StaleHead,
@@ -1941,6 +2095,7 @@ fn append_model_call_rejection<S, F>(
     state: &RunState,
     call_id: &str,
     reason: ModelCallRejectionReason,
+    proposal: Option<ProposalRejectionCode>,
 ) -> Result<xgen_local_store::Commit, AgentLoopError>
 where
     S: RunStore,
@@ -1951,7 +2106,7 @@ where
         state,
         RunEventBody::ModelCallSettled {
             call_id: call_id.to_owned(),
-            settlement: ModelCallSettlement::Rejected { reason },
+            settlement: ModelCallSettlement::Rejected { reason, proposal },
         },
     )?;
     Ok(store.append(ExpectedHead::from_state(state), event)?)
@@ -2280,12 +2435,37 @@ fn build_context_ordered(
     })
     .map_err(|_| ContextBuildError::Canonicalization)?;
     let mut step_summaries = Vec::with_capacity(state.steps.len());
+    // ADR-0064: first finished Step per (capability, contract, argument digest).
+    let mut finished_actions: BTreeMap<(&str, &str, &str), &str> = BTreeMap::new();
+    let mut last_finished_action = None;
     for step_id in planning_step_order {
         let step = state
             .steps
             .get(step_id)
             .ok_or(ContextBuildError::OutputBinding)?;
         validate_planning_step_shape(step)?;
+        let action = step.planned_invocation.as_ref().map(|invocation| {
+            (
+                invocation.capability_id(),
+                invocation.contract_version(),
+                invocation.plan_input_digest(),
+            )
+        });
+        let repeats_step = action
+            .and_then(|action| finished_actions.get(&action))
+            .map(|earlier| (*earlier).to_owned());
+        if let Some(action) = action
+            && matches!(step.status, StepStatus::Completed | StepStatus::Failed)
+        {
+            finished_actions
+                .entry(action)
+                .or_insert(step.step_id.as_str());
+            last_finished_action = Some(FinishedAction {
+                capability_id: action.0.to_owned(),
+                contract_version: action.1.to_owned(),
+                plan_input_digest: action.2.to_owned(),
+            });
+        }
         let summary = PlanningStepSummary {
             step_id: step.step_id.clone(),
             objective: step.objective.clone(),
@@ -2302,6 +2482,8 @@ fn build_context_ordered(
             dependency_released: receipt_releases_dependency(step),
             failure_code: step.failure_label(),
             failure_meaning: step.failure_meaning(),
+            repeat_meaning: repeats_step.is_some().then_some(REPEAT_MEANING),
+            repeats_step,
         };
         let summary_size =
             canonical_size(&summary).map_err(|_| ContextBuildError::Canonicalization)?;
@@ -2327,6 +2509,12 @@ fn build_context_ordered(
         planning_constraints: planning_constraints.to_vec(),
         total_steps: frontier.total_steps,
         verified_completed_steps: frontier.verified_completed_step_ids.len(),
+        previous_response_rejection: state
+            .agent_loop
+            .as_ref()
+            .and_then(|loop_state| loop_state.model_calls.as_ref())
+            .and_then(|calls| calls.last_rejection)
+            .map(PreviousResponseRejection::from_feedback),
         tool_outputs,
         steps: Vec::new(),
         omitted_steps: total_steps,
@@ -2379,6 +2567,7 @@ fn build_context_ordered(
         payload,
         context_digest,
         canonical_size_bytes,
+        last_finished_action,
     })
 }
 
@@ -2714,6 +2903,18 @@ fn prepare_plan<R: ResourceResolver>(
         })?;
         if !proposed_semantic_action_digests.insert(facts.semantic_action_digest.clone()) {
             return Err(ProposalRejection::DuplicateSemanticAction);
+        }
+        // ADR-0064: a read-only action returns the same result for the same input while nothing
+        // ran in between, and that result is already in the context. Effects are left alone: a
+        // repeated write fails with its own diagnosis and a terminal read can return new output.
+        if definition.spec.effect.class == EffectClass::ReadOnly
+            && context.last_finished_action.as_ref().is_some_and(|last| {
+                last.capability_id == step.capability.capability_id
+                    && last.contract_version == step.capability.contract_version
+                    && last.plan_input_digest == facts.material_digest
+            })
+        {
+            return Err(ProposalRejection::RepeatedFinishedAction);
         }
         validated.push(ValidatedPlanStep {
             key: step.key,
@@ -3377,6 +3578,62 @@ mod tests {
             ),
             Err(ContextBuildError::OutputBinding)
         ));
+    }
+
+    fn invoked(mut step: xgen_workgraph::StepState, input: char) -> xgen_workgraph::StepState {
+        let digest = |fill: char| format!("sha256:{}", fill.to_string().repeat(64));
+        step.planned_invocation = Some(
+            serde_json::from_value(serde_json::json!({
+                "formatVersion": 1,
+                "planId": "plan-test",
+                "proposalDigest": digest('1'),
+                "capabilityId": "xgeny.fs/list-directory",
+                "contractVersion": "1.0.0",
+                "definitionDigest": digest('2'),
+                "actionDigest": digest('3'),
+                "planInputDigest": digest(input),
+                "executionProfile": "local_sync_read_only_occurrence_v1",
+                "targetOs": "linux",
+                "targetArch": "x86_64",
+                "specDigest": digest('4'),
+                "planInputRecordDigest": digest('5'),
+            }))
+            .expect("binding fixture should deserialize"),
+        );
+        step
+    }
+
+    #[test]
+    fn repeated_finished_actions_are_marked_with_the_first_finished_step() {
+        let state = state(vec![
+            invoked(step("first", StepStatus::Failed, Vec::new()), 'a'),
+            invoked(step("again", StepStatus::Completed, Vec::new()), 'a'),
+            invoked(step("third", StepStatus::Planned, Vec::new()), 'a'),
+            invoked(step("other", StepStatus::Completed, Vec::new()), 'b'),
+        ]);
+        let frontier = derive_frontier(&state).expect("frontier should derive");
+        let order = ["first", "again", "third", "other"].map(str::to_owned);
+        let context = build_context_ordered(
+            &state,
+            &BTreeMap::new(),
+            &order,
+            &[],
+            &frontier,
+            &CapabilityRegistry::new(),
+            &[],
+            &test_budget(),
+        )
+        .expect("context should fit");
+        let value = serde_json::to_value(&context).expect("context should serialize");
+        let repeats = value["steps"]
+            .as_array()
+            .expect("steps should be an array")
+            .iter()
+            .map(|step| step["repeatsStep"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(repeats, [None, Some("first"), Some("first"), None]);
+        assert_eq!(value["steps"][1]["repeatMeaning"], REPEAT_MEANING);
+        assert!(value["steps"][0].get("repeatMeaning").is_none());
     }
 
     #[test]
