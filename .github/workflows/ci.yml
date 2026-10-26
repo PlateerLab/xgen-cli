@@ -154,6 +154,10 @@ jobs:
             binary: target/x86_64-apple-darwin/release/xgen
             npm_tarball: xgen-cli-darwin-x64.tgz
             developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
+            # The Intel runner took 12.5 of a 13-minute run (tests 4.2, release build 5.0).
+            # macOS code paths are tested on aarch64-apple-darwin; this job keeps the release
+            # build, native dependency audit and install smokes for the x64 asset.
+            skip_tests: true
           - os: macos-15
             target: aarch64-apple-darwin
             asset: xgen-aarch64-apple-darwin
@@ -210,6 +214,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install cargo-nextest
+        if: ${{ !matrix.skip_tests }}
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-nextest@0.9.148
@@ -217,15 +222,19 @@ jobs:
       # nextest runs every test binary concurrently instead of one after another, and runs the
       # full suite (the `default` profile). The workspace has no doctests.
       - name: Test workspace
+        if: ${{ !matrix.skip_tests }}
         run: cargo nextest run --workspace --locked --no-fail-fast
 
       - name: Lint platform-specific filesystem adapter
+        if: ${{ !matrix.skip_tests }}
         run: cargo clippy --locked -p xgen-adapter-filesystem --all-targets -- -D warnings
 
       - name: Lint platform-specific process adapter
+        if: ${{ !matrix.skip_tests }}
         run: cargo clippy --locked -p xgen-adapter-process --all-targets -- -D warnings
 
       - name: Check bundled protocol
+        if: ${{ !matrix.skip_tests }}
         run: cargo run --locked --quiet -p xgen-cli -- protocol check
 
       - name: Build release CLI
