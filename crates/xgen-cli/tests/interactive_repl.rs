@@ -551,6 +551,20 @@ fn trust_flag_runs_a_tool_goal_without_any_approval_prompt() {
                 .any(|id| matches!(id, "bash" | "zsh" | "sh"))),
         "trust mode should catalogue a shell: {stdout}"
     );
+    // ADR-0063: the trusted goal carries the workspace boundary and the shell route.
+    #[cfg(unix)]
+    {
+        let request = server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        let goal = planning_context(&request)["goal"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(goal.starts_with("Read README.md and report it."), "{goal}");
+        assert!(
+            goal.contains("Host environment (trusted local session): the workspace root is"),
+            "{goal}"
+        );
+    }
     assert!(stdout.contains("status: completed"), "{stdout}");
     let run_id = extract_run_id(&stderr(&output));
     let store =

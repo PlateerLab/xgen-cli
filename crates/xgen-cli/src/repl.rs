@@ -1855,6 +1855,39 @@ const SHELL_EXECUTABLES: &[&str] = &["bash", "zsh", "sh"];
 const SHELL_EXECUTABLES: &[&str] = &["pwsh", "powershell"];
 
 /// The user's own shell when `SHELL` names a known one, otherwise the first known shell on PATH.
+/// Host note for trusted goals (ADR-0063): file tools take workspace-relative paths only, so a
+/// model told about `~/x` or `/etc` otherwise retries `not_found` instead of using the shell.
+///
+/// Returns `None` when a path is not plain UTF-8 text the note can quote safely.
+pub(crate) fn trusted_environment_note(
+    workspace: &Path,
+    home: Option<&Path>,
+    shell_id: &str,
+) -> Option<String> {
+    let quoted = |path: &Path| {
+        path.to_str()
+            .filter(|text| !text.chars().any(char::is_control))
+            .map(|text| serde_json::to_string(text).expect("text serializes"))
+    };
+    let workspace = quoted(workspace)?;
+    let command_flag = if matches!(shell_id, "pwsh" | "powershell") {
+        "-Command"
+    } else {
+        "-c"
+    };
+    let home = home
+        .and_then(quoted)
+        .map(|home| format!(" The user's home directory (~) is {home}."))
+        .unwrap_or_default();
+    Some(format!(
+        "Host environment (trusted local session): the workspace root is {workspace}. The \
+         xgeny.fs capabilities accept only paths relative to it and cannot reach anything \
+         outside it; an absolute path, a ~ path, or a path leaving the workspace fails with \
+         not_found there. For locations outside the workspace, run the `{shell_id}` executable \
+         with arguments [\"{command_flag}\", \"<command>\"].{home}"
+    ))
+}
+
 pub(crate) fn discover_shell_executable() -> Option<(String, PathBuf)> {
     let path = env::var_os("PATH").unwrap_or_default();
     #[cfg(windows)]
@@ -2445,6 +2478,26 @@ mod tests {
         assert_eq!(output.matches("Allow read").count(), 2);
         assert_eq!(output.matches("Allow write").count(), 1);
         assert_eq!(output.matches("Allow execute").count(), 1);
+    }
+
+    #[test]
+    fn trusted_environment_note_names_the_boundary_and_the_shell_route() {
+        let note =
+            trusted_environment_note(Path::new("/work/repo"), Some(Path::new("/home/me")), "bash")
+                .unwrap();
+        assert!(note.contains(r#"workspace root is "/work/repo""#), "{note}");
+        assert!(note.contains("not_found"), "{note}");
+        assert!(note.contains(r#"`bash` executable with arguments ["-c", "<command>"]"#));
+        assert!(
+            note.contains(r#"home directory (~) is "/home/me""#),
+            "{note}"
+        );
+
+        let note = trusted_environment_note(Path::new("/work/repo"), None, "pwsh").unwrap();
+        assert!(note.contains(r#"["-Command", "<command>"]"#), "{note}");
+        assert!(!note.contains("home directory"));
+
+        assert!(trusted_environment_note(Path::new("/work/re\npo"), None, "bash").is_none());
     }
 
     #[cfg(unix)]
