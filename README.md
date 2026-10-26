@@ -68,7 +68,7 @@ xgen model check --compatibility
 # 상세 durable progress 로그가 필요할 때
 xgen --debug
 
-# 요청 하나가 쓸 수 있는 model turn 수를 바꿀 때 (기본 24)
+# 요청 하나가 쓸 수 있는 model turn 수를 바꿀 때 (기본 24, --trust면 96)
 xgen --max-model-turns 48
 ```
 

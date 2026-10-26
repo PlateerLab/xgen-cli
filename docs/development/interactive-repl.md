@@ -31,6 +31,8 @@ Session 허용은 파일에 저장하지 않고 process가 끝나면 사라진�
 신뢰 모드는 사용자의 shell(`SHELL`이 bash·zsh·sh면 그것, 아니면 PATH의 bash→zsh→sh, Windows는
 pwsh→powershell)도 catalog에 넣는다([ADR-0060](../adr/0060-trusted-shell-executable.md)). 모델은 이것으로
 파이프와 catalog에 없는 명령을 실행한다.
+신뢰 모드의 goal당 model turn 기본값은 24가 아니라 96이다([ADR-0062](../adr/0062-trusted-turn-budget.md)).
+`--max-model-turns`를 주면 그 값이 우선한다.
 
 ```text
 xgen> 프로젝트 구조를 보고 테스트 실패를 수정해줘.

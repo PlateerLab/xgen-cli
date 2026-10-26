@@ -42,14 +42,14 @@ struct Cli {
     /// Show durable progress events instead of the interactive Thinking display.
     #[arg(long)]
     debug: bool,
-    /// Model turns each interactive goal may use before it stops without an answer.
+    /// Model turns each interactive goal may use before it stops without an answer
+    /// [default: 24, or 96 with --trust].
     #[arg(
         long,
         value_name = "TURNS",
-        default_value_t = REPL_MODEL_TURNS,
         value_parser = clap::value_parser!(u32).range(1..=i64::from(xgen_cli::MAX_HOST_MODEL_TURNS))
     )]
-    max_model_turns: u32,
+    max_model_turns: Option<u32>,
     /// Start the interactive session with model/read/write/execute allowed, asking nothing.
     #[arg(long)]
     trust: bool,
@@ -387,7 +387,12 @@ fn main() -> ExitCode {
     }
     match cli.command {
         Some(Command::Tools { command }) => tools::run(command),
-        None => interactive_command(cli.debug, cli.max_model_turns, cli.trust),
+        None => interactive_command(
+            cli.debug,
+            cli.max_model_turns
+                .unwrap_or_else(|| default_repl_model_turns(cli.trust)),
+            cli.trust,
+        ),
         Some(Command::Licenses) => print_licenses(),
         Some(Command::Protocol {
             command: ProtocolCommand::Check,
@@ -508,9 +513,22 @@ fn executable_catalog(named: Vec<String>, include_path: bool) -> Vec<String> {
 // The bare workspace budget (8 turns) ends a read-edit-test task before it can answer.
 // 24 turns is the budget the project evals already use for Node.js and Python work.
 const REPL_MODEL_TURNS: u32 = 24;
+// Trust mode (ADR-0062) is the personal mode where nobody approves each step, so a goal like a
+// rename across 17 files should not stop at 24 turns. 96 turns keep a foreground invocation
+// inside MAX_TICKS (1_024) at ten ticks per turn.
+const TRUSTED_REPL_MODEL_TURNS: u32 = 96;
+const _: () = assert!(TRUSTED_REPL_MODEL_TURNS * REPL_TICKS_PER_MODEL_TURN <= xgen_cli::MAX_TICKS);
 // Ticks only bound one foreground invocation; the manifest budget bounds the Run. Ten
 // per turn covers plan, admission, effect and verification with room for recovery.
 const REPL_TICKS_PER_MODEL_TURN: u32 = 10;
+
+const fn default_repl_model_turns(trust: bool) -> u32 {
+    if trust {
+        TRUSTED_REPL_MODEL_TURNS
+    } else {
+        REPL_MODEL_TURNS
+    }
+}
 
 const fn repl_max_ticks(max_model_turns: u32) -> u32 {
     let ticks = max_model_turns.saturating_mul(REPL_TICKS_PER_MODEL_TURN);
