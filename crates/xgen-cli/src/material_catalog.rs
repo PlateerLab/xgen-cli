@@ -263,6 +263,46 @@ impl RunMaterialCatalog {
         Ok(record.arguments)
     }
 
+    /// Arguments of a process, terminal, or web search Step, bound to its material digest.
+    fn process_family_arguments(
+        &self,
+        reference: &ReconstructableMaterialReference,
+        step_id: &str,
+        material_digest: &str,
+        capability: &CapabilityRef,
+    ) -> Result<Value, MaterialProviderFailure> {
+        let profile = if capability.capability_id == PROCESS_EXECUTE_CAPABILITY_ID
+            && capability.contract_version == PROCESS_EXECUTE_CONTRACT_VERSION
+        {
+            PROCESS_RECIPE_PROFILE
+        } else if capability.capability_id == WEB_SEARCH_CAPABILITY_ID
+            && capability.contract_version == WEB_SEARCH_CONTRACT_VERSION
+        {
+            WEB_SEARCH_RECIPE_PROFILE
+        } else if TerminalOperation::from_capability(&capability.capability_id).is_some()
+            && capability.contract_version == TERMINAL_VERSION
+        {
+            TERMINAL_RECIPE_PROFILE
+        } else {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        };
+        if reference.provider_id() != profile.provider_id {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        let record = self.reconstruct_record_with_profile(
+            reference.reference_id(),
+            reference.revision(),
+            profile,
+        )?;
+        if record.step_id != step_id
+            || record.material_digest != material_digest
+            || record.capability != *capability
+        {
+            return Err(MaterialProviderFailure::RevisionChanged);
+        }
+        Ok(record.arguments)
+    }
+
     /// Arguments of a workspace Step exactly as planned and approved, bound to its material digest.
     pub(crate) fn workspace_arguments(
         &self,
@@ -534,13 +574,8 @@ impl PlanMaterializer for ProcessMaterializer {
         reference: &ReconstructableMaterialReference,
         material_digest: &str,
     ) -> Option<Value> {
-        if capability.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
-            || capability.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
-        {
-            return None;
-        }
         self.catalog
-            .process_arguments(reference, step_id, material_digest)
+            .process_family_arguments(reference, step_id, material_digest, capability)
             .ok()
     }
 }
@@ -1015,6 +1050,22 @@ mod tests {
                     MaterialProviderFailure::RevisionChanged
                 );
             }
+            // ADR-0067: the planner sees the arguments only under the recorded capability.
+            assert_eq!(
+                reopened
+                    .process_family_arguments(&reference, &input.step_id, DIGEST, &input.capability)
+                    .unwrap(),
+                input.arguments
+            );
+            let process = CapabilityRef {
+                capability_id: PROCESS_EXECUTE_CAPABILITY_ID.to_owned(),
+                contract_version: PROCESS_EXECUTE_CONTRACT_VERSION.to_owned(),
+            };
+            assert!(
+                reopened
+                    .process_family_arguments(&reference, &input.step_id, DIGEST, &process)
+                    .is_err()
+            );
         }
     }
 

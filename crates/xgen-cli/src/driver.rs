@@ -146,6 +146,12 @@ pub enum DriverProgressControl {
 /// Each retry is a new journaled model call and spends the Run's model-call budget.
 pub const MAX_REJECTED_RESPONSE_RETRIES: u32 = 2;
 
+/// Consecutive `repeated_finished_action` rejections the driver re-asks before it stops (ADR-0067).
+///
+/// A repeated read runs nothing and the model usually moves on within a few re-asks; a longer
+/// streak in the measured Runs never ended before ten more calls.
+pub const MAX_REPEATED_ACTION_RETRIES: u32 = 8;
+
 /// Provider-neutral bounded coordinator used by CLI composition roots and hermetic tests.
 #[derive(Debug, Clone)]
 pub struct RunDriver {
@@ -318,6 +324,7 @@ impl RunDriver {
         O: FnMut(DriverProgress) -> DriverProgressControl,
     {
         let mut rejected_responses_in_a_row = 0_u32;
+        let mut repeated_actions_in_a_row = 0_u32;
         for _ in 0..self.max_ticks.get() {
             if model_call_may_be_next(store)? {
                 if !model_egress_allowed {
@@ -342,6 +349,7 @@ impl RunDriver {
                 | AgentLoopTick::ModelCallAbandoned { .. } => {}
                 AgentLoopTick::PlanAccepted { .. } => {
                     rejected_responses_in_a_row = 0;
+                    repeated_actions_in_a_row = 0;
                     if observer(DriverProgress::PlanCommitted) == DriverProgressControl::Cancel {
                         return Ok(DriverOutcome::Cancelled);
                     }
@@ -505,6 +513,15 @@ impl RunDriver {
                     return Ok(DriverOutcome::PlannerUnavailable(failure));
                 }
                 AgentLoopTick::ProposalRejected { reason, .. } => {
+                    // A repeated read runs nothing and costs one model call; about half the time
+                    // the model moves on once told, so it gets its own, longer limit (ADR-0067).
+                    if reason == ProposalRejection::RepeatedFinishedAction {
+                        if repeated_actions_in_a_row < MAX_REPEATED_ACTION_RETRIES {
+                            repeated_actions_in_a_row += 1;
+                            continue;
+                        }
+                        return Ok(DriverOutcome::ProposalRejected(reason));
+                    }
                     // A spent budget rejects every later proposal the same way.
                     let budget_spent = matches!(
                         reason,
