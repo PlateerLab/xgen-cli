@@ -264,7 +264,7 @@ impl RunMaterialCatalog {
     }
 
     /// Arguments of a process, terminal, or web search Step, bound to its material digest.
-    fn process_family_arguments(
+    pub(crate) fn process_family_arguments(
         &self,
         reference: &ReconstructableMaterialReference,
         step_id: &str,
