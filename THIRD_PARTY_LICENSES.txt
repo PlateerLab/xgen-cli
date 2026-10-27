@@ -8608,6 +8608,7 @@ License: MIT License
 
 Used by:
 - crossterm 0.29.0 (https://github.com/crossterm-rs/crossterm)
+- crossterm_winapi 0.9.1 (https://github.com/crossterm-rs/crossterm-winapi)
 
 MIT License
 

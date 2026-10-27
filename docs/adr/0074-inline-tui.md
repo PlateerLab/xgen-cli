@@ -34,8 +34,8 @@ prompt와 같은 흐름에 섞였다. Claude Code·Codex처럼 입력창은 화�
 7. 종료·panic 시 raw mode와 bracketed paste를 되돌리고 pane을 지운다.
 8. 터미널이 아니면(파이프, 테스트) 기존 stdin reader와 plain 출력을 그대로 쓴다.
 
-의존성: `rustyline`을 빼고 `crossterm` 0.29.0(`events`, `bracketed-paste`)과 `unicode-width` 0.2.2를 넣었다.
-lock의 package 수는 333에서 335가 됐고, Windows의 BSL-1.0 의존성이 사라져 `about.toml` allow-list에서 뺐다.
+의존성: `rustyline`을 빼고 `crossterm` 0.29.0(`events`, `bracketed-paste`, `windows`)과 `unicode-width` 0.2.2를 넣었다.
+lock의 package 수는 333에서 336이 됐고, Windows의 BSL-1.0 의존성이 사라져 `about.toml` allow-list에서 뺐다.
 
 ## 검증
 
