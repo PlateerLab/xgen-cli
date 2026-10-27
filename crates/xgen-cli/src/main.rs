@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::env;
 use std::io::{BufRead as _, ErrorKind, IsTerminal as _, Read as _, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -23,6 +23,7 @@ use xgen_provider_openai::{BearerCredential, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
 
 mod repl;
+mod tui;
 use xgen_cli::tools;
 
 const PROJECT_LICENSE: &str = include_str!("../../../LICENSE");
@@ -798,6 +799,26 @@ impl repl::ReplHost for InteractiveHost {
     }
 }
 
+/// The session line under the input box: where the agent works, and whether it is trusted.
+fn interactive_footer(trust: bool) -> String {
+    let directory = env::current_dir().map_or_else(
+        |_| String::from("?"),
+        |directory| match env::home_dir()
+            .and_then(|home| directory.strip_prefix(home).ok().map(Path::to_path_buf))
+        {
+            Some(relative) if relative.as_os_str().is_empty() => String::from("~"),
+            Some(relative) => format!("~/{}", relative.display()),
+            None => directory.display().to_string(),
+        },
+    );
+    let mode = if trust {
+        "trusted"
+    } else {
+        "asks before acting"
+    };
+    format!("{directory} · {mode}")
+}
+
 fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCode {
     let terminal = std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal()
@@ -817,14 +838,14 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };
     let result = if terminal {
-        // ADR-0071: arrow-key editing and history while the REPL waits for a line.
-        let prompt = repl::PendingPrompt::default();
-        let mut input = repl::InterruptibleInput::terminal(
-            cancellation.clone(),
-            prompt.clone(),
-            xgen_cli::repl_history_path(),
-        );
-        let mut output = repl::PromptTrackingOutput::new(std::io::stdout(), prompt);
+        // ADR-0074: a pane pinned to the bottom keeps the input editable while a Run is in flight.
+        let footer = interactive_footer(trust);
+        let Ok((mut input, mut output, _guard)) =
+            tui::start(cancellation.clone(), xgen_cli::repl_history_path(), footer)
+        else {
+            eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
+            return ExitCode::from(PublicRunError::Internal.exit_code());
+        };
         repl::run_with_display(
             &mut input,
             &mut output,

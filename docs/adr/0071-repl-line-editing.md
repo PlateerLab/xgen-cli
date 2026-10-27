@@ -1,6 +1,6 @@
 # ADR-0071: 대화형 REPL 입력에 줄 편집과 기록을 붙인다
 
-- 상태: Accepted
+- 상태: Superseded by ADR-0074 (rustyline editor를 하단 고정 TUI로 바꿈)
 - 기준일: 2026-10-27
 - 변경 분류: 범용 REPL 입력. protocol·journal·planning context 변경 없음.
 
