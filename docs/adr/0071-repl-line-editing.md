@@ -23,6 +23,8 @@ stdin과 stdout이 모두 터미널이면 입력 thread가 `rustyline` 18.0.1 ed
 - 기록 파일은 Run과 같은 state root의 `repl-history.txt`이고 Unix에서 0600이다. 목표와 명령(`xgen> `, `...> `
   prompt에서 받은 줄)만 저장한다. `[y/a/N]` 승인 응답은 저장하지 않는다.
 - 터미널이 아니면(파이프, 테스트) 기존 stdin reader와 plain 출력을 그대로 쓴다.
+- Windows에서 rustyline이 끌어오는 `clipboard-win`·`error-code`가 BSL-1.0이다. BSL-1.0은 바이너리 배포 시 고지
+  의무도 없는 OSI 승인 라이선스라 `about.toml` allow-list에 더하고 `THIRD_PARTY_LICENSES.txt`를 다시 생성했다.
 
 ## 검증
 
