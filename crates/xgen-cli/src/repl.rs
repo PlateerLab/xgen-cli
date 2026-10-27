@@ -270,6 +270,7 @@ impl Cancellation {
 
 enum InputMessage {
     Line(String),
+    Interrupted,
     TooLarge,
     Unavailable,
     EndOfInput,
@@ -283,6 +284,100 @@ pub(crate) struct InterruptibleInput {
     buffer: Vec<u8>,
     position: usize,
     ended: bool,
+    /// Asks the line editor for one line; `None` reads stdin ahead line by line.
+    requests: Option<mpsc::Sender<()>>,
+    requested: bool,
+}
+
+/// Goals can name private paths or hosts, so only the user may read the history file.
+fn keep_private(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
+/// The text written after the last line break: the prompt a line editor must redraw.
+#[derive(Clone, Default)]
+pub(crate) struct PendingPrompt(Arc<Mutex<String>>);
+
+impl PendingPrompt {
+    const MAX_CHARS: usize = 256;
+
+    fn observe(&self, bytes: &[u8]) {
+        let Ok(mut pending) = self.0.lock() else {
+            return;
+        };
+        let tail = match bytes.iter().rposition(|byte| matches!(byte, b'\n' | b'\r')) {
+            Some(index) => {
+                pending.clear();
+                &bytes[index + 1..]
+            }
+            None => bytes,
+        };
+        pending.push_str(&String::from_utf8_lossy(tail));
+        if pending.chars().count() > Self::MAX_CHARS {
+            pending.clear();
+        }
+    }
+
+    fn clear(&self) {
+        if let Ok(mut pending) = self.0.lock() {
+            pending.clear();
+        }
+    }
+
+    /// The pending text without terminal escape sequences, which a line editor would miscount.
+    fn text(&self) -> String {
+        let pending = self
+            .0
+            .lock()
+            .map(|pending| pending.clone())
+            .unwrap_or_default();
+        let mut text = String::with_capacity(pending.len());
+        let mut characters = pending.chars();
+        while let Some(character) = characters.next() {
+            if character == '\x1b' {
+                if characters.next() == Some('[') {
+                    for parameter in characters.by_ref() {
+                        if ('@'..='~').contains(&parameter) {
+                            break;
+                        }
+                    }
+                }
+            } else if !character.is_control() {
+                text.push(character);
+            }
+        }
+        text
+    }
+}
+
+/// Terminal output that remembers the pending prompt for [`InterruptibleInput::terminal`].
+pub(crate) struct PromptTrackingOutput<W> {
+    inner: W,
+    prompt: PendingPrompt,
+}
+
+impl<W> PromptTrackingOutput<W> {
+    pub(crate) const fn new(inner: W, prompt: PendingPrompt) -> Self {
+        Self { inner, prompt }
+    }
+}
+
+impl<W: Write> Write for PromptTrackingOutput<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let written = self.inner.write(bytes)?;
+        self.prompt.observe(&bytes[..written]);
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 impl InterruptibleInput {
@@ -315,6 +410,75 @@ impl InterruptibleInput {
             buffer: Vec::new(),
             position: 0,
             ended: false,
+            requests: None,
+            requested: false,
+        }
+    }
+
+    /// A line editor with arrow-key editing and history for a terminal (ADR-0071).
+    ///
+    /// The editor reads only when the REPL asks for a line, so while a Run is in flight the
+    /// terminal stays in its normal mode and Ctrl+C reaches the cooperative handler. While the
+    /// editor is reading, Ctrl+C cancels the line like the plain reader does.
+    pub(crate) fn terminal(
+        cancellation: Cancellation,
+        prompt: PendingPrompt,
+        history: Option<PathBuf>,
+    ) -> Self {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let (requests, requested) = mpsc::channel::<()>();
+        thread::spawn(move || {
+            let Ok(mut editor) = rustyline::DefaultEditor::new() else {
+                let _ = sender.send(InputMessage::Unavailable);
+                return;
+            };
+            if let Some(history) = &history {
+                if let Some(parent) = history.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = editor.load_history(history);
+            }
+            while requested.recv().is_ok() {
+                let text = prompt.text();
+                let read = editor.readline(&text);
+                // The editor ended its line on the terminal itself.
+                prompt.clear();
+                let message = match read {
+                    Ok(line) if line.len() > MAX_REPL_LINE_BYTES => InputMessage::TooLarge,
+                    Ok(line) => {
+                        // Only goals and commands are worth recalling, not approval answers.
+                        let entry = text.starts_with("xgen> ") || text.starts_with("...> ");
+                        if entry
+                            && !line.trim().is_empty()
+                            && editor.add_history_entry(line.as_str()).is_ok()
+                            && let Some(history) = &history
+                        {
+                            let _ = editor.append_history(history);
+                            keep_private(history);
+                        }
+                        InputMessage::Line(line)
+                    }
+                    Err(rustyline::error::ReadlineError::Interrupted) => InputMessage::Interrupted,
+                    Err(rustyline::error::ReadlineError::Eof) => InputMessage::EndOfInput,
+                    Err(_) => InputMessage::Unavailable,
+                };
+                let ended = matches!(
+                    message,
+                    InputMessage::EndOfInput | InputMessage::Unavailable
+                );
+                if sender.send(message).is_err() || ended {
+                    return;
+                }
+            }
+        });
+        Self {
+            receiver,
+            cancellation,
+            buffer: Vec::new(),
+            position: 0,
+            ended: false,
+            requests: Some(requests),
+            requested: false,
         }
     }
 
@@ -323,11 +487,25 @@ impl InterruptibleInput {
             if self.cancellation.is_requested() {
                 return Err(io::Error::from(io::ErrorKind::Interrupted));
             }
+            if let Some(requests) = &self.requests
+                && !self.requested
+            {
+                if requests.send(()).is_err() {
+                    self.ended = true;
+                    break;
+                }
+                self.requested = true;
+            }
             match self.receiver.recv_timeout(Duration::from_millis(25)) {
                 Ok(InputMessage::Line(line)) => {
+                    self.requested = false;
                     self.buffer = line.into_bytes();
                     self.buffer.push(b'\n');
                     self.position = 0;
+                }
+                Ok(InputMessage::Interrupted) => {
+                    self.requested = false;
+                    return Err(io::Error::from(io::ErrorKind::Interrupted));
                 }
                 Ok(InputMessage::TooLarge) => {
                     return Err(io::Error::new(
@@ -2039,6 +2217,21 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn the_pending_prompt_is_the_unstyled_text_after_the_last_line_break() {
+        let prompt = PendingPrompt::default();
+        let mut output = PromptTrackingOutput::new(Vec::new(), prompt.clone());
+        write!(output, "answer\n\x1b[1mxgen>\x1b[0m ").unwrap();
+        assert_eq!(prompt.text(), "xgen> ");
+        write!(output, "\nAllow read? [y/a/N] ").unwrap();
+        assert_eq!(prompt.text(), "Allow read? [y/a/N] ");
+        prompt.clear();
+        assert_eq!(prompt.text(), "");
+        write!(output, "{}", "x".repeat(PendingPrompt::MAX_CHARS + 1)).unwrap();
+        assert_eq!(prompt.text(), "");
+        assert_eq!(output.inner.len(), 42 + PendingPrompt::MAX_CHARS + 1);
+    }
 
     #[test]
     fn model_rejection_keeps_request_until_explicit_resume_or_clear() {

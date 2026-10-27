@@ -31,6 +31,15 @@ pub use usage::{CostEstimate, TokenPrices, UsageReport, UsdPerMillion, inspect_l
 #[doc(hidden)]
 pub use environment::compatible_environment;
 
+/// Where the interactive REPL keeps its input history, beside the Runs (ADR-0071).
+#[doc(hidden)]
+#[must_use]
+pub fn repl_history_path() -> Option<std::path::PathBuf> {
+    run_layout::discover_state_root()
+        .ok()
+        .map(|root| root.join("repl-history.txt"))
+}
+
 /// Resolve the catalog directory using the same platform and legacy state roots as Runs.
 #[doc(hidden)]
 pub fn tool_catalog_directory() -> Result<std::path::PathBuf, &'static str> {

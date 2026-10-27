@@ -816,16 +816,36 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
         eprintln!("XGEN_ERROR code={}", PublicRunError::Configuration.code());
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };
-    let mut input = repl::InterruptibleInput::stdin(cancellation.clone());
-    let mut output = std::io::stdout();
-    match repl::run_with_display(
-        &mut input,
-        &mut output,
-        &mut host,
-        &cancellation,
-        terminal && !debug,
-        trust,
-    ) {
+    let result = if terminal {
+        // ADR-0071: arrow-key editing and history while the REPL waits for a line.
+        let prompt = repl::PendingPrompt::default();
+        let mut input = repl::InterruptibleInput::terminal(
+            cancellation.clone(),
+            prompt.clone(),
+            xgen_cli::repl_history_path(),
+        );
+        let mut output = repl::PromptTrackingOutput::new(std::io::stdout(), prompt);
+        repl::run_with_display(
+            &mut input,
+            &mut output,
+            &mut host,
+            &cancellation,
+            !debug,
+            trust,
+        )
+    } else {
+        let mut input = repl::InterruptibleInput::stdin(cancellation.clone());
+        let mut output = std::io::stdout();
+        repl::run_with_display(
+            &mut input,
+            &mut output,
+            &mut host,
+            &cancellation,
+            false,
+            trust,
+        )
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) if error.kind() == ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(_) => {
