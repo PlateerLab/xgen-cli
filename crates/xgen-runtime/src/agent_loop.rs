@@ -446,11 +446,12 @@ pub enum PlanningConstraintError {
     DuplicateIdentifier,
 }
 
-/// Field order is the wire order (ADR-0036): the catalog and goal are stable for a Run, `steps`
-/// and `tool_outputs` only grow at their tails between turns, and the per-call identifiers come
-/// last, so a provider prefix cache can reuse the leading tokens across calls. A completed change
-/// marks earlier outputs it superseded (ADR-0069), which shortens the reusable prefix once. The canonical
-/// `context_digest` is RFC 8785 and therefore independent of this order.
+/// Field order is the wire order (ADR-0036): the catalog and goal are stable for a Run, and the
+/// per-call identifiers come last, so a provider prefix cache can reuse the leading tokens across
+/// calls. `tool_outputs` only grow at their tail, while `steps` change in place as Steps settle,
+/// so the outputs, which hold most of the bytes, come before the steps (ADR-0072). A completed
+/// change marks earlier outputs it superseded (ADR-0069), which shortens the reusable prefix once.
+/// The canonical `context_digest` is RFC 8785 and therefore independent of this order.
 #[derive(Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PlanningContextPayload {
@@ -461,9 +462,9 @@ struct PlanningContextPayload {
     goal: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     planning_constraints: Vec<PlanningConstraint>,
+    tool_outputs: Vec<PlanningToolOutput>,
     steps: Vec<PlanningStepSummary>,
     omitted_steps: usize,
-    tool_outputs: Vec<PlanningToolOutput>,
     total_steps: usize,
     verified_completed_steps: usize,
     /// Why the previous response was discarded, when it was (ADR-0064).
@@ -3973,9 +3974,9 @@ mod tests {
         };
         assert!(position("profileVersion") < position("capabilities"));
         assert!(position("capabilities") < position("goal"));
-        assert!(position("goal") < position("steps"));
-        assert!(position("steps") < position("toolOutputs"));
-        assert!(position("toolOutputs") < position("runId"));
+        assert!(position("goal") < position("toolOutputs"));
+        assert!(position("toolOutputs") < position("steps"));
+        assert!(position("steps") < position("runId"));
         assert!(position("runId") < position("journalHeadDigest"));
         let last_key = [
             "profileVersion",

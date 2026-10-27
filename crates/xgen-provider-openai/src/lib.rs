@@ -28,7 +28,7 @@ mod usage;
 pub use usage::{ModelCallObservation, ModelCallOutcome, TokenUsage};
 
 const REQUEST_PROFILE_DOMAIN: &str = "xgeny.openai-request-profile/v1";
-const REQUEST_ENVELOPE_PROFILE: &str = "xgeny.planner-request/v2";
+const REQUEST_ENVELOPE_PROFILE: &str = "xgeny.planner-request/v3";
 const PLANNING_CONTEXT_PROFILE: &str = "xgeny.planning-context/v3";
 const PROPOSAL_SCHEMA_REVISION: &str = "xgeny.plan-proposal/v2";
 const PROMPT_TEMPLATE_REVISION: &str = "xgeny.openai-planner-prompt/v4-compact";
@@ -2405,7 +2405,7 @@ mod tests {
         );
         assert_eq!(
             original.request_profile_digest(),
-            "sha256:be4331e9fe9c0e2645f99aa5e0e3987a946c887cb142e53586a2b1451f2bf7e9"
+            "sha256:51c88c265bede0dad6e24394464df7770777b21e4f388f49581b4e6cb87947f7"
         );
         assert_eq!(
             serde_json::to_vec(&original.chat_request(&prompt, "task")).unwrap(),
@@ -2952,7 +2952,7 @@ mod tests {
         );
         assert_eq!(
             first.request_profile_digest(),
-            "sha256:be4331e9fe9c0e2645f99aa5e0e3987a946c887cb142e53586a2b1451f2bf7e9"
+            "sha256:51c88c265bede0dad6e24394464df7770777b21e4f388f49581b4e6cb87947f7"
         );
         assert_eq!(
             first.request_profile_digest(),
@@ -3650,7 +3650,7 @@ mod tests {
         // prompt, proposal schema, and bounded limits are.
         assert_eq!(
             config("https://provider.example/v1").request_profile_digest(),
-            "sha256:be4331e9fe9c0e2645f99aa5e0e3987a946c887cb142e53586a2b1451f2bf7e9"
+            "sha256:51c88c265bede0dad6e24394464df7770777b21e4f388f49581b4e6cb87947f7"
         );
         assert_eq!(
             config("https://provider.example/v1")
@@ -3659,7 +3659,7 @@ mod tests {
                 .with_timeout(Duration::from_secs(60))
                 .unwrap()
                 .request_profile_digest(),
-            "sha256:d52f2f7873215ecb13d2c04e79f14829afae6219a4d795fa2912581192476973"
+            "sha256:ed7c965e1ee130f12035b9ea13abffd10a7a3852aad04772ddc8ae579eb3e59a"
         );
     }
 
