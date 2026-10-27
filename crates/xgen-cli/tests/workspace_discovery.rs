@@ -848,6 +848,114 @@ fn exact_patch_requires_write_approval_and_survives_process_resume() {
 }
 
 #[test]
+fn observations_of_a_file_changed_later_are_marked_for_the_planner() {
+    // ADR-0069: a read or search covering a file that a later completed patch changed is marked
+    // with that patch; unrelated and later observations are not. Every output stays.
+    let fixture = tempdir().expect("test directory should exist");
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(workspace.join("src")).expect("workspace should create");
+    let source = "pub fn answer() -> u32 {\n    41\n}\n";
+    fs::write(workspace.join("src/lib.rs"), source).expect("source should write");
+    fs::write(workspace.join("README.md"), "fixture workspace").expect("README should write");
+    let server = SequentialServer::spawn_responses(vec![
+        plan_response(
+            "read_source",
+            "Read the source",
+            "xgeny.fs/read-text",
+            &json!({"path": "src/lib.rs"}),
+        ),
+        plan_response(
+            "read_readme",
+            "Read the README",
+            "xgeny.fs/read-text",
+            &json!({"path": "README.md"}),
+        ),
+        plan_response(
+            "search_source",
+            "Find the answer",
+            "xgeny.fs/search-text",
+            &json!({"path": "src", "query": "41"}),
+        ),
+        plan_response(
+            "patch_source",
+            "Patch the answer",
+            "xgeny.fs/apply-patch",
+            &json!({
+                "path": "src/lib.rs",
+                "expectedDigest": test_sha256_digest(source.as_bytes()),
+                "edits": [{"oldText": "    41\n", "newText": "    42\n"}]
+            }),
+        ),
+        plan_response(
+            "reread_source",
+            "Read the patched source",
+            "xgeny.fs/read-text",
+            &json!({"path": "src/lib.rs"}),
+        ),
+        completion_response(),
+    ]);
+
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-read",
+        "--allow-write",
+        "--allow-remote-model-egress",
+        "Update the answer and confirm it.",
+    ]))
+    .expect("run should finish");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+
+    let requests: Vec<_> = (0..6)
+        .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+        .collect();
+    server.handle.join().expect("provider server should finish");
+    let before_patch = planning_context(&requests[3]);
+    assert!(
+        before_patch["toolOutputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|output| output.get("supersededBy").is_none())
+    );
+    let context = planning_context(&requests[5]);
+    let steps = context["steps"].as_array().unwrap();
+    let patch_step = steps[3]["stepId"].as_str().unwrap();
+    let outputs = context["toolOutputs"].as_array().unwrap();
+    assert_eq!(outputs.len(), 5);
+    for stale in [&outputs[0], &outputs[2]] {
+        assert_eq!(stale["supersededBy"], patch_step, "{stale}");
+        assert!(
+            stale["supersededMeaning"]
+                .as_str()
+                .unwrap()
+                .contains("may no longer match")
+        );
+    }
+    assert_eq!(outputs[0]["output"]["content"], source);
+    assert!(outputs[2]["output"]["matches"].as_array().is_some());
+    assert_eq!(outputs[1]["output"]["content"], "fixture workspace");
+    assert_eq!(outputs[3]["output"]["changed"], true);
+    assert_eq!(
+        outputs[4]["output"]["content"],
+        "pub fn answer() -> u32 {\n    42\n}\n"
+    );
+    for fresh in [&outputs[1], &outputs[3], &outputs[4]] {
+        assert!(fresh.get("supersededBy").is_none());
+    }
+}
+
+#[test]
 fn failed_read_is_shown_to_the_planner_and_the_task_can_complete() {
     let fixture = tempdir().expect("test directory should exist");
     let state_root = fixture.path().join("state");

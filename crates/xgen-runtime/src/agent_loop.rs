@@ -39,6 +39,9 @@ const MAX_PLANNING_SOURCE_STEPS: usize = 4_096;
 const MAX_PLANNING_DEFINITION_BYTES: usize = 256 * 1024;
 const MAX_PLANNING_STEP_BYTES: usize = 64 * 1024;
 /// Larger arguments, such as patch bodies, stay out of the planning context (ADR-0065).
+/// Fixed `supersededMeaning` beside an observation whose output was withheld (ADR-0069).
+const SUPERSEDED_OUTPUT_MEANING: &str = "A later completed Step changed a resource this observation \
+     covered, so this output may no longer match the current state.";
 const MAX_PLANNING_STEP_ARGUMENT_BYTES: usize = 2 * 1024;
 const MAX_PLANNING_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PLANNING_VALUE_DEPTH: usize = 64;
@@ -236,6 +239,12 @@ pub struct PlanningToolOutput {
     receipt_digest: String,
     canonical_size_bytes: u64,
     output: Value,
+    /// The first later completed Step that changed a resource this observation covered (ADR-0069).
+    /// The output stays: unchanged parts of a broad observation remain the planner's only record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    superseded_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    superseded_meaning: Option<&'static str>,
 }
 
 impl PlanningToolOutput {
@@ -273,6 +282,11 @@ impl PlanningToolOutput {
     pub const fn output(&self) -> &Value {
         &self.output
     }
+
+    #[must_use]
+    pub fn superseded_by(&self) -> Option<&str> {
+        self.superseded_by.as_deref()
+    }
 }
 
 impl fmt::Debug for PlanningToolOutput {
@@ -286,6 +300,8 @@ impl fmt::Debug for PlanningToolOutput {
             .field("receipt_digest", &self.receipt_digest)
             .field("canonical_size_bytes", &self.canonical_size_bytes)
             .field("output", &"<redacted>")
+            .field("superseded_by", &self.superseded_by)
+            .field("superseded_meaning", &self.superseded_meaning)
             .finish()
     }
 }
@@ -432,7 +448,8 @@ pub enum PlanningConstraintError {
 
 /// Field order is the wire order (ADR-0036): the catalog and goal are stable for a Run, `steps`
 /// and `tool_outputs` only grow at their tails between turns, and the per-call identifiers come
-/// last, so a provider prefix cache can reuse the leading tokens across calls. The canonical
+/// last, so a provider prefix cache can reuse the leading tokens across calls. A completed change
+/// marks earlier outputs it superseded (ADR-0069), which shortens the reusable prefix once. The canonical
 /// `context_digest` is RFC 8785 and therefore independent of this order.
 #[derive(Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1404,12 +1421,20 @@ impl AgentLoop {
             return Err(AgentLoopError::PlanningSnapshotMismatch);
         }
         let step_arguments = finished_step_arguments(store, materializer, capabilities, &state);
+        let superseded_outputs = superseded_observations(
+            store,
+            materializer,
+            capabilities,
+            &state,
+            planning_snapshot.completed_tool_output_order(),
+        );
         let context = match build_context_ordered(
             &state,
             planning_snapshot.completed_tool_outputs(),
             planning_snapshot.planning_step_order(),
             planning_snapshot.completed_tool_output_order(),
             &step_arguments,
+            &superseded_outputs,
             &frontier,
             capabilities,
             &self.planning_constraints,
@@ -2246,6 +2271,7 @@ fn build_planning_tool_outputs(
     state: &RunState,
     completed_tool_outputs: &BTreeMap<String, ToolOutputRecord>,
     completed_tool_output_order: &[String],
+    superseded_outputs: &BTreeMap<String, String>,
 ) -> Result<Vec<PlanningToolOutput>, ContextBuildError> {
     let expected_count = state
         .steps
@@ -2311,6 +2337,10 @@ fn build_planning_tool_outputs(
             receipt_digest: receipt_digest.to_owned(),
             canonical_size_bytes: output.canonical_size_bytes(),
             output: output.output().clone(),
+            superseded_by: superseded_outputs.get(step_id).cloned(),
+            superseded_meaning: superseded_outputs
+                .contains_key(step_id)
+                .then_some(SUPERSEDED_OUTPUT_MEANING),
         });
     }
     if seen.len() != expected_count {
@@ -2335,6 +2365,7 @@ fn build_context(
         completed_tool_outputs,
         &planning_step_order,
         &completed_tool_output_order,
+        &BTreeMap::new(),
         &BTreeMap::new(),
         frontier,
         registry,
@@ -2364,37 +2395,13 @@ where
         if !matches!(step.status, StepStatus::Completed | StepStatus::Failed) {
             continue;
         }
-        let (Some(intent), Some(invocation)) = (&step.intent, &step.planned_invocation) else {
+        let Some(capability) = planned_capability(step) else {
             continue;
         };
-        let capability = CapabilityRef {
-            capability_id: invocation.capability_id().to_owned(),
-            contract_version: invocation.contract_version().to_owned(),
-        };
-        let non_idempotent = registry
-            .definition(&capability)
-            .is_some_and(|definition| definition.spec.effect.class == EffectClass::NonIdempotent);
-        if !non_idempotent {
+        if effect_class(registry, &capability) != Some(EffectClass::NonIdempotent) {
             continue;
         }
-        let Ok(Some(material)) = store.load_invocation_material(&intent.effect_id) else {
-            continue;
-        };
-        let InvocationMaterialRetention::ReconstructableReference(reference) = material.retention()
-        else {
-            continue;
-        };
-        if material.step_id() != step.step_id
-            || material.material_digest() != invocation.plan_input_digest()
-        {
-            continue;
-        }
-        let Some(value) = materializer.planned_arguments(
-            &step.step_id,
-            &capability,
-            reference,
-            material.material_digest(),
-        ) else {
+        let Some(value) = normalized_step_arguments(store, materializer, step, &capability) else {
             continue;
         };
         if canonical_size(&value).is_ok_and(|size| size <= MAX_PLANNING_STEP_ARGUMENT_BYTES) {
@@ -2404,6 +2411,144 @@ where
     arguments
 }
 
+fn planned_capability(step: &xgen_workgraph::StepState) -> Option<CapabilityRef> {
+    step.planned_invocation
+        .as_ref()
+        .map(|invocation| CapabilityRef {
+            capability_id: invocation.capability_id().to_owned(),
+            contract_version: invocation.contract_version().to_owned(),
+        })
+}
+
+fn effect_class(registry: &CapabilityRegistry, capability: &CapabilityRef) -> Option<EffectClass> {
+    registry
+        .definition(capability)
+        .map(|definition| definition.spec.effect.class)
+}
+
+/// Normalized arguments of a Step whose material reconstructs to exactly this Step (ADR-0065).
+fn normalized_step_arguments<S, M>(
+    store: &S,
+    materializer: &M,
+    step: &xgen_workgraph::StepState,
+    capability: &CapabilityRef,
+) -> Option<Value>
+where
+    S: RunStore,
+    M: PlanMaterializer,
+{
+    let (intent, invocation) = (step.intent.as_ref()?, step.planned_invocation.as_ref()?);
+    let material = store.load_invocation_material(&intent.effect_id).ok()??;
+    let InvocationMaterialRetention::ReconstructableReference(reference) = material.retention()
+    else {
+        return None;
+    };
+    if material.step_id() != step.step_id
+        || material.material_digest() != invocation.plan_input_digest()
+    {
+        return None;
+    }
+    materializer.planned_arguments(
+        &step.step_id,
+        capability,
+        reference,
+        material.material_digest(),
+    )
+}
+
+/// Resources a Step selected through its capability's resource selectors, read from its
+/// normalized arguments.
+fn selected_resources(
+    registry: &CapabilityRegistry,
+    capability: &CapabilityRef,
+    arguments: &Value,
+) -> Vec<String> {
+    registry
+        .definition(capability)
+        .map(|definition| {
+            definition
+                .spec
+                .effect
+                .resource_selectors
+                .iter()
+                .filter_map(|selector| arguments.pointer(&selector.argument_pointer))
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether `changed` is `observed` or lies under it in a `/`-separated resource hierarchy.
+fn resource_covers(observed: &str, changed: &str) -> bool {
+    changed == observed
+        || changed
+            .strip_prefix(observed)
+            .is_some_and(|rest| rest.starts_with('/') || observed.ends_with('/'))
+}
+
+/// Read-only observations whose resources a later completed Step changed, keyed by the observing Step and
+/// mapped to the first Step that changed one of its resources (ADR-0069).
+///
+/// Completion order is receipt chronology, so an observation completed after the change is never
+/// superseded by it. A Step whose arguments or resources are unknown supersedes nothing.
+fn superseded_observations<S, M>(
+    store: &S,
+    materializer: &M,
+    registry: &CapabilityRegistry,
+    state: &RunState,
+    completed_tool_output_order: &[String],
+) -> BTreeMap<String, String>
+where
+    S: RunStore,
+    M: PlanMaterializer,
+{
+    let classified = completed_tool_output_order
+        .iter()
+        .filter_map(|step_id| {
+            let step = state.steps.get(step_id)?;
+            let capability = planned_capability(step)?;
+            let class = effect_class(registry, &capability)?;
+            Some((step, capability, class))
+        })
+        .collect::<Vec<_>>();
+    let Some(last_change) = classified
+        .iter()
+        .rposition(|(_, _, class)| *class != EffectClass::ReadOnly)
+    else {
+        return BTreeMap::new();
+    };
+    let mut observations: Vec<(&str, Vec<String>)> = Vec::new();
+    let mut superseded = BTreeMap::new();
+    for (step, capability, class) in &classified[..=last_change] {
+        let resources = || {
+            normalized_step_arguments(store, materializer, step, capability)
+                .map(|arguments| selected_resources(registry, capability, &arguments))
+                .unwrap_or_default()
+        };
+        if *class == EffectClass::ReadOnly {
+            observations.push((step.step_id.as_str(), resources()));
+            continue;
+        }
+        if observations.is_empty() {
+            continue;
+        }
+        let changed = resources();
+        observations.retain(|(observer, observed)| {
+            let covered = observed.iter().any(|observed| {
+                changed
+                    .iter()
+                    .any(|changed| resource_covers(observed, changed))
+            });
+            if covered {
+                superseded.insert((*observer).to_owned(), step.step_id.clone());
+            }
+            !covered
+        });
+    }
+    superseded
+}
+
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn build_context_ordered(
     state: &RunState,
@@ -2411,6 +2556,7 @@ fn build_context_ordered(
     planning_step_order: &[String],
     completed_tool_output_order: &[String],
     step_arguments: &BTreeMap<String, Value>,
+    superseded_outputs: &BTreeMap<String, String>,
     frontier: &WorkFrontier,
     registry: &CapabilityRegistry,
     planning_constraints: &[PlanningConstraint],
@@ -2443,8 +2589,12 @@ fn build_context_ordered(
                 .filter(|size| *size <= MAX_PLANNING_SOURCE_BYTES)
                 .ok_or(ContextBuildError::InputLimitExceeded)
         })?;
-    let tool_outputs =
-        build_planning_tool_outputs(state, completed_tool_outputs, completed_tool_output_order)?;
+    let tool_outputs = build_planning_tool_outputs(
+        state,
+        completed_tool_outputs,
+        completed_tool_output_order,
+        superseded_outputs,
+    )?;
     source_bytes = tool_outputs
         .iter()
         .try_fold(source_bytes, |total, output| {
@@ -3626,6 +3776,7 @@ mod tests {
             &["step-z".to_owned(), "step-a".to_owned()],
             &[],
             &BTreeMap::new(),
+            &BTreeMap::new(),
             &frontier,
             &CapabilityRegistry::new(),
             &[],
@@ -3649,6 +3800,7 @@ mod tests {
                 &["step-a".to_owned(), "step-a".to_owned()],
                 &[],
                 &BTreeMap::new(),
+                &BTreeMap::new(),
                 &frontier,
                 &CapabilityRegistry::new(),
                 &[],
@@ -3662,6 +3814,7 @@ mod tests {
                 &BTreeMap::new(),
                 &["step-z".to_owned(), "step-a".to_owned()],
                 &["step-a".to_owned()],
+                &BTreeMap::new(),
                 &BTreeMap::new(),
                 &frontier,
                 &CapabilityRegistry::new(),
@@ -3711,6 +3864,7 @@ mod tests {
             &order,
             &[],
             &BTreeMap::new(),
+            &BTreeMap::new(),
             &frontier,
             &CapabilityRegistry::new(),
             &[],
@@ -3730,6 +3884,35 @@ mod tests {
     }
 
     #[test]
+    fn a_change_covers_the_same_resource_or_one_below_it() {
+        // ADR-0069: hierarchy is `/`-separated; other resources only match exactly.
+        assert!(resource_covers(
+            "workspace:primary/src/lib.rs",
+            "workspace:primary/src/lib.rs"
+        ));
+        assert!(resource_covers(
+            "workspace:primary/src",
+            "workspace:primary/src/lib.rs"
+        ));
+        assert!(resource_covers(
+            "workspace:primary",
+            "workspace:primary/README.md"
+        ));
+        assert!(!resource_covers(
+            "workspace:primary/src",
+            "workspace:primary/srcs/lib.rs"
+        ));
+        assert!(!resource_covers(
+            "workspace:primary/src/lib.rs",
+            "workspace:primary/src"
+        ));
+        assert!(!resource_covers(
+            "workspace:primary/a.md",
+            "workspace:primary/b.md"
+        ));
+    }
+
+    #[test]
     fn finished_step_arguments_follow_the_capability_of_their_step() {
         // ADR-0065: the planner sees which call produced an output.
         let state = state(vec![
@@ -3745,6 +3928,7 @@ mod tests {
             &order,
             &[],
             &arguments,
+            &BTreeMap::new(),
             &frontier,
             &CapabilityRegistry::new(),
             &[],
