@@ -546,6 +546,10 @@ const fn rejection_meaning(
             "Core rejected the previous proposal for the rule named in proposalRejection. Nothing \
              was changed."
         }
+        (ModelCallRejectionReason::OutputTruncated, _) => {
+            "The previous response reached the output token limit and was discarded. Return a \
+             shorter proposal: fewer Steps, and each edit only once. Nothing was changed."
+        }
         _ => "The previous model call was rejected for the reason given. Nothing was changed.",
     }
 }

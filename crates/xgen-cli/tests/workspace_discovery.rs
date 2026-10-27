@@ -1998,6 +1998,56 @@ fn tool_discovery_rejects_unknown_collections_and_candidate_execution() {
 }
 
 #[test]
+fn a_truncated_response_is_sampled_again_with_its_reason() {
+    // ADR-0073: an output that hit the token limit is retried like an invalid one.
+    let fixture = tempdir().unwrap();
+    let state = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    let answer = provider_response(&json!({
+        "formatVersion": 1, "kind": "response_candidate", "steps": [], "summary": "answer"
+    }));
+    let mut truncated: Value = serde_json::from_slice(&answer).unwrap();
+    truncated["choices"][0]["finish_reason"] = json!("length");
+    let server =
+        SequentialServer::spawn_responses(vec![serde_json::to_vec(&truncated).unwrap(), answer]);
+    let result = bounded_output(xgen(&state).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "--conversation-responses",
+        "Answer.",
+    ]))
+    .unwrap();
+    let requests: Vec<_> = (0..2)
+        .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+        .collect();
+    server.handle.join().unwrap();
+    assert!(
+        planning_context(&requests[0])
+            .get("previousResponseRejection")
+            .is_none()
+    );
+    let rejection = &planning_context(&requests[1])["previousResponseRejection"];
+    assert_eq!(rejection["reason"], "output_truncated", "{rejection}");
+    assert!(
+        rejection["meaning"]
+            .to_string()
+            .contains("shorter proposal")
+    );
+    assert_eq!(result.status.code(), Some(0), "{}", stderr(&result));
+}
+
+#[test]
 #[cfg(unix)]
 fn run_names_collections_that_must_be_rebuilt_and_does_not_start() {
     let fixture = tempdir().unwrap();

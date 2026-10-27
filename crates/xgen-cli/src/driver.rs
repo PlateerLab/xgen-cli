@@ -503,9 +503,12 @@ impl RunDriver {
                 }
                 AgentLoopTick::PlannerUnavailable { failure, .. } => {
                     // ADR-0061: the rejected call is already settled in the journal, so the next
-                    // tick reserves a fresh call exactly like `/resume` would.
-                    if failure == PlannerPortFailure::InvalidResponse
-                        && rejected_responses_in_a_row < MAX_REJECTED_RESPONSE_RETRIES
+                    // tick reserves a fresh call exactly like `/resume` would. A truncated response
+                    // is usually a rare runaway repetition that a fresh sample avoids (ADR-0073).
+                    if matches!(
+                        failure,
+                        PlannerPortFailure::InvalidResponse | PlannerPortFailure::OutputTruncated
+                    ) && rejected_responses_in_a_row < MAX_REJECTED_RESPONSE_RETRIES
                     {
                         rejected_responses_in_a_row += 1;
                         continue;
