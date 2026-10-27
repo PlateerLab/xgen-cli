@@ -1488,6 +1488,21 @@ impl PlanMaterializer for LocalReadMaterializer {
             Self::Workspace(materializer) => materializer.materialize(request),
         }
     }
+
+    fn planned_arguments(
+        &self,
+        step_id: &str,
+        capability: &CapabilityRef,
+        reference: &ReconstructableMaterialReference,
+        material_digest: &str,
+    ) -> Option<serde_json::Value> {
+        match self {
+            Self::ExactFiles(_) => None,
+            Self::Workspace(materializer) => {
+                materializer.planned_arguments(step_id, capability, reference, material_digest)
+            }
+        }
+    }
 }
 
 struct LocalMaterializer {
@@ -1525,6 +1540,25 @@ impl PlanMaterializer for LocalMaterializer {
                 .materialize(request);
         }
         self.filesystem.materialize(request)
+    }
+
+    fn planned_arguments(
+        &self,
+        step_id: &str,
+        capability: &CapabilityRef,
+        reference: &ReconstructableMaterialReference,
+        material_digest: &str,
+    ) -> Option<serde_json::Value> {
+        if capability.capability_id == PROCESS_EXECUTE_CAPABILITY_ID {
+            return self.process.as_ref()?.planned_arguments(
+                step_id,
+                capability,
+                reference,
+                material_digest,
+            );
+        }
+        self.filesystem
+            .planned_arguments(step_id, capability, reference, material_digest)
     }
 }
 

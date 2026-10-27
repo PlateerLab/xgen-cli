@@ -11,12 +11,13 @@ use xgen_policy::ResourceResolver;
 use xgen_workgraph::{
     AcceptedPlanStep, AgentLoopBudget, CompletionCandidateState, CompletionOutputError,
     CompletionOutputRecord, ContinuationAction, DependencyBlockReason, ExpectedPlanningTurn,
-    FrontierAction, MAX_ACCEPTED_OBJECTIVE_BYTES, MAX_ACCEPTED_PLAN_EDGES, MAX_ACCEPTED_PLAN_STEPS,
-    ModelCallAbandonmentReason, ModelCallBudget, ModelCallRejectionReason, ModelCallReservation,
-    ModelCallSettlement, ModelCallStatus, ModelCallUnknownReason, PlannedExecutionProfile,
-    PlannedInvocationMaterialRecord, PlannedInvocationSpec, PlanningContractError,
-    ProposalRejectionCode, ReconstructableMaterialReference, RunEvent, RunEventBody, RunState,
-    StepStatus, ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
+    FrontierAction, InvocationMaterialRetention, MAX_ACCEPTED_OBJECTIVE_BYTES,
+    MAX_ACCEPTED_PLAN_EDGES, MAX_ACCEPTED_PLAN_STEPS, ModelCallAbandonmentReason, ModelCallBudget,
+    ModelCallRejectionReason, ModelCallReservation, ModelCallSettlement, ModelCallStatus,
+    ModelCallUnknownReason, PlannedExecutionProfile, PlannedInvocationMaterialRecord,
+    PlannedInvocationSpec, PlanningContractError, ProposalRejectionCode,
+    ReconstructableMaterialReference, RunEvent, RunEventBody, RunState, StepStatus,
+    ToolOutputRecord, WorkFrontier, dependency_release_block_reason, derive_frontier,
     receipt_releases_dependency, validate_completion_summary_candidate,
 };
 
@@ -37,6 +38,8 @@ const MAX_PLANNING_CATALOG_DEFINITIONS: usize = 1_024;
 const MAX_PLANNING_SOURCE_STEPS: usize = 4_096;
 const MAX_PLANNING_DEFINITION_BYTES: usize = 256 * 1024;
 const MAX_PLANNING_STEP_BYTES: usize = 64 * 1024;
+/// Larger arguments, such as patch bodies, stay out of the planning context (ADR-0065).
+const MAX_PLANNING_STEP_ARGUMENT_BYTES: usize = 2 * 1024;
 const MAX_PLANNING_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PLANNING_VALUE_DEPTH: usize = 64;
 const MAX_PLANNING_VALUE_NODES: usize = 32_768;
@@ -193,6 +196,10 @@ pub struct PlanningStepSummary {
     status: StepStatus,
     attempts: u32,
     capability: Option<CapabilityRef>,
+    /// Normalized arguments of a finished Step, when its materializer can return them within
+    /// `MAX_PLANNING_STEP_ARGUMENT_BYTES` (ADR-0065).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<Value>,
     dependency_released: bool,
     /// Value-free failure classification of a `failed` Step (ADR-0054); absent otherwise and for
     /// failures recorded before classification existed.
@@ -336,6 +343,7 @@ impl fmt::Debug for PlanningStepSummary {
             .field("status", &self.status)
             .field("attempts", &self.attempts)
             .field("capability", &self.capability)
+            .field("arguments", &self.arguments.as_ref().map(|_| "<redacted>"))
             .field("dependency_released", &self.dependency_released)
             .field("failure_code", &self.failure_code)
             .field("failure_meaning", &self.failure_meaning)
@@ -969,6 +977,21 @@ pub trait PlanMaterializer {
         &mut self,
         request: PlanMaterializationRequest<'_>,
     ) -> Result<ReconstructableMaterialReference, PlanMaterializerFailure>;
+
+    /// Normalized arguments of a finished Step whose material this materializer persisted, shown
+    /// to later planner turns so they can tell which call produced an output (ADR-0065).
+    ///
+    /// Implementations must return the arguments only when `reference` reconstructs to exactly
+    /// this Step, capability, and material digest. `None` leaves the arguments out.
+    fn planned_arguments(
+        &self,
+        _step_id: &str,
+        _capability: &CapabilityRef,
+        _reference: &ReconstructableMaterialReference,
+        _material_digest: &str,
+    ) -> Option<Value> {
+        None
+    }
 }
 
 /// Why the loop deliberately yielded without selecting or committing more work.
@@ -1380,11 +1403,13 @@ impl AgentLoop {
         if planning_snapshot.state != state {
             return Err(AgentLoopError::PlanningSnapshotMismatch);
         }
+        let step_arguments = finished_step_arguments(store, materializer, &state);
         let context = match build_context_ordered(
             &state,
             planning_snapshot.completed_tool_outputs(),
             planning_snapshot.planning_step_order(),
             planning_snapshot.completed_tool_output_order(),
+            &step_arguments,
             &frontier,
             capabilities,
             &self.planning_constraints,
@@ -2310,11 +2335,64 @@ fn build_context(
         completed_tool_outputs,
         &planning_step_order,
         &completed_tool_output_order,
+        &BTreeMap::new(),
         frontier,
         registry,
         planning_constraints,
         budget,
     )
+}
+
+/// Arguments of finished Steps, read back through the materializer that persisted them (ADR-0065).
+///
+/// A Step is skipped when its material is missing, ephemeral, bound to another digest, or larger
+/// than `MAX_PLANNING_STEP_ARGUMENT_BYTES`; the context then shows it without arguments.
+fn finished_step_arguments<S, M>(
+    store: &S,
+    materializer: &M,
+    state: &RunState,
+) -> BTreeMap<String, Value>
+where
+    S: RunStore,
+    M: PlanMaterializer,
+{
+    let mut arguments = BTreeMap::new();
+    for step in state.steps.values() {
+        if !matches!(step.status, StepStatus::Completed | StepStatus::Failed) {
+            continue;
+        }
+        let (Some(intent), Some(invocation)) = (&step.intent, &step.planned_invocation) else {
+            continue;
+        };
+        let Ok(Some(material)) = store.load_invocation_material(&intent.effect_id) else {
+            continue;
+        };
+        let InvocationMaterialRetention::ReconstructableReference(reference) = material.retention()
+        else {
+            continue;
+        };
+        if material.step_id() != step.step_id
+            || material.material_digest() != invocation.plan_input_digest()
+        {
+            continue;
+        }
+        let capability = CapabilityRef {
+            capability_id: invocation.capability_id().to_owned(),
+            contract_version: invocation.contract_version().to_owned(),
+        };
+        let Some(value) = materializer.planned_arguments(
+            &step.step_id,
+            &capability,
+            reference,
+            material.material_digest(),
+        ) else {
+            continue;
+        };
+        if canonical_size(&value).is_ok_and(|size| size <= MAX_PLANNING_STEP_ARGUMENT_BYTES) {
+            arguments.insert(step.step_id.clone(), value);
+        }
+    }
+    arguments
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -2323,6 +2401,7 @@ fn build_context_ordered(
     completed_tool_outputs: &BTreeMap<String, ToolOutputRecord>,
     planning_step_order: &[String],
     completed_tool_output_order: &[String],
+    step_arguments: &BTreeMap<String, Value>,
     frontier: &WorkFrontier,
     registry: &CapabilityRegistry,
     planning_constraints: &[PlanningConstraint],
@@ -2479,6 +2558,7 @@ fn build_context_ordered(
                     capability_id: invocation.capability_id().to_owned(),
                     contract_version: invocation.contract_version().to_owned(),
                 }),
+            arguments: step_arguments.get(step_id).cloned(),
             dependency_released: receipt_releases_dependency(step),
             failure_code: step.failure_label(),
             failure_meaning: step.failure_meaning(),
@@ -3536,6 +3616,7 @@ mod tests {
             &BTreeMap::new(),
             &["step-z".to_owned(), "step-a".to_owned()],
             &[],
+            &BTreeMap::new(),
             &frontier,
             &CapabilityRegistry::new(),
             &[],
@@ -3558,6 +3639,7 @@ mod tests {
                 &BTreeMap::new(),
                 &["step-a".to_owned(), "step-a".to_owned()],
                 &[],
+                &BTreeMap::new(),
                 &frontier,
                 &CapabilityRegistry::new(),
                 &[],
@@ -3571,6 +3653,7 @@ mod tests {
                 &BTreeMap::new(),
                 &["step-z".to_owned(), "step-a".to_owned()],
                 &["step-a".to_owned()],
+                &BTreeMap::new(),
                 &frontier,
                 &CapabilityRegistry::new(),
                 &[],
@@ -3618,6 +3701,7 @@ mod tests {
             &BTreeMap::new(),
             &order,
             &[],
+            &BTreeMap::new(),
             &frontier,
             &CapabilityRegistry::new(),
             &[],
@@ -3634,6 +3718,38 @@ mod tests {
         assert_eq!(repeats, [None, Some("first"), Some("first"), None]);
         assert_eq!(value["steps"][1]["repeatMeaning"], REPEAT_MEANING);
         assert!(value["steps"][0].get("repeatMeaning").is_none());
+    }
+
+    #[test]
+    fn finished_step_arguments_follow_the_capability_of_their_step() {
+        // ADR-0065: the planner sees which call produced an output.
+        let state = state(vec![
+            invoked(step("listed", StepStatus::Completed, Vec::new()), 'a'),
+            invoked(step("unlisted", StepStatus::Completed, Vec::new()), 'b'),
+        ]);
+        let frontier = derive_frontier(&state).expect("frontier should derive");
+        let order = ["listed", "unlisted"].map(str::to_owned);
+        let arguments = BTreeMap::from([("listed".to_owned(), serde_json::json!({"path": "src"}))]);
+        let context = build_context_ordered(
+            &state,
+            &BTreeMap::new(),
+            &order,
+            &[],
+            &arguments,
+            &frontier,
+            &CapabilityRegistry::new(),
+            &[],
+            &test_budget(),
+        )
+        .expect("context should fit");
+        let value = serde_json::to_value(&context).expect("context should serialize");
+        assert_eq!(
+            value["steps"][0]["arguments"],
+            serde_json::json!({"path": "src"})
+        );
+        assert!(value["steps"][1].get("arguments").is_none());
+        let raw = serde_json::to_string(&context).expect("context should serialize");
+        assert!(raw.find("\"capability\"") < raw.find("\"arguments\""));
     }
 
     #[test]
