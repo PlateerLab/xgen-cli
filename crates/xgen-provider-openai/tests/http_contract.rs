@@ -869,7 +869,7 @@ fn assert_strict_request_contract(request: &[u8]) -> Value {
             .expect("user message should be text"),
     )
     .expect("planner prompt should be JSON");
-    assert_eq!(prompt["profileVersion"], "xgeny.planner-request/v2");
+    assert_eq!(prompt["profileVersion"], "xgeny.planner-request/v3");
     // ADR-0036: stable prefix first, volatile identifiers last, so provider prefix caches survive
     // across calls. The raw user message is what the model tokenizes, so check the byte order.
     let raw = request_body["messages"][1]["content"]
