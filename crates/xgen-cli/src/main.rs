@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::env;
 use std::io::{BufRead as _, ErrorKind, IsTerminal as _, Read as _, Write as _};
 use std::path::PathBuf;
@@ -609,6 +609,36 @@ impl InteractiveHost {
     }
 }
 
+/// Forward what each finished Step did once its effect commits, read back from the verified
+/// journal (ADR-0070). Progress events themselves stay redacted (ADR-0033).
+fn with_activity<'a>(
+    run_id: &'a RefCell<Option<String>>,
+    reported: &'a Cell<usize>,
+    progress: &'a mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+    activity: &'a mut dyn FnMut(xgen_cli::StepActivity),
+) -> impl FnMut(DriverProgress) -> DriverProgressControl + 'a {
+    move |event| {
+        // A Receipt lands at effect commit or, for a verified effect, at verification commit.
+        if matches!(
+            event,
+            DriverProgress::EffectCommitted { .. }
+                | DriverProgress::VerificationCommitted
+                | DriverProgress::ModelCallStarting
+                | DriverProgress::CompletionCommitted
+                | DriverProgress::ResponseCommitted
+        ) && reported.get() != usize::MAX
+            && let Some(run_id) = run_id.borrow().as_deref()
+            && let Ok(activities) = xgen_cli::inspect_step_activities(run_id, reported.get())
+        {
+            reported.set(reported.get() + activities.len());
+            for finished in activities {
+                activity(finished);
+            }
+        }
+        progress(event)
+    }
+}
+
 impl repl::ReplHost for InteractiveHost {
     fn model(&mut self) -> Result<repl::ModelView, repl::ReplFailure> {
         Self::selected_model_view()
@@ -656,6 +686,7 @@ impl repl::ReplHost for InteractiveHost {
         goal: String,
         grants: repl::InvocationGrants,
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        activity: &mut dyn FnMut(xgen_cli::StepActivity),
     ) -> Result<LocalCommandResult, repl::ReplFailure> {
         let model = resolve_model(None, None, None, None, false, RequestOptionArgs::default())
             .map_err(|error| repl::ReplFailure::new(error.code()))?;
@@ -666,6 +697,8 @@ impl repl::ReplHost for InteractiveHost {
             }
             _ => goal,
         };
+        let started_run = RefCell::new(None);
+        let reported = Cell::new(0);
         run_interactive_with_process_session_progress(
             LocalRunRequest {
                 goal,
@@ -694,11 +727,12 @@ impl repl::ReplHost for InteractiveHost {
             },
             &process_session,
             |run_id| {
+                started_run.replace(Some(run_id.to_owned()));
                 if self.detailed_progress {
                     eprintln!("XGEN_STARTED run_id={run_id}");
                 }
             },
-            progress,
+            with_activity(&started_run, &reported, progress, activity),
         )
         .map_err(repl::ReplFailure::from_run_error)
     }
@@ -708,8 +742,12 @@ impl repl::ReplHost for InteractiveHost {
         run_id: &str,
         grants: repl::InvocationGrants,
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        activity: &mut dyn FnMut(xgen_cli::StepActivity),
     ) -> Result<LocalCommandResult, repl::ReplFailure> {
         let process_session = self.process_session.clone();
+        let resumed_run = RefCell::new(Some(run_id.to_owned()));
+        let reported = Cell::new(xgen_cli::inspect_receipt_count(run_id).unwrap_or(usize::MAX));
+        let progress = with_activity(&resumed_run, &reported, progress, activity);
         let request = LocalResumeRequest {
             run_id: run_id.to_owned(),
             workspace: Some(self.workspace.clone()),

@@ -144,6 +144,225 @@ pub fn inspect_local_changes(run_id: &str) -> Result<Vec<CommittedChange>, Publi
     Ok(changes)
 }
 
+/// What one finished Step did, for the live activity log (ADR-0070).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepActivity {
+    /// Short past-tense verb such as `read`, `patched`, or `ran`.
+    pub verb: String,
+    /// The workspace-relative path, command line, or query the Step acted on.
+    pub subject: String,
+    /// A short result such as `+3 -1`, `exit 1`, or `12 matches`, when one is known.
+    pub detail: Option<String>,
+    /// The closed failure code when the Step failed.
+    pub failure: Option<String>,
+}
+
+/// Activities of the Receipts after the first `skip` ones, in Receipt order, rebuilt from the
+/// verified journal like [`inspect_local_changes`]. A Step whose arguments cannot be rebuilt is
+/// reported by its capability alone.
+///
+/// # Errors
+///
+/// Returns [`PublicRunError::Configuration`] when the Run does not exist and
+/// [`PublicRunError::Integrity`] when its journal does not open.
+pub fn inspect_step_activities(
+    run_id: &str,
+    skip: usize,
+) -> Result<Vec<StepActivity>, PublicRunError> {
+    let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
+    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let store = SqliteRunStore::open_existing_read_only(layout.database_path())
+        .map_err(|_| PublicRunError::Integrity)?;
+    let receipts = store
+        .load_execution_receipts()
+        .map_err(|_| PublicRunError::Integrity)?;
+    if receipts.len() <= skip {
+        return Ok(Vec::new());
+    }
+    let state = store
+        .load_current()
+        .map_err(|_| PublicRunError::Integrity)?
+        .ok_or(PublicRunError::Integrity)?;
+    let catalog =
+        RunMaterialCatalog::open_existing_read_only(&layout.material_catalog_path(), run_id).ok();
+    let mut activities = Vec::new();
+    for receipt in receipts.iter().skip(skip) {
+        let step = state.steps.get(&receipt.step_id);
+        let arguments = step.and_then(|step| {
+            let intent = step.intent.as_ref()?;
+            let material = store.load_invocation_material(&intent.effect_id).ok()??;
+            let InvocationMaterialRetention::ReconstructableReference(reference) =
+                material.retention()
+            else {
+                return None;
+            };
+            let catalog = catalog.as_ref()?;
+            catalog
+                .workspace_arguments(
+                    reference,
+                    &step.step_id,
+                    material.material_digest(),
+                    &receipt.capability.capability_id,
+                )
+                .or_else(|_| {
+                    catalog.process_family_arguments(
+                        reference,
+                        &step.step_id,
+                        material.material_digest(),
+                        &receipt.capability,
+                    )
+                })
+                .ok()
+        });
+        let output = step
+            .and_then(|step| step.intent.as_ref())
+            .and_then(|intent| store.load_tool_output(&intent.effect_id).ok().flatten());
+        let failure = step
+            .and_then(|step| step.failure_code)
+            .map(|code| code.as_str().to_owned())
+            .or_else(|| (receipt.status != ReceiptStatus::Succeeded).then(|| "failed".to_owned()));
+        activities.push(activity_from(
+            &receipt.capability.capability_id,
+            arguments.as_ref(),
+            output
+                .as_ref()
+                .map(xgen_workgraph::ToolOutputRecord::output),
+            failure,
+        ));
+    }
+    Ok(activities)
+}
+
+/// How many Receipts the Run has, so a resumed Run reports only the Steps it finishes next.
+///
+/// # Errors
+///
+/// Returns [`PublicRunError::Configuration`] when the Run does not exist and
+/// [`PublicRunError::Integrity`] when its journal does not open.
+pub fn inspect_receipt_count(run_id: &str) -> Result<usize, PublicRunError> {
+    let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
+    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    SqliteRunStore::open_existing_read_only(layout.database_path())
+        .and_then(|store| store.load_execution_receipts())
+        .map(|receipts| receipts.len())
+        .map_err(|_| PublicRunError::Integrity)
+}
+
+/// Lines removed and added by a patch's edits, as the change report counts them.
+fn patch_line_counts(arguments: Option<&Value>) -> (usize, usize) {
+    let edits = arguments
+        .and_then(|arguments| arguments.get("edits"))
+        .and_then(Value::as_array);
+    edits.map_or((0, 0), |edits| {
+        edits.iter().fold((0, 0), |(removed, added), edit| {
+            let text = |key: &str| {
+                edit.get(key)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned()
+            };
+            let edit = TextEdit {
+                old_text: text("oldText"),
+                new_text: text("newText"),
+            };
+            let (old, new) = edit_lines(&edit);
+            (removed + old.len(), added + new.len())
+        })
+    })
+}
+
+fn activity_from(
+    capability_id: &str,
+    arguments: Option<&Value>,
+    output: Option<&Value>,
+    failure: Option<String>,
+) -> StepActivity {
+    let text = |key: &str| {
+        arguments
+            .and_then(|arguments| arguments.get(key))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    };
+    let path = || {
+        arguments
+            .and_then(display_path)
+            .unwrap_or_else(|| ".".to_owned())
+    };
+    let output_number = |key: &str| {
+        output
+            .and_then(|output| output.get(key))
+            .and_then(Value::as_i64)
+    };
+    let (verb, subject, detail) = match capability_id {
+        "xgeny.fs/read-text" => ("read", path(), None),
+        "xgeny.fs/read-text-lines" => (
+            "read",
+            path(),
+            output_number("startLine")
+                .zip(output_number("endLine"))
+                .map(|(start, end)| format!("lines {start}-{end}")),
+        ),
+        "xgeny.fs/list-directory" => ("listed", path(), None),
+        "xgeny.fs/stat" => ("inspected", path(), None),
+        "xgeny.fs/search-text" => (
+            "searched",
+            format!("{:?} in {}", text("query").unwrap_or_default(), path()),
+            output
+                .and_then(|output| output.get("matches"))
+                .and_then(Value::as_array)
+                .map(|matches| format!("{} matches", matches.len())),
+        ),
+        APPLY_PATCH => {
+            let (removed, added) = patch_line_counts(arguments);
+            ("patched", path(), Some(format!("+{added} -{removed}")))
+        }
+        WRITE_ATOMIC => (
+            "wrote",
+            path(),
+            text("content").map(|content| format!("{} lines", content.lines().count())),
+        ),
+        PROCESS_EXECUTE_CAPABILITY_ID => {
+            let mut command = text("executable")
+                .map(|executable| logical_executable(&executable).to_owned())
+                .unwrap_or_default();
+            for argument in arguments
+                .and_then(|arguments| arguments.get("args"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                command.push(' ');
+                command.push_str(argument);
+            }
+            (
+                "ran",
+                command,
+                output_number("exitCode").map(|code| format!("exit {code}")),
+            )
+        }
+        TERMINAL_START => (
+            "started terminal",
+            text("executable")
+                .map(|executable| logical_executable(&executable).to_owned())
+                .unwrap_or_default(),
+            None,
+        ),
+        TERMINAL_WRITE => ("typed into terminal", String::new(), None),
+        other => (
+            "used",
+            other.to_owned(),
+            text("query").map(|query| format!("{query:?}")),
+        ),
+    };
+    StepActivity {
+        verb: verb.to_owned(),
+        subject,
+        detail,
+        failure,
+    }
+}
+
 fn change_from(
     capability_id: &str,
     arguments: &Value,
@@ -234,6 +453,58 @@ mod tests {
             old_text: old_text.to_owned(),
             new_text: new_text.to_owned(),
         }
+    }
+
+    #[test]
+    fn activities_name_the_target_and_a_short_result() {
+        let search = activity_from(
+            "xgeny.fs/search-text",
+            Some(&json!({"path": "workspace:primary/src", "query": "likes"})),
+            Some(&json!({"matches": [{}, {}], "truncated": false})),
+            None,
+        );
+        assert_eq!(
+            (
+                search.verb.as_str(),
+                search.subject.as_str(),
+                search.detail.as_deref()
+            ),
+            ("searched", "\"likes\" in src", Some("2 matches"))
+        );
+        let patch = activity_from(
+            APPLY_PATCH,
+            Some(&json!({"path": "workspace:primary/a.py", "edits": [
+                {"oldText": "x\ny = 1", "newText": "x\ny = 2\nz = 3"}]})),
+            None,
+            None,
+        );
+        assert_eq!(patch.detail.as_deref(), Some("+2 -1"));
+        let run = activity_from(
+            PROCESS_EXECUTE_CAPABILITY_ID,
+            Some(
+                &json!({"executable": "process:primary/executables/bash", "args": ["-c", "pytest"]}),
+            ),
+            Some(&json!({"exitCode": 1})),
+            None,
+        );
+        assert_eq!(
+            (
+                run.verb.as_str(),
+                run.subject.as_str(),
+                run.detail.as_deref()
+            ),
+            ("ran", "bash -c pytest", Some("exit 1"))
+        );
+        let missing = activity_from(
+            "xgeny.fs/read-text",
+            Some(&json!({"path": "workspace:primary/gone.md"})),
+            None,
+            Some("not_found".to_owned()),
+        );
+        assert_eq!(
+            (missing.subject.as_str(), missing.failure.as_deref()),
+            ("gone.md", Some("not_found"))
+        );
     }
 
     #[test]

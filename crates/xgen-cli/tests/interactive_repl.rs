@@ -187,6 +187,17 @@ fn bare_xgen_streams_durable_progress_prompts_separate_approvals_and_replays_off
         assert!(stdout.contains(progress), "missing {progress}: {stdout}");
     }
     assert_eq!(stdout.matches(COMPLETION).count(), 2, "{stdout}");
+    // ADR-0070: each finished Step is listed from the journal while the Run is in flight.
+    assert_eq!(
+        stdout.matches("\n  read README.md\n").count(),
+        1,
+        "{stdout}"
+    );
+    assert_eq!(
+        stdout.matches("\n  ran git --version (exit 0)\n").count(),
+        1,
+        "{stdout}"
+    );
     assert!(stdout.contains("status: completed"));
     assert!(!stdout.contains("session cleared"));
     assert!(stderr.contains("XGEN_STARTED run_id="));

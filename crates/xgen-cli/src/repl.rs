@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use xgen_cli::{
     CommittedChange, DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason,
-    RejectionReason, edit_lines,
+    RejectionReason, StepActivity, edit_lines,
 };
 use xgen_runtime::AgentLoopQuiescence;
 
@@ -237,6 +237,7 @@ pub(crate) trait ReplHost {
         goal: String,
         grants: InvocationGrants,
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        activity: &mut dyn FnMut(StepActivity),
     ) -> Result<LocalCommandResult, ReplFailure>;
 
     fn resume(
@@ -244,6 +245,7 @@ pub(crate) trait ReplHost {
         run_id: &str,
         grants: InvocationGrants,
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        activity: &mut dyn FnMut(StepActivity),
     ) -> Result<LocalCommandResult, ReplFailure>;
 }
 
@@ -605,7 +607,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     cancellation,
                     interactive_display,
                     &mut tally,
-                    |progress| host.resume(&run_id, grants, progress),
+                    |progress, activity| host.resume(&run_id, grants, progress, activity),
                 )?;
                 handle_result(
                     reader,
@@ -661,7 +663,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
                     cancellation,
                     interactive_display,
                     &mut tally,
-                    |progress| host.start(contextual_goal, grants, progress),
+                    |progress, activity| host.start(contextual_goal, grants, progress, activity),
                 )?;
                 handle_result(
                     reader,
@@ -795,7 +797,7 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                     cancellation,
                     interactive_display,
                     &mut leg,
-                    |progress| host.resume(&run_id, grants, progress),
+                    |progress, activity| host.resume(&run_id, grants, progress, activity),
                 )?;
                 tally.committed_steps = tally.committed_steps.saturating_add(leg.committed_steps);
                 tally.elapsed = tally.elapsed.saturating_add(leg.elapsed);
@@ -952,31 +954,40 @@ fn invoke_with_progress<W: Write + Send, F>(
 where
     F: FnOnce(
         &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        &mut dyn FnMut(StepActivity),
     ) -> Result<LocalCommandResult, ReplFailure>,
 {
     if interactive_display {
         return invoke_with_thinking(output, cancellation, tally, invoke);
     }
     let started = Instant::now();
-    let mut output_failure = None;
+    let output = std::cell::RefCell::new(output);
+    let output_failure = std::cell::RefCell::new(None);
     let mut progress = |event| {
         if matches!(event, DriverProgress::EffectCommitted { .. }) {
             tally.committed_steps = tally.committed_steps.saturating_add(1);
         }
-        if output_failure.is_none()
-            && let Err(error) = print_progress(output, event)
+        if output_failure.borrow().is_none()
+            && let Err(error) = print_progress(&mut **output.borrow_mut(), event)
         {
-            output_failure = Some(error);
+            *output_failure.borrow_mut() = Some(error);
         }
-        if cancellation.is_requested() || output_failure.is_some() {
+        if cancellation.is_requested() || output_failure.borrow().is_some() {
             DriverProgressControl::Cancel
         } else {
             DriverProgressControl::Continue
         }
     };
-    let result = invoke(&mut progress);
+    let mut activity = |activity: StepActivity| {
+        if output_failure.borrow().is_none()
+            && let Err(error) = write_activity(&mut **output.borrow_mut(), &activity, false)
+        {
+            *output_failure.borrow_mut() = Some(error);
+        }
+    };
+    let result = invoke(&mut progress, &mut activity);
     tally.elapsed = started.elapsed();
-    if let Some(error) = output_failure {
+    if let Some(error) = output_failure.into_inner() {
         return Err(error);
     }
     Ok(result)
@@ -1073,6 +1084,7 @@ fn invoke_with_thinking<W: Write + Send, F>(
 where
     F: FnOnce(
         &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+        &mut dyn FnMut(StepActivity),
     ) -> Result<LocalCommandResult, ReplFailure>,
 {
     let started = Instant::now();
@@ -1123,7 +1135,21 @@ where
                 DriverProgressControl::Continue
             }
         };
-        let result = invoke(&mut progress);
+        let mut activity = |activity: StepActivity| {
+            // The live line is repainted on the display thread's next tick.
+            let written = output
+                .lock()
+                .map_err(|_| io::Error::other("display unavailable"))
+                .and_then(|mut output| {
+                    write!(output, "\r\x1b[2K")?;
+                    write_activity(&mut *output, &activity, true)?;
+                    output.flush()
+                });
+            if written.is_err() {
+                failed.store(true, Ordering::SeqCst);
+            }
+        };
+        let result = invoke(&mut progress, &mut activity);
         let _ = stop.send(());
         display
             .join()
@@ -1272,6 +1298,31 @@ fn print_changes(
         budget -= shown;
     }
     Ok(())
+}
+
+/// One line of the live activity log: what a finished Step did (ADR-0070).
+fn write_activity(
+    output: &mut impl Write,
+    activity: &StepActivity,
+    styled: bool,
+) -> io::Result<()> {
+    let (dim, plain) = if styled { (DIM, PLAIN) } else { ("", "") };
+    write!(output, "  ")?;
+    write_terminal_line(output, &activity.verb)?;
+    if !activity.subject.is_empty() {
+        write!(output, " ")?;
+        write_terminal_line(output, &bounded_command(&activity.subject))?;
+    }
+    if let Some(failure) = &activity.failure {
+        write!(output, " {dim}failed: ")?;
+        write_terminal_line(output, failure)?;
+        write!(output, "{plain}")?;
+    } else if let Some(detail) = &activity.detail {
+        write!(output, " {dim}(")?;
+        write_terminal_line(output, detail)?;
+        write!(output, "){plain}")?;
+    }
+    writeln!(output)
 }
 
 const MAX_CHANGE_COMMAND_CHARS: usize = 120;
@@ -2117,6 +2168,7 @@ mod tests {
             goal: String,
             grants: InvocationGrants,
             progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+            _activity: &mut dyn FnMut(StepActivity),
         ) -> Result<LocalCommandResult, ReplFailure> {
             self.starts.push((goal, grants));
             if progress(DriverProgress::ModelCallStarting) == DriverProgressControl::Cancel {
@@ -2133,6 +2185,7 @@ mod tests {
             run_id: &str,
             grants: InvocationGrants,
             progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+            _activity: &mut dyn FnMut(StepActivity),
         ) -> Result<LocalCommandResult, ReplFailure> {
             self.resumes.push((run_id.to_owned(), grants));
             let _ = progress(DriverProgress::EffectStarting {
@@ -2287,7 +2340,7 @@ mod tests {
             &cancellation,
             true,
             &mut RunTally::default(),
-            |progress| {
+            |progress, _| {
                 cancellation.request();
                 assert_eq!(
                     progress(DriverProgress::ModelCallStarting),
@@ -2334,7 +2387,7 @@ mod tests {
             &cancellation,
             true,
             &mut RunTally::default(),
-            |progress| {
+            |progress, _| {
                 progress(DriverProgress::EffectCommitted {
                     effect_class: xgen_domain::EffectClass::Idempotent,
                 });
@@ -2386,7 +2439,7 @@ mod tests {
             &cancellation,
             true,
             &mut RunTally::default(),
-            |_| {
+            |_, _| {
                 ticks
                     .recv_timeout(Duration::from_secs(5))
                     .expect("display should refresh during blocking I/O");

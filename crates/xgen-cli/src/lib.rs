@@ -18,7 +18,10 @@ mod run_layout;
 pub mod tools;
 mod usage;
 
-pub use change_report::{CommittedChange, TextEdit, edit_lines, inspect_local_changes};
+pub use change_report::{
+    CommittedChange, StepActivity, TextEdit, edit_lines, inspect_local_changes,
+    inspect_receipt_count, inspect_step_activities,
+};
 pub use composition::*;
 pub use driver::*;
 pub use manifest::MAX_HOST_MODEL_TURNS;
