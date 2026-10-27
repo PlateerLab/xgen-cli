@@ -387,6 +387,23 @@ impl PlanMaterializer for WorkspaceReadMaterializer {
         }
         self.catalog.persist_request(&request)
     }
+
+    fn planned_arguments(
+        &self,
+        step_id: &str,
+        capability: &CapabilityRef,
+        reference: &ReconstructableMaterialReference,
+        material_digest: &str,
+    ) -> Option<Value> {
+        self.catalog
+            .workspace_arguments(
+                reference,
+                step_id,
+                material_digest,
+                &capability.capability_id,
+            )
+            .ok()
+    }
 }
 
 pub(crate) struct WorkspaceReadMaterialProvider {
@@ -508,6 +525,23 @@ impl PlanMaterializer for ProcessMaterializer {
             return Err(PlanMaterializerFailure::Rejected);
         }
         self.catalog.persist_process_request(&request)
+    }
+
+    fn planned_arguments(
+        &self,
+        step_id: &str,
+        capability: &CapabilityRef,
+        reference: &ReconstructableMaterialReference,
+        material_digest: &str,
+    ) -> Option<Value> {
+        if capability.capability_id != PROCESS_EXECUTE_CAPABILITY_ID
+            || capability.contract_version != PROCESS_EXECUTE_CONTRACT_VERSION
+        {
+            return None;
+        }
+        self.catalog
+            .process_arguments(reference, step_id, material_digest)
+            .ok()
     }
 }
 

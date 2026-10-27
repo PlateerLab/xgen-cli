@@ -502,6 +502,11 @@ fn one_invalid_response_is_retried_and_the_run_completes_without_resume() {
         .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
         .collect();
     server.handle.join().unwrap();
+    // ADR-0065: the finished read shows the arguments it ran with.
+    assert_eq!(
+        planning_context(&requests[1])["steps"][0]["arguments"]["path"],
+        "workspace:primary/README.md"
+    );
     // ADR-0064: only the call after the discarded response learns why it was discarded.
     assert!(
         planning_context(&requests[1])
