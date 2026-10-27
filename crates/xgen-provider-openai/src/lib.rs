@@ -1571,7 +1571,14 @@ fn decode_chat_response_with_codec(
     if content.len() > max_proposal_bytes {
         return Err(PlannerPortFailure::InvalidResponse);
     }
-    let proposal_value = parse_unique_json(content.as_bytes(), max_json_depth)?;
+    let proposal_value =
+        parse_unique_json(content.as_bytes(), max_json_depth).or_else(|error| {
+            // ADR-0068: a model that drops a closer inside nested arguments gets one rebalance.
+            rebalance_json_closers(content)
+                .filter(|repaired| repaired.len() <= max_proposal_bytes)
+                .and_then(|repaired| parse_unique_json(repaired.as_bytes(), max_json_depth).ok())
+                .ok_or(error)
+        })?;
     let proposal: ProposalDocument =
         serde_json::from_value(proposal_value).map_err(|_| PlannerPortFailure::InvalidResponse)?;
     if proposal.format_version != 1 {
@@ -1848,6 +1855,53 @@ fn parse_unique_json(body: &[u8], max_depth: usize) -> Result<Value, PlannerPort
     serde_json::from_slice::<UniqueJsonValue>(body)
         .map(|value| value.0)
         .map_err(|_| PlannerPortFailure::InvalidResponse)
+}
+
+/// Insert the closers implied by each mismatched `}` or `]` (ADR-0068).
+///
+/// A closer that does not match the innermost open container but matches an outer one closes
+/// every container in between first, as if the model had written their closers there. String
+/// contents are copied unchanged. Returns `None` when nothing needed inserting, when a closer
+/// matches no open container, or when the text ends with containers still open (truncation).
+fn rebalance_json_closers(text: &str) -> Option<String> {
+    let mut repaired = String::with_capacity(text.len() + 8);
+    let mut open = Vec::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut inserted = false;
+    for character in text.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            repaired.push(character);
+            continue;
+        }
+        match character {
+            '"' => in_string = true,
+            '{' => open.push('}'),
+            '[' => open.push(']'),
+            '}' | ']' => {
+                if !open.contains(&character) {
+                    return None;
+                }
+                while let Some(closer) = open.pop() {
+                    if closer == character {
+                        break;
+                    }
+                    repaired.push(closer);
+                    inserted = true;
+                }
+            }
+            _ => {}
+        }
+        repaired.push(character);
+    }
+    (inserted && !in_string && open.is_empty()).then_some(repaired)
 }
 
 fn json_depth_within(body: &[u8], max_depth: usize) -> bool {
@@ -3094,6 +3148,47 @@ mod tests {
         assert_eq!(
             decode_chat_response(&response(&deep, "stop"), MODEL, 256 * 1024, 64),
             Err(PlannerPortFailure::InvalidResponse)
+        );
+    }
+
+    #[test]
+    fn a_dropped_closer_in_nested_arguments_is_rebalanced() {
+        // ADR-0068: the shape observed in patch proposals, with brackets inside a string.
+        let step = r#"{"key":"patch","objective":"Rename","dependsOn":[],"capability":{"capabilityId":"xgeny.fs/apply-patch","contractVersion":"2.0.0"},"arguments":{"path":"a.py","edits":[{"oldText":"x[\"id\"]}","newText":"y[\"id\"]}"}]}"#;
+        let correct =
+            format!(r#"{{"formatVersion":1,"kind":"plan","steps":[{step}}}],"summary":""}}"#);
+        let dropped =
+            format!(r#"{{"formatVersion":1,"kind":"plan","steps":[{step}],"summary":""}}"#);
+        let expected = decode_chat_response(&response(&correct, "stop"), MODEL, 256 * 1024, 64)
+            .expect("the correct plan should decode");
+        assert_eq!(
+            decode_chat_response(&response(&dropped, "stop"), MODEL, 256 * 1024, 64),
+            Ok(expected)
+        );
+        assert_eq!(rebalance_json_closers(&correct), None);
+    }
+
+    #[test]
+    fn closers_are_not_invented_for_truncated_or_unmatched_json() {
+        for content in [
+            // still open at the end: truncation is never completed
+            r#"{"formatVersion":1,"kind":"plan","steps":[{"key":"a""#,
+            // a closer with no matching open container
+            r#"{"formatVersion":1}]"#,
+            // the extra closer after a full object
+            r#"{"steps":[{"a":1}]}}"#,
+        ] {
+            assert_eq!(rebalance_json_closers(content), None, "{content}");
+            assert_eq!(
+                decode_chat_response(&response(content, "stop"), MODEL, 256 * 1024, 64),
+                Err(PlannerPortFailure::InvalidResponse)
+            );
+        }
+        // brackets inside strings never count
+        assert_eq!(rebalance_json_closers(r#"{"a":"]}"}"#), None);
+        assert_eq!(
+            rebalance_json_closers(r#"{"a":[{"b":"]"]}"#).as_deref(),
+            Some(r#"{"a":[{"b":"]"}]}"#)
         );
     }
 
