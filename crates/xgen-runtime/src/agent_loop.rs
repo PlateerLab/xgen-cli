@@ -1403,7 +1403,7 @@ impl AgentLoop {
         if planning_snapshot.state != state {
             return Err(AgentLoopError::PlanningSnapshotMismatch);
         }
-        let step_arguments = finished_step_arguments(store, materializer, &state);
+        let step_arguments = finished_step_arguments(store, materializer, capabilities, &state);
         let context = match build_context_ordered(
             &state,
             planning_snapshot.completed_tool_outputs(),
@@ -2345,11 +2345,14 @@ fn build_context(
 
 /// Arguments of finished Steps, read back through the materializer that persisted them (ADR-0065).
 ///
-/// A Step is skipped when its material is missing, ephemeral, bound to another digest, or larger
-/// than `MAX_PLANNING_STEP_ARGUMENT_BYTES`; the context then shows it without arguments.
+/// Only non-idempotent Steps (process and terminal runs) show arguments: their outputs do not say
+/// which command produced them, while shown read and write arguments made the planner read the
+/// same target again (ADR-0067). A Step is also skipped when its material is missing, ephemeral,
+/// bound to another digest, or larger than `MAX_PLANNING_STEP_ARGUMENT_BYTES`.
 fn finished_step_arguments<S, M>(
     store: &S,
     materializer: &M,
+    registry: &CapabilityRegistry,
     state: &RunState,
 ) -> BTreeMap<String, Value>
 where
@@ -2364,6 +2367,16 @@ where
         let (Some(intent), Some(invocation)) = (&step.intent, &step.planned_invocation) else {
             continue;
         };
+        let capability = CapabilityRef {
+            capability_id: invocation.capability_id().to_owned(),
+            contract_version: invocation.contract_version().to_owned(),
+        };
+        let non_idempotent = registry
+            .definition(&capability)
+            .is_some_and(|definition| definition.spec.effect.class == EffectClass::NonIdempotent);
+        if !non_idempotent {
+            continue;
+        }
         let Ok(Some(material)) = store.load_invocation_material(&intent.effect_id) else {
             continue;
         };
@@ -2376,10 +2389,6 @@ where
         {
             continue;
         }
-        let capability = CapabilityRef {
-            capability_id: invocation.capability_id().to_owned(),
-            contract_version: invocation.contract_version().to_owned(),
-        };
         let Some(value) = materializer.planned_arguments(
             &step.step_id,
             &capability,

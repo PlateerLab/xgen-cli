@@ -1549,7 +1549,13 @@ impl PlanMaterializer for LocalMaterializer {
         reference: &ReconstructableMaterialReference,
         material_digest: &str,
     ) -> Option<serde_json::Value> {
-        if capability.capability_id == PROCESS_EXECUTE_CAPABILITY_ID {
+        if (capability.capability_id == PROCESS_EXECUTE_CAPABILITY_ID
+            && capability.contract_version == PROCESS_EXECUTE_CONTRACT_VERSION)
+            || (capability.capability_id == WEB_SEARCH_CAPABILITY_ID
+                && capability.contract_version == WEB_SEARCH_CONTRACT_VERSION)
+            || (TerminalOperation::from_capability(&capability.capability_id).is_some()
+                && capability.contract_version == TERMINAL_VERSION)
+        {
             return self.process.as_ref()?.planned_arguments(
                 step_id,
                 capability,

@@ -208,6 +208,12 @@ fn bare_xgen_streams_durable_progress_prompts_separate_approvals_and_replays_off
     assert_eq!(request_model(&first_request), MODEL);
     assert_eq!(request_model(&process_request), MODEL);
     let context = planning_context(&completion_request);
+    // ADR-0065/0067: the finished process run shows the command it ran; the read does not.
+    let steps = context["steps"]
+        .as_array()
+        .expect("steps should be present");
+    assert!(steps[0].get("arguments").is_none());
+    assert_eq!(steps[1]["arguments"]["args"], json!(["--version"]));
     let output = context["toolOutputs"]
         .as_array()
         .expect("tool outputs should be present")
@@ -420,6 +426,14 @@ fn rejected_final_response_resumes_after_restart_without_replaying_writes_or_fai
             .find(|o| o["capability"]["capabilityId"] == "xgeny.process/execute")
             .unwrap();
         assert_eq!(process["output"]["success"], false);
+        // ADR-0065/0067: after a restart the command still shows its arguments; writes do not.
+        let steps = context["steps"].as_array().unwrap();
+        assert!(steps[0].get("arguments").is_none());
+        assert!(steps[1].get("arguments").is_none());
+        assert_eq!(
+            steps[2]["arguments"]["args"],
+            json!(["--definitely-invalid-option"])
+        );
     }
 }
 
@@ -459,6 +473,73 @@ fn headless_run_keeps_the_legacy_contract_and_rejects_conversation_proposals() {
             .unwrap()
             .contains("CONVERSATION_RESPONSE_V1")
     );
+}
+
+#[test]
+fn repeated_reads_have_their_own_longer_retry_limit() {
+    // ADR-0067: up to MAX_REPEATED_ACTION_RETRIES read repeats in a row are re-asked; one more
+    // stops the Run with the same rejection.
+    for repeats in [
+        xgen_cli::MAX_REPEATED_ACTION_RETRIES,
+        xgen_cli::MAX_REPEATED_ACTION_RETRIES + 1,
+    ] {
+        let fixture = tempdir().unwrap();
+        fs::write(fixture.path().join("README.md"), "repeat fixture\n").unwrap();
+        let read = || {
+            plan_response(
+                "read",
+                "Read README",
+                "xgeny.fs/read-text",
+                &json!({"path":"README.md"}),
+            )
+        };
+        let mut responses = vec![read()];
+        responses.extend((0..repeats).map(|_| read()));
+        let completes = repeats == xgen_cli::MAX_REPEATED_ACTION_RETRIES;
+        if completes {
+            responses.push(completion_response());
+        }
+        let calls = responses.len();
+        let server = SequentialServer::with_responses(responses);
+        let output = Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .args([
+                "run",
+                "Read README",
+                "--allow-dir",
+                ".",
+                "--allow-remote-model-egress",
+                "--allow-read",
+            ])
+            .current_dir(fixture.path())
+            .env("XGEN_STATE_HOME", fixture.path().join("state"))
+            .env("XGEN_CONFIG_HOME", fixture.path().join("config"))
+            .env("XGEN_OPENAI_BASE_URL", &server.base_url)
+            .env("XGEN_OPENAI_MODEL", MODEL)
+            .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+            .env("XGEN_OPENAI_RESPONSE_FORMAT", "json_object")
+            .env_remove("XGEN_OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        let requests: Vec<_> = (0..calls)
+            .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+            .collect();
+        server.handle.join().unwrap();
+        if completes {
+            assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+            let last = &planning_context(&requests[calls - 1])["previousResponseRejection"];
+            assert_eq!(
+                last["proposalRejection"], "repeated_finished_action",
+                "{last}"
+            );
+        } else {
+            assert_eq!(output.status.code(), Some(20), "{}", stderr(&output));
+            assert!(
+                stderr(&output).contains("proposal_rejected.repeated_finished_action"),
+                "{}",
+                stderr(&output)
+            );
+        }
+    }
 }
 
 #[test]
@@ -502,10 +583,11 @@ fn one_invalid_response_is_retried_and_the_run_completes_without_resume() {
         .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
         .collect();
     server.handle.join().unwrap();
-    // ADR-0065: the finished read shows the arguments it ran with.
-    assert_eq!(
-        planning_context(&requests[1])["steps"][0]["arguments"]["path"],
-        "workspace:primary/README.md"
+    // ADR-0067: only non-idempotent Steps show their arguments.
+    assert!(
+        planning_context(&requests[1])["steps"][0]
+            .get("arguments")
+            .is_none()
     );
     // ADR-0064: only the call after the discarded response learns why it was discarded.
     assert!(
