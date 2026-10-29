@@ -549,6 +549,9 @@ struct InteractiveHost {
     process_session: Option<LocalProcessSession>,
     /// ADR-0063: where the file tools stop and how to reach the rest, appended to trusted goals.
     environment_note: Option<String>,
+    /// ADR-0075: the user's and the project's instruction files, read once per session.
+    instructions: Option<String>,
+    instruction_sources: Vec<String>,
 }
 
 impl InteractiveHost {
@@ -579,6 +582,19 @@ impl InteractiveHost {
             .into_iter()
             .map(|(id, path)| (id.clone(), format!("{id}={path}")))
             .unzip();
+        let instruction_files = xgen_cli::load_instruction_files(
+            &workspace,
+            xgen_cli::user_instructions_path().as_deref(),
+            env::home_dir().as_deref(),
+        );
+        let instruction_sources = instruction_files
+            .iter()
+            .map(|file| {
+                let size = file.text.len().div_ceil(1024);
+                let cut = if file.truncated { ", truncated" } else { "" };
+                format!("{} ({size} KiB{cut})", file.source)
+            })
+            .collect();
         Ok(Self {
             detailed_progress,
             max_model_turns,
@@ -587,6 +603,8 @@ impl InteractiveHost {
             executable_ids,
             process_session: None,
             environment_note,
+            instructions: xgen_cli::instruction_block(&instruction_files),
+            instruction_sources,
         })
     }
 
@@ -641,6 +659,10 @@ fn with_activity<'a>(
 }
 
 impl repl::ReplHost for InteractiveHost {
+    fn instruction_sources(&self) -> &[String] {
+        &self.instruction_sources
+    }
+
     fn model(&mut self) -> Result<repl::ModelView, repl::ReplFailure> {
         Self::selected_model_view()
     }
@@ -692,12 +714,13 @@ impl repl::ReplHost for InteractiveHost {
         let model = resolve_model(None, None, None, None, false, RequestOptionArgs::default())
             .map_err(|error| repl::ReplFailure::new(error.code()))?;
         let process_session = self.process_session()?;
-        let goal = match &self.environment_note {
-            Some(note) if goal.len() + note.len() + 2 <= xgen_cli::MAX_GOAL_BYTES => {
-                format!("{goal}\n\n{note}")
-            }
-            _ => goal,
-        };
+        // The short environment note goes first so a long instruction block is what gets cut.
+        let parts = [&self.environment_note, &self.instructions]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let goal = xgen_cli::append_within(goal, &parts, xgen_cli::MAX_GOAL_BYTES);
         let started_run = RefCell::new(None);
         let reported = Cell::new(0);
         run_interactive_with_process_session_progress(

@@ -10,6 +10,7 @@ mod environment;
 mod final_response;
 mod graph_discovery;
 mod http_read;
+mod instructions;
 mod manifest;
 mod material_catalog;
 mod model_profile;
@@ -24,6 +25,10 @@ pub use change_report::{
 };
 pub use composition::*;
 pub use driver::*;
+pub use instructions::{
+    InstructionFile, MAX_INSTRUCTION_BYTES, append_within, instruction_block,
+    load_instruction_files, user_instructions_path,
+};
 pub use manifest::MAX_HOST_MODEL_TURNS;
 pub use model_profile::*;
 pub use usage::{CostEstimate, TokenPrices, UsageReport, UsdPerMillion, inspect_local_usage};

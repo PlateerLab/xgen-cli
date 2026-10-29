@@ -217,6 +217,11 @@ pub(crate) trait ReplHost {
 
     fn executable_ids(&self) -> &[String];
 
+    /// Instruction files appended to every goal this session (ADR-0075), as shown to the user.
+    fn instruction_sources(&self) -> &[String] {
+        &[]
+    }
+
     /// Catalog one more executable, named `LOGICAL_ID=ABSOLUTE_PATH`, for this session.
     ///
     /// A Run is pinned to the executable catalog it started with, so this takes effect on the
@@ -491,6 +496,13 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
         writeln!(
             output,
             "Local tools are catalogued; every model/read/write/execute boundary keeps its own approval."
+        )?;
+    }
+    if !host.instruction_sources().is_empty() {
+        writeln!(
+            output,
+            "instructions: {}",
+            host.instruction_sources().join(", ")
         )?;
     }
 
