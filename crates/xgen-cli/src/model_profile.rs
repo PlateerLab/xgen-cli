@@ -833,7 +833,7 @@ fn valid_credential_ref(value: &str) -> bool {
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-fn discover_config_root() -> Result<PathBuf, ModelProfileError> {
+pub(crate) fn discover_config_root() -> Result<PathBuf, ModelProfileError> {
     if let Some(value) = crate::compatible_environment("XGEN_CONFIG_HOME") {
         let path = PathBuf::from(value);
         validate_config_root(&path)?;
