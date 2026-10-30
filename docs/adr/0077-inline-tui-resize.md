@@ -62,6 +62,11 @@ Lock에는 rustls·ureq-proto·webpki-roots의 연계 갱신도 포함된다. �
   변경 binary는 전체 흐름을 통과했다. 전체 Rust 회귀 766개(4 ignored), Clippy·fmt·protocol·문서·배포 workflow·
   license notice 검사를 통과했다.
 
+코드 `e751aef`의 [전체 CI 7개 job](https://github.com/PlateerLab/xgen-cli/actions/runs/41048809159)이
+통과했다. 5개 플랫폼 release·설치 검사를 포함한다. CI·smoke harness 보완 `02bd243`의
+[Linux PR 검사](https://github.com/PlateerLab/xgen-cli/actions/runs/41049049910)도 통과했고, 실제 tmux smoke는 3초에 완료됐다.
+Intel macOS job은 기존 CI 정책대로 테스트를 생략하고 macOS 테스트는 Apple Silicon에서 실행한다.
+
 ## 참고
 
 - [ureq 3.5.0 changelog의 EINTR 수정](https://github.com/algesten/ureq/blob/main/CHANGELOG.md#350)
