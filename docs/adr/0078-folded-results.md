@@ -50,6 +50,8 @@
 
 ## 제한과 후속 과제
 
+빠른 resize 잔상은 이후 [ADR-0079](0079-terminal-screen-size.md)에서 수정했다. 아래는 발견 당시 기록이다.
+
 - 연속 resize stress(`--rapid-resize`)에서는 축소 직후 확대하면 inline pane의 이전 테두리
   한 줄이 남는 경우를 발견했다. viewer가 닫힌 draft·실행 중 queue 두 상태에서 재현했다.
   변경 전 main `ad2a898`을 별도 archive에서 빌드한 바이너리도 같은 40×12 → 100×30 stress에서 실패했다.

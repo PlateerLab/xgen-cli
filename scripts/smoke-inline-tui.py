@@ -2,14 +2,17 @@
 """Exercise the real inline TUI in isolated tmux with a loopback model; no API key needed."""
 
 import argparse
+import fcntl
 import http.server
 import json
 import os
 from pathlib import Path
 import shlex
 import subprocess
+import struct
 import tempfile
 import threading
+import termios
 import time
 import unicodedata
 
@@ -20,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=Path("target/debug/xgen"))
     parser.add_argument("--results", action="store_true", help="Also check folding and the full-result viewer")
-    parser.add_argument("--rapid-resize", action="store_true", help="Stress consecutive resizes without settling; known inline-pane edge case")
+    parser.add_argument("--rapid-resize", action="store_true", help="Stress consecutive resizes without settling")
     args = parser.parse_args()
     binary = args.binary.resolve(strict=True)
     root = Path(tempfile.mkdtemp(prefix="xgen-inline-tui-"))
@@ -178,8 +181,40 @@ def main():
         tmux("set-option", "-t", "fixture", "remain-on-exit", "on")
         wait_for(lambda: "Enter send" in capture(), "initial pane")
         send("한글 draft that wraps across the terminal and remains editable")
+        if args.rapid_resize:
+            # Guarantee a PTY/screen mismatch independently of tmux's timer scheduling.
+            pane_tty = tmux("display-message", "-p", "-t", "fixture", "#{pane_tty}").strip()
+            with open(pane_tty, "rb", buffering=0) as tty:
+                def pty_size():
+                    return struct.unpack("HHHH", fcntl.ioctl(tty, termios.TIOCGWINSZ, bytes(8)))[:2]
+
+                wait_for(lambda: pty_size() == (30, 100), "initial PTY geometry")
+                original = fcntl.ioctl(tty, termios.TIOCGWINSZ, bytes(8))
+                try:
+                    fcntl.ioctl(tty, termios.TIOCSWINSZ, struct.pack("HHHH", 19, 73, 0, 0))
+                    assert pty_size() == (19, 73), "fixture did not create geometry lag"
+                    send(" lag-probe")
+
+                    def lagged_input_updated():
+                        text = capture(history=True)
+                        return ("lag-probe" in text and text.count("╭") == 1
+                                and text.count("╰") == 1 and "╭" + "─" * 98 + "╮" in text)
+
+                    wait_for(lagged_input_updated, "input redraw with stale PTY size")
+                    assert pty_size() == (19, 73), "PTY lag ended before redraw assertion"
+                    mark("lagged-pty-redraw-verified")
+                    (root / "lagged-pty.txt").write_text(capture(history=True))
+                finally:
+                    fcntl.ioctl(tty, termios.TIOCSWINSZ, original)
+            tmux("send-keys", "-t", "fixture", *("BSpace" for _ in " lag-probe"))
         for width, height in [(40, 12), (100, 30), (100, 12), (80, 24)]:
             resize(width, height, f"draft-{width}x{height}")
+        if args.rapid_resize:
+            # Held-out sizes: send a burst without waiting for an intermediate frame.
+            mark("heldout-resize-burst")
+            for burst_width, burst_height in [(53, 17), (91, 26), (28, 9), (80, 24)] * 3:
+                tmux("resize-window", "-t", "fixture", "-x", str(burst_width), "-y", str(burst_height))
+            resize(80, 24, "heldout-burst-restored")
         tmux("send-keys", "-t", "fixture", "C-c")
         send("Inspect fixture")
         enter()
