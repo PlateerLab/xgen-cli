@@ -17,9 +17,11 @@ use xgen_runtime::{
 use zeroize::Zeroizing;
 
 pub(crate) const READ: &str = "xgen.http/read";
+pub(crate) const PROFILE: &str = "xgen.http.read/v2";
 pub(crate) const SCOPE: &str = "http.read";
 pub(crate) type Connections = BTreeMap<String, Connection>;
 const MAX_BODY: usize = 32 * 1024;
+const MAX_TARGET_BYTES: usize = 8 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -353,6 +355,30 @@ fn scalar(value: &Value) -> Result<String, &'static str> {
     }
 }
 
+fn parameter_values(value: &Value, definition: &Value) -> Result<Vec<String>, &'static str> {
+    let values: Vec<&Value> =
+        if definition["location"] == "query" && definition["schema"]["type"] == "array" {
+            let values = value.as_array().ok_or("http_parameter_type_invalid")?;
+            // Empty exploded lists have no wire representation (RFC 6570); required cannot be omitted.
+            if values.is_empty() && definition["required"] == true {
+                return Err("http_parameter_required");
+            }
+            values.iter().collect()
+        } else {
+            vec![value]
+        };
+    values
+        .into_iter()
+        .map(|value| {
+            let text = scalar(value)?;
+            if text.len() > 2048 || text.chars().any(char::is_control) {
+                return Err("http_parameter_invalid");
+            }
+            Ok(text)
+        })
+        .collect()
+}
+
 fn request_url(
     connection: &Connection,
     contract: &Value,
@@ -401,10 +427,7 @@ fn request_url(
             if !validator.is_valid(value) {
                 return Err("http_parameter_schema_invalid");
             }
-            let text = scalar(value)?;
-            if text.len() > 2048 || text.chars().any(char::is_control) {
-                return Err("http_parameter_invalid");
-            }
+            parameter_values(value, definition)?;
         } else if definition["required"] == true {
             return Err("http_parameter_required");
         }
@@ -442,9 +465,18 @@ fn request_url(
         }
     }
     for (name, value) in arguments["query"].as_object().ok_or("http_input_invalid")? {
-        url.query_pairs_mut().append_pair(name, &scalar(value)?);
+        let definition = definitions
+            .iter()
+            .find(|p| p["name"] == name.as_str() && p["location"] == "query")
+            .ok_or("http_parameter_unknown")?;
+        for text in parameter_values(value, definition)? {
+            url.query_pairs_mut().append_pair(name, &text);
+            if url.as_str().len() > MAX_TARGET_BYTES {
+                return Err("http_target_size_limit");
+            }
+        }
     }
-    if url.as_str().len() > 8192 {
+    if url.as_str().len() > MAX_TARGET_BYTES {
         return Err("http_target_size_limit");
     }
     Ok(url)
@@ -875,6 +907,117 @@ mod tests {
             "/api/v1/records/42"
         );
     }
+    #[test]
+    fn exploded_query_arrays_preserve_values_and_enforce_all_constraints() {
+        let mut schema = contract();
+        schema["parameters"].as_array_mut().unwrap().push(json!({"name":"states","location":"query","required":false,
+            "schema":{"type":"array","items":{"type":"string","pattern":"^[a-z]+$","enum":["open","closed"]},"minItems":1,"maxItems":2,"uniqueItems":true}}));
+        let input = json!({"parameters":{"path":{"id":42},"query":{"states":["open","closed"]}}});
+        let url = request_url(&connection(), &schema, &input).unwrap();
+        assert_eq!(
+            url.query_pairs().collect::<Vec<_>>(),
+            vec![
+                ("states".into(), "open".into()),
+                ("states".into(), "closed".into())
+            ]
+        );
+        for values in [
+            json!([]),
+            json!(["open", "open"]),
+            json!(["other"]),
+            json!(["open", "closed", "open"]),
+            json!([{}]),
+            json!("open"),
+        ] {
+            let mut invalid = input.clone();
+            invalid["parameters"]["query"]["states"] = values;
+            assert_eq!(
+                request_url(&connection(), &schema, &invalid),
+                Err("http_parameter_schema_invalid")
+            );
+        }
+    }
+
+    #[test]
+    fn boolean_and_numeric_array_items_keep_their_wire_types() {
+        for (item_type, values, expected) in [
+            ("boolean", json!([true, false]), vec!["true", "false"]),
+            ("integer", json!([1, 5]), vec!["1", "5"]),
+            ("number", json!([1.25, 2.5]), vec!["1.25", "2.5"]),
+        ] {
+            let mut schema = contract();
+            schema["parameters"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"name":"values","location":"query","required":true,
+                "schema":{"type":"array","items":{"type":item_type},"minItems":1}}));
+            let input = json!({"parameters":{"path":{"id":42},"query":{"values":values}}});
+            let url = request_url(&connection(), &schema, &input).unwrap();
+            assert_eq!(
+                url.query_pairs()
+                    .map(|(_, value)| value.into_owned())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn array_items_are_encoded_separately_and_empty_required_arrays_cannot_disappear() {
+        let mut schema = contract();
+        schema["parameters"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":"values","location":"query","required":false,
+            "schema":{"type":"array","items":{"type":"string"}}}));
+        let mut input =
+            json!({"parameters":{"path":{"id":42},"query":{"values":["a&b 한글","x=y"]}}});
+        let url = request_url(&connection(), &schema, &input).unwrap();
+        assert_eq!(
+            url.query_pairs()
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("values".into(), "a&b 한글".into()),
+                ("values".into(), "x=y".into())
+            ]
+        );
+        for values in [json!(["line\nbreak"]), json!(["x".repeat(2049)])] {
+            input["parameters"]["query"]["values"] = values;
+            assert_eq!(
+                request_url(&connection(), &schema, &input),
+                Err("http_parameter_invalid")
+            );
+        }
+        input["parameters"]["query"]["values"] = json!([]);
+        assert!(
+            request_url(&connection(), &schema, &input)
+                .unwrap()
+                .query()
+                .is_none()
+        );
+        schema["parameters"]
+            .as_array_mut()
+            .unwrap()
+            .last_mut()
+            .unwrap()["required"] = json!(true);
+        assert_eq!(
+            request_url(&connection(), &schema, &input),
+            Err("http_parameter_required")
+        );
+        schema["parameters"]
+            .as_array_mut()
+            .unwrap()
+            .last_mut()
+            .unwrap()["required"] = json!(false);
+        input["parameters"]["query"]["values"] =
+            json!(["a&".repeat(1024), "a&".repeat(1024), "a&".repeat(1024)]);
+        assert_eq!(
+            request_url(&connection(), &schema, &input),
+            Err("http_target_size_limit")
+        );
+    }
+
     #[test]
     fn invalid_or_unknown_parameters_are_rejected_before_io() {
         for parameters in [

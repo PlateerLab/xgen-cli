@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+import urllib.parse
 
 import test_tool_graph_worker as base
 from test_tool_graph_worker import WORKER, asset_spec, calendar_spec
@@ -46,7 +47,7 @@ class OptionalParameterContractTests(unittest.TestCase):
         for source, path in [(asset_spec(), "/assets"), (calendar_spec(), "/events")]:
             with self.subTest(path=path):
                 parameters = [{"name":"keep","in":"query","type":"string","schema":{"type":"string"}},
-                              {"name":"filters","in":"query","type":"array","schema":{"type":"array","items":{"type":"string"}}},
+                              {"name":"filters","in":"query","type":"array","explode":False,"schema":{"type":"array","items":{"type":"string"}}},
                               {"name":"trace","in":"header","schema":{"type":"string"}}]
                 source["paths"][path]["get"]["parameters"] = parameters
                 result, tool = self.describe(source, path)
@@ -54,7 +55,7 @@ class OptionalParameterContractTests(unittest.TestCase):
                 contract = result["contract"]
                 self.assertEqual([p["name"] for p in contract["parameters"]], ["keep"])
                 self.assertEqual(contract["excluded_parameters"], [
-                    {"location":"query","name":"filters","reason":"http_parameter_type_unsupported"},
+                    {"location":"query","name":"filters","reason":"http_parameter_serialization_unsupported"},
                     {"location":"header","name":"trace","reason":"http_parameter_location_unsupported"}])
                 self.assertEqual(result["contract_digest"], WORKER.digest(contract))
                 view = WORKER.describe_view({"collection":"fixture","artifact_digest":"a"*64,"artifact":{"tools":[tool],"metadata":{"source_count":1}}}, tool, result, 0)
@@ -65,7 +66,7 @@ class OptionalParameterContractTests(unittest.TestCase):
     def test_required_shapes_and_path_parameters_still_close_the_operation(self):
         for location, required in [("query",True),("header",True),("path",False)]:
             source = asset_spec()
-            source["paths"]["/assets"]["get"]["parameters"] = [{"name":"bad","in":location,"required":required,"schema":{"type":"array","items":{"type":"string"}}}]
+            source["paths"]["/assets"]["get"]["parameters"] = [{"name":"bad","in":location,"required":required,"explode":False,"schema":{"type":"array","items":{"type":"string"}}}]
             result, _ = self.describe(source)
             self.assertFalse(result["supported"], result)
 
@@ -150,6 +151,52 @@ class OptionalParameterContractTests(unittest.TestCase):
         self.assertEqual(result, {"supported":False,"error":"http_security_unsupported"})
 
 
+class ArrayQueryContractTests(unittest.TestCase):
+    describe = staticmethod(OptionalParameterContractTests.describe)
+
+    def test_form_explode_and_swagger_multi_keep_complete_item_and_array_constraints(self):
+        for source, path in [(asset_spec(), "/assets"), (calendar_spec(), "/events")]:
+            for items in [{"type":"string","enum":["open","closed"],"pattern":"^[a-z]+$"},
+                          {"type":"integer","minimum":1,"maximum":5},
+                          {"type":"number","minimum":0.1}, {"type":"boolean"}]:
+                with self.subTest(path=path, items=items):
+                    schema = {"type":"array","items":items,"minItems":1,"maxItems":3,"uniqueItems":True}
+                    parameter = {"name":"values","in":"query","required":True,"schema":schema}
+                    if source.get("swagger"):
+                        parameter = {"name":"values","in":"query","required":True,
+                                     "collectionFormat":"multi",**schema}
+                    source["paths"][path]["get"]["parameters"] = [parameter]
+                    result, _ = self.describe(source, path)
+                    self.assertTrue(result["supported"], result)
+                    self.assertEqual(result["contract"]["parameters"][0]["schema"],schema)
+                    self.assertNotIn("excluded_parameters", result["contract"])
+
+    def test_other_array_serializations_and_object_items_follow_optional_required_policy(self):
+        for fields, reason in [({"explode":False}, "http_parameter_serialization_unsupported"),
+                               *[({"style":style}, "http_parameter_serialization_unsupported")
+                                 for style in ["spaceDelimited","pipeDelimited","deepObject"]],
+                               ({"schema":{"type":"array","items":{"type":"object"}}}, "http_parameter_type_unsupported")]:
+            for required in [False, True]:
+                source = asset_spec()
+                parameter = {"name":"values","in":"query","required":required,
+                             "schema":{"type":"array","items":{"type":"string"}},**fields}
+                source["paths"]["/assets"]["get"]["parameters"] = [parameter]
+                result, _ = self.describe(source)
+                if required:
+                    self.assertEqual(result,{"supported":False,"error":reason})
+                else:
+                    self.assertTrue(result["supported"],result)
+                    self.assertEqual(result["contract"]["excluded_parameters"][0]["reason"],reason)
+        for encoding in [None,"csv","ssv","tsv","pipes"]:
+            source = calendar_spec()
+            parameter = {"name":"values","in":"query","type":"array","items":{"type":"integer"}}
+            if encoding is not None: parameter["collectionFormat"] = encoding
+            source["paths"]["/events"]["get"]["parameters"] = [parameter]
+            result, _ = self.describe(source,"/events")
+            self.assertTrue(result["supported"],result)
+            self.assertEqual(result["contract"]["excluded_parameters"][0]["reason"],"http_parameter_serialization_unsupported")
+
+
 @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
 class ContractTests(unittest.TestCase):
     setUp = base.WorkerTests.setUp
@@ -178,7 +225,7 @@ class ContractTests(unittest.TestCase):
             op=source["paths"]["/assets"]["get"]
             if kind=="post": source["paths"]["/assets"]={"post":op}
             elif kind=="header": op["parameters"]=[{"name":"x","in":"header","required":True,"schema":{"type":"string"}}]
-            elif kind=="array": op["parameters"]=[{"name":"x","in":"query","required":True,"schema":{"type":"array","items":{"type":"string"}}}]
+            elif kind=="array": op["parameters"]=[{"name":"x","in":"query","required":True,"explode":False,"schema":{"type":"array","items":{"type":"string"}}}]
             elif kind=="xml": op["responses"]["200"]["content"]={"application/xml":{"schema":{"type":"object"}}}
             else:
                 source["components"]={"schemas":{"Recursive":{"$ref":"#/components/schemas/Recursive"}}}
@@ -248,8 +295,8 @@ class HttpCliTests(unittest.TestCase):
         self.addCleanup(cleanup)
         return server
 
-    def cli(self,*args,check=True):
-        result=subprocess.run([os.environ["XGEN_TOOL_TEST_BINARY"],*args],env=self.env,capture_output=True,timeout=150)
+    def cli(self,*args,check=True,binary=None):
+        result=subprocess.run([binary or os.environ["XGEN_TOOL_TEST_BINARY"],*args],env=self.env,capture_output=True,timeout=150)
         if check: self.assertEqual(result.returncode,0,result.stderr.decode())
         self.assertNotIn(self.secret.encode(),result.stdout+result.stderr)
         return result
@@ -275,10 +322,10 @@ class HttpCliTests(unittest.TestCase):
     def context(payload):
         return json.loads(next(m["content"] for m in payload["messages"] if m["role"]=="user"))["planningContext"]
 
-    def run_cli(self,allow=True):
+    def run_cli(self,allow=True,binary=None):
         args=["run","--workspace",str(self.workspace),"--base-url",f"http://127.0.0.1:{self.model.server_port}/v1","--model","fixture-model","--tokenizer","fixture-tokenizer","--allow-dir",".","--allow-remote-model-egress"]
         if allow: args += ["--allow-read"]
-        return self.cli(*args,"Read connected fixture API.",check=False)
+        return self.cli(*args,"Read connected fixture API.",check=False,binary=binary)
 
     def manifest(self):
         return json.loads(next((self.state/"runs").glob("*/manifest.json")).read_text())
@@ -321,22 +368,22 @@ class HttpCliTests(unittest.TestCase):
                 for path in self.state.rglob("*"):
                     if path.is_file(): self.assertNotIn(self.secret.encode(),path.read_bytes(),str(path))
 
-    def test_optional_array_is_hidden_and_injected_input_is_rejected_before_http(self):
+    def test_unsupported_optional_array_is_hidden_and_injected_input_is_rejected_before_http(self):
         for name, path, tool in [("shipments","/shipments/{tracking}","readShipment"),
                                  ("sensors","/sensors/{sensorId}","readSensor")]:
             with self.subTest(name=name):
                 source = held_out_spec(name)
-                parameter = {"name":"states","in":"query","required":False,
+                parameter = {"name":"states","in":"query","required":False,"explode":False,
                              "schema":{"type":"array","items":{"type":"string"}}}
                 if name == "sensors":
-                    parameter = {"name":"states","in":"query","required":False,
+                    parameter = {"name":"states","in":"query","required":False,"collectionFormat":"csv",
                                  "type":"array","items":{"type":"integer"}}
                 source["paths"][path]["get"]["parameters"].append(parameter)
                 arguments = self.install(name, source)
                 view = json.loads(self.cli("tools","describe","--name",name,tool).stdout)
                 self.assertNotIn("states", [row["name"] for row in view["http_read"]["contract"]["parameters"]])
                 self.assertEqual(view["http_read"]["contract"]["excluded_parameters"][0]["name"], "states")
-                self.assertEqual(view["http_read"]["contract"]["excluded_parameters"][0]["reason"], "http_parameter_type_unsupported")
+                self.assertEqual(view["http_read"]["contract"]["excluded_parameters"][0]["reason"], "http_parameter_serialization_unsupported")
                 self.response = {"tracking":"A42","delivered":True} if name == "shipments" else {"values":[2.5]}
                 self.calls.clear(); self.requests.clear()
                 self.proposals = [self.plan("describe", "xgen.tools/describe", {"collection":name,"tool":tool}),
@@ -355,6 +402,62 @@ class HttpCliTests(unittest.TestCase):
                 result = self.run_cli()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.calls, [])
+
+    def test_repeated_query_pairs_and_invalid_array_inputs_on_independent_sources(self):
+        for name, path in [("shipments","/shipments/{tracking}"),("sensors","/sensors/{sensorId}")]:
+            with self.subTest(name=name):
+                self.state=self.directory/(name+"-arrays-state");self.env["XGEN_STATE_HOME"]=str(self.state)
+                source=held_out_spec(name)
+                schema={"type":"array","items":{"type":"string","enum":["open","closed"]},
+                        "minItems":1,"maxItems":2,"uniqueItems":True}
+                parameter={"name":"states","in":"query","schema":schema}
+                values=["open","closed"]
+                invalid=[[],["open","open"],["unknown"],["open","closed","open"]]
+                if name=="sensors":
+                    schema={"type":"array","items":{"type":"integer","minimum":1,"maximum":5},
+                            "minItems":1,"maxItems":2,"uniqueItems":True}
+                    parameter={"name":"states","in":"query","collectionFormat":"multi",**schema}
+                    values=[1,5];invalid=[[],[1,1],[0],[6],[1,2,3]]
+                source["paths"][path]["get"]["parameters"].append(parameter)
+                arguments=self.install(name,source)
+                arguments["parameters"]["query"]["states"]=values
+                self.response={"tracking":"A42","delivered":True} if name=="shipments" else {"values":[2.5]}
+                self.calls.clear();self.requests.clear()
+                self.proposals=[self.plan("read","xgen.http/read",arguments)]
+                result=self.run_cli();self.assertEqual(result.returncode,0,result.stderr.decode())
+                self.assertEqual(len(self.calls),1)
+                pairs=urllib.parse.parse_qsl(urllib.parse.urlsplit(self.calls[0][0]).query)
+                self.assertEqual([value for key,value in pairs if key=="states"],[str(value) for value in values])
+                for bad_value in invalid:
+                    self.calls.clear();self.requests.clear()
+                    bad=copy.deepcopy(arguments);bad["parameters"]["query"]["states"]=bad_value
+                    self.proposals=[self.plan("bad","xgen.http/read",bad)]
+                    result=self.run_cli();self.assertNotEqual(result.returncode,0)
+                    self.assertEqual(self.calls,[])
+
+    @unittest.skipUnless(os.environ.get("XGEN_HTTP_V1_TEST_BINARY"),"previous HTTP profile binary opt-in")
+    def test_previous_http_profile_does_not_resume_under_new_wire_rules(self):
+        arguments=self.install();self.proposals=[self.plan("read","xgen.http/read",arguments)]
+        paused=self.run_cli(allow=False,binary=os.environ["XGEN_HTTP_V1_TEST_BINARY"])
+        self.assertEqual(paused.returncode,10,paused.stderr.decode())
+        run_id=self.manifest()["record"]["runId"]
+        result=self.cli("resume",run_id,"--workspace",str(self.workspace),"--allow-dir",".",
+                        "--base-url",f"http://127.0.0.1:{self.model.server_port}/v1","--allow-read",check=False)
+        self.assertEqual(result.returncode,64,result.stderr.decode())
+        self.assertIn(b"configuration=execution_profile",result.stderr)
+        self.assertEqual(self.calls,[])
+        self.assertEqual(len(self.requests),1)
+
+    @unittest.skipUnless(os.environ.get("XGEN_HTTP_V1_TEST_BINARY"),"previous HTTP profile binary opt-in")
+    def test_completed_previous_http_profile_replays_without_network(self):
+        arguments=self.install();self.proposals=[self.plan("read","xgen.http/read",arguments)]
+        completed=self.run_cli(binary=os.environ["XGEN_HTTP_V1_TEST_BINARY"])
+        self.assertEqual(completed.returncode,0,completed.stderr.decode())
+        calls=len(self.calls);requests=len(self.requests)
+        result=self.cli("resume",self.manifest()["record"]["runId"],check=False)
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertEqual(len(self.calls),calls)
+        self.assertEqual(len(self.requests),requests)
 
     def test_http_failures_do_not_publish_unverified_body_or_follow_redirect(self):
         arguments=self.install()

@@ -54,9 +54,14 @@ agent loop에는 연결이 있을 때 `xgen.http/read@1.0.0`이 추가된다. �
   `http_read.excluded_parameters`에 이름 preview·위치·고정 이유를 표시하고 count/digest/complete를
   함께 준다. 제외한 이름을 입력에 넣으면 HTTP 호출 전에 거절한다. required와 path 파라미터가
   지원 밖이면 operation 전체를 거절한다. [ADR-0081](../adr/0081-optional-http-parameters.md).
+- query 배열은 OpenAPI 3 `style=form, explode=true`(기본값 포함)와 Swagger 2
+  `collectionFormat=multi`만 지원한다. JSON 배열을 반복 query key로 직렬화하며 items의 scalar 제약과
+  minItems/maxItems/uniqueItems를 검증한다. 빈 선택 배열은 pair를 만들지 않고 빈 required 배열은 거절한다.
+  다른 직렬화·object items·path 배열은 선택 제외/필수 거절 대상이다.
+  [실행 profile v2와 이전 Run 재개](../adr/0082-array-query-parameters.md).
 - scalar path/query: string/integer/number/boolean, simple path·form query, 원본 required·enum·pattern·수치/길이 제약. 값은 URL library로 encode한다. path의 dot segment·slash·역슬래시·percent 입력과 혼합 template는 거절한다.
 - 명시적인 숫자 2xx 응답의 `application/json` 스키마. 실제 응답도 해당 Content-Type이어야 한다. 순환 없는 문서 내부 `$ref`를 해제한다.
-- 인증 없음 또는 OpenAPI HTTP bearer. OAuth·API key·cookie·header parameter·본문·배열 파라미터·외부/순환 ref·ref sibling·nullable/legacy boolean exclusive bound·dynamic ref는 호출 전에 거절한다. JSON Schema 2020-12에 호환되는 스키마만 실행한다. format은 annotation이며 추가 format 보증은 없다.
+- 인증 없음 또는 OpenAPI HTTP bearer. OAuth·API key·cookie·header parameter·본문·지원 밖 배열 파라미터·외부/순환 ref·ref sibling·nullable/legacy boolean exclusive bound·dynamic ref는 호출 전에 거절한다. JSON Schema 2020-12에 호환되는 스키마만 실행한다. format은 annotation이며 추가 format 보증은 없다.
 - 기존 collection과 URL/Swagger UI로 직접 수집한 collection에는 실행에 필요한 원본이 없으므로 검색은 가능하지만 HTTP 실행은 거절한다. 실행하려면 로컬 JSON으로 새 이름에 다시 가져온다. 원격 수집 원본 보존은 graph-tool-call 연계 후속이다.
 - HTTPS, 또는 테스트용 숫자 loopback HTTP만 연결. redirect·환경 proxy·애플리케이션 재시도 없음. 응답 헤더 16 KiB, body 32 KiB, 전체 관찰 64 KiB, 입력·URL 각 8 KiB, HTTP timeout 30초. worker 계약 조회는 기존 offline 120초 한도다.
 - 인증은 호스트에서만 추가한다. bearer 값이 본문에 그대로 또는 JSON escape 해제 후 포함되면 본문을 버린다. 인증값·오류 원문·응답 헤더는 worker나 모델 컨텍스트·Receipt에 넣지 않는다. 일반 업무 데이터 전체에 대한 redaction 기능은 아니다.
