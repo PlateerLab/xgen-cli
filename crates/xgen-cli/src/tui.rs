@@ -26,6 +26,8 @@ use unicode_width::UnicodeWidthChar as _;
 use crate::repl::{Cancellation, InputMessage, InterruptibleInput, MAX_REPL_LINE_BYTES};
 
 const MAX_HISTORY_ENTRIES: usize = 500;
+/// Keep keyboard/resize bursts from starving output and shutdown messages.
+const MAX_EVENTS_PER_TICK: usize = 256;
 /// Input rows the box shows before it scrolls with the caret.
 const MAX_INPUT_ROWS: usize = 8;
 const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
@@ -147,6 +149,36 @@ struct Frontend {
 struct DrawnPane {
     /// Row of the cursor inside the pane, counted from the pane's first row.
     caret_row: u16,
+    caret_column: u16,
+    origin_row: u16,
+    size: Option<(u16, u16)>,
+    /// Hard-line widths, needed when the terminal reflows the previous pane on resize.
+    line_widths: Vec<usize>,
+}
+
+impl DrawnPane {
+    fn rows_above_caret(&self, width: u16) -> u16 {
+        if self.size.is_none_or(|(old_width, _)| old_width == width) {
+            return self.caret_row;
+        }
+        let width = usize::from(width.max(1));
+        let above: usize = self
+            .line_widths
+            .iter()
+            .take(usize::from(self.caret_row))
+            .map(|columns| (*columns).max(1).div_ceil(width))
+            .sum();
+        u16::try_from(above + usize::from(self.caret_column) / width).unwrap_or(u16::MAX)
+    }
+
+    fn physical_rows(&self, width: u16) -> usize {
+        let width = usize::from(width.max(1));
+        self.line_widths
+            .iter()
+            .map(|columns| (*columns).max(1).div_ceil(width))
+            .sum::<usize>()
+            .max(1)
+    }
 }
 
 impl Frontend {
@@ -187,7 +219,7 @@ impl Frontend {
                     Ok(Message::Request) => self.on_request(&mut finished),
                     Ok(Message::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => {
                         let _ = self.draw(&finished, false);
-                        let _ = clear_pane(self.drawn.caret_row);
+                        let _ = clear_pane(&self.drawn);
                         return;
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
@@ -202,6 +234,14 @@ impl Frontend {
             };
             if let Some(event) = event {
                 dirty |= self.on_event(event, &mut finished);
+                // Apply queued keys and the latest resize before painting another frame.
+                for _ in 0..MAX_EVENTS_PER_TICK {
+                    if !event::poll(Duration::ZERO).unwrap_or(false) {
+                        break;
+                    }
+                    let Ok(event) = event::read() else { break };
+                    dirty |= self.on_event(event, &mut finished);
+                }
             }
             if dirty || last_draw.elapsed() >= REDRAW_INTERVAL {
                 if self.draw(&finished, true).is_err() {
@@ -356,15 +396,7 @@ impl Frontend {
     fn draw(&mut self, finished: &[Vec<u8>], with_pane: bool) -> io::Result<()> {
         let (width, height) = terminal::size().unwrap_or((80, 24));
         let mut stdout = io::stdout().lock();
-        // `CSI 0 A` moves one row on most terminals, so never send a zero move.
-        if self.drawn.caret_row > 0 {
-            queue!(stdout, cursor::MoveUp(self.drawn.caret_row))?;
-        }
-        queue!(
-            stdout,
-            cursor::MoveToColumn(0),
-            terminal::Clear(terminal::ClearType::FromCursorDown)
-        )?;
+        let origin = erase_pane(&mut stdout, &self.drawn, (width, height))?;
         for line in finished {
             stdout.write_all(line)?;
             stdout.write_all(b"\x1b[0m\r\n")?;
@@ -386,6 +418,19 @@ impl Frontend {
                 % SPINNER.len()],
         };
         let pane = layout(&view, &self.editor);
+        let row = if finished.is_empty()
+            && let Some(origin) = origin
+        {
+            origin
+        } else {
+            stdout.flush()?;
+            cursor::position()?.1
+        };
+        let top = height.saturating_sub(u16::try_from(pane.rows.len()).unwrap_or(height));
+        if row > top {
+            queue!(stdout, terminal::ScrollUp(row - top))?;
+        }
+        queue!(stdout, cursor::MoveTo(0, top))?;
         let last_row = pane.rows.len().saturating_sub(1);
         stdout.write_all(pane.rows.join("\r\n").as_bytes())?;
         let up = u16::try_from(last_row.saturating_sub(pane.caret_row)).unwrap_or(0);
@@ -397,21 +442,57 @@ impl Frontend {
             cursor::MoveToColumn(u16::try_from(pane.caret_column).unwrap_or(0))
         )?;
         self.drawn.caret_row = u16::try_from(pane.caret_row).unwrap_or(0);
+        self.drawn.caret_column = u16::try_from(pane.caret_column).unwrap_or(0);
+        self.drawn.origin_row = top;
+        self.drawn.size = Some((width, height));
+        self.drawn.line_widths = pane
+            .rows
+            .iter()
+            .map(|row| display_width(&strip_controls(row.as_bytes())))
+            .collect();
         stdout.flush()
     }
 }
 
-fn clear_pane(caret_row: u16) -> io::Result<()> {
+fn clear_pane(drawn: &DrawnPane) -> io::Result<()> {
     let mut stdout = io::stdout();
-    if caret_row > 0 {
-        queue!(stdout, cursor::MoveUp(caret_row))?;
+    erase_pane(&mut stdout, drawn, terminal::size().unwrap_or((80, 24)))?;
+    stdout.flush()
+}
+
+fn erase_pane(
+    output: &mut impl Write,
+    drawn: &DrawnPane,
+    size: (u16, u16),
+) -> io::Result<Option<u16>> {
+    let above = drawn.rows_above_caret(size.0);
+    let origin = if drawn.size.is_some_and(|old_size| old_size != size) {
+        // Resize can clamp or reflow the caret. Re-anchor to its actual screen row.
+        let (_, row) = cursor::position()?;
+        Some(row.saturating_sub(above))
+    } else {
+        drawn.size.map(|_| drawn.origin_row)
+    };
+    if let Some(origin) = origin {
+        queue!(output, cursor::MoveTo(0, origin))?;
     }
     queue!(
-        stdout,
+        output,
         cursor::MoveToColumn(0),
-        terminal::Clear(terminal::ClearType::FromCursorDown)
+        cursor::SavePosition,
+        terminal::Clear(terminal::ClearType::CurrentLine)
     )?;
-    stdout.flush()
+    // Erasing from (0, 0) with CSI J moves the old screen into tmux/terminal scrollback.
+    // Clear individual rows instead, preserving both committed output and existing scrollback.
+    for _ in 1..drawn.physical_rows(size.0).min(usize::from(size.1)) {
+        queue!(
+            output,
+            cursor::MoveDown(1),
+            terminal::Clear(terminal::ClearType::CurrentLine)
+        )?;
+    }
+    queue!(output, cursor::RestorePosition)?;
+    Ok(origin)
 }
 
 /// How a submitted line is kept in the scrollback.
@@ -697,8 +778,8 @@ struct Pane {
 
 /// The pinned pane: status, queued goals, the input box, and the footer.
 fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
-    let width = view.width.max(20);
-    let inner = width - 4;
+    let width = view.width.max(1);
+    let height = view.height.max(1);
     let mut rows = Vec::new();
     let goal_prompt = view.prompt == GOAL_PROMPT || view.prompt == CONTINUATION_PROMPT;
     if view.cancelling {
@@ -710,20 +791,60 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
         rows.push(format!(
             "\x1b[2m{} {}\x1b[0m",
             view.spinner,
-            fit(&view.prompt, inner)
+            fit(&view.prompt, width.saturating_sub(4))
         ));
     } else if view.requested && !goal_prompt && !view.prompt.is_empty() {
         rows.push(format!("\x1b[1;33m{}\x1b[0m", fit(&view.prompt, width - 1)));
     }
-    for goal in view.queue {
+    for row in &mut rows {
+        let text = strip_controls(row.as_bytes());
+        if display_width(&text) > width {
+            *row = fit(&text, width);
+        }
+    }
+    if width < 8 || height < 4 {
+        rows.truncate(height.saturating_sub(1));
+        let (lines, caret_line, caret_column) = wrap_input(&editor.text, editor.caret, width);
+        let visible = height.saturating_sub(rows.len()).max(1);
+        let first = caret_line.saturating_sub(visible - 1);
+        let top = rows.len();
+        rows.extend(
+            lines
+                .iter()
+                .skip(first)
+                .take(visible)
+                .map(|line| fit(line, width)),
+        );
+        return Pane {
+            rows,
+            caret_row: top + caret_line - first,
+            caret_column: caret_column.min(width - 1),
+        };
+    }
+    let inner = width - 4;
+    let (lines, caret_line, caret_column) = wrap_input(&editor.text, editor.caret, inner - 2);
+    let footer = height > rows.len() + 3;
+    let visible = MAX_INPUT_ROWS
+        .min(lines.len())
+        .min(height - rows.len() - 2 - usize::from(footer));
+    let queue_slots = height - rows.len() - 2 - visible - usize::from(footer);
+    for (index, goal) in view.queue.iter().take(queue_slots).enumerate() {
+        if index + 1 == queue_slots && view.queue.len() > queue_slots {
+            rows.push(format!(
+                "\x1b[2m{}\x1b[0m",
+                fit(
+                    &format!("queued: +{} more", view.queue.len() - index),
+                    width - 1
+                )
+            ));
+            break;
+        }
         rows.push(format!(
             "\x1b[2mqueued: {}\x1b[0m",
             fit(&goal.replace('\n', " "), inner.saturating_sub(8))
         ));
     }
     rows.push(format!("╭{}╮", "─".repeat(width - 2)));
-    let (lines, caret_line, caret_column) = wrap_input(&editor.text, editor.caret, inner - 2);
-    let visible = MAX_INPUT_ROWS.min(view.height.saturating_sub(rows.len() + 3).max(1));
     let first = caret_line.saturating_sub(visible - 1);
     let box_top = rows.len();
     for (index, line) in lines.iter().enumerate().skip(first).take(visible) {
@@ -737,10 +858,12 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
     } else {
         "Enter queue · Esc drop queue · Ctrl+C cancel run"
     };
-    rows.push(format!(
-        "\x1b[2m{}\x1b[0m",
-        fit(&format!("{}  {hint}", view.footer), width - 1)
-    ));
+    if footer {
+        rows.push(format!(
+            "\x1b[2m{}\x1b[0m",
+            fit(&format!("{}  {hint}", view.footer), width - 1)
+        ));
+    }
     Pane {
         caret_row: box_top + caret_line - first,
         caret_column: 4 + caret_column,
@@ -794,6 +917,9 @@ fn display_width(text: &str) -> usize {
 
 /// Cut `text` to `width` columns, marking the cut.
 fn fit(text: &str, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
     if display_width(text) <= width {
         return text.to_owned();
     }
@@ -962,6 +1088,95 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(text[0].starts_with("Allow read"));
         assert!(text.last().unwrap().contains("Ctrl+D exit"));
+    }
+
+    #[test]
+    fn pane_layout_stays_inside_narrow_and_short_terminals() {
+        let queue = VecDeque::from_iter((0..20).map(|n| format!("queued goal {n}")));
+        let mut editor = LineEditor::default();
+        editor.insert_str("한글 draft\nsecond line\nthird line");
+        for (width, height, cancelling) in (1..=100).flat_map(|width| {
+            (1..=24)
+                .flat_map(move |height| [false, true].map(|cancelling| (width, height, cancelling)))
+        }) {
+            let view = PaneView {
+                width,
+                height,
+                prompt: "Allow read? [y/a/N]".to_owned(),
+                requested: true,
+                cancelling,
+                queue: &queue,
+                footer: "fixture",
+                spinner: '|',
+            };
+            let pane = layout(&view, &editor);
+            assert!(pane.rows.len() <= height, "height {width}x{height}");
+            assert!(
+                pane.rows
+                    .iter()
+                    .all(|row| display_width(&strip_controls(row.as_bytes())) <= width),
+                "width {width}x{height}"
+            );
+            assert!(pane.caret_row < pane.rows.len());
+            assert!(pane.caret_column < width);
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn pane_erasure_never_uses_a_clear_that_pushes_the_screen_to_scrollback() {
+        let drawn = DrawnPane {
+            size: Some((80, 24)),
+            origin_row: 20,
+            caret_row: 1,
+            caret_column: 9,
+            line_widths: vec![80, 80, 80, 79],
+        };
+        let mut output = Vec::new();
+        assert_eq!(erase_pane(&mut output, &drawn, (80, 24)).unwrap(), Some(20));
+        let commands = String::from_utf8(output).unwrap();
+        assert!(!commands.contains('J'));
+        assert_eq!(commands.matches("\x1b[2K").count(), 4);
+        assert!(commands.ends_with("\x1b8"));
+        assert_eq!(drawn.rows_above_caret(40), 2);
+        assert_eq!(drawn.physical_rows(40), 8);
+    }
+
+    #[test]
+    fn resizing_preserves_drafts_queued_goals_and_pending_approval_answers() {
+        let (lines, received) = mpsc::sync_channel(1);
+        let mut frontend =
+            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        let mut finished = Vec::new();
+        frontend.editor.insert_str("다음 goal\nsecond line");
+        assert!(frontend.on_event(Event::Resize(12, 4), &mut finished));
+        assert_eq!(frontend.editor.text, "다음 goal\nsecond line");
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &mut finished,
+        );
+        assert_eq!(frontend.queue.front().unwrap(), "다음 goal\nsecond line");
+
+        frontend.screen.push(b"Allow read? [y/a/N] ");
+        frontend.on_request(&mut finished);
+        frontend.editor.insert('y');
+        frontend.on_event(Event::Resize(80, 24), &mut finished);
+        assert_eq!(frontend.prompt(), "Allow read? [y/a/N] ");
+        assert_eq!(frontend.editor.text, "y");
+        assert_eq!(frontend.queue.len(), 1);
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &mut finished,
+        );
+        assert!(matches!(received.try_recv(), Ok(InputMessage::Line(line)) if line == "y"));
+        assert_eq!(frontend.queue.len(), 1);
+
+        frontend.screen.push(GOAL_PROMPT.as_bytes());
+        frontend.on_request(&mut finished);
+        assert!(
+            matches!(received.try_recv(), Ok(InputMessage::Line(line)) if line == "다음 goal\\")
+        );
+        assert!(frontend.queue.is_empty());
     }
 
     #[test]
