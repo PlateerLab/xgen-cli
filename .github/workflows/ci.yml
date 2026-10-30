@@ -57,6 +57,16 @@ jobs:
       - name: Test workspace without slow process tests
         run: cargo nextest run --profile pr --workspace --locked
 
+      - name: Check inline TUI resize and approval flow offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v tmux >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes tmux
+          fi
+          python3 scripts/smoke-inline-tui.py
+
       - name: Test Python scripts without API calls
         run: python3 -m unittest discover -s scripts/tests
 
