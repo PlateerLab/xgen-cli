@@ -12,6 +12,8 @@ import tempfile
 import threading
 import time
 
+TIMEOUT = 30
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -43,7 +45,7 @@ def main():
             mark("model_request")
             if context["goal"].startswith("Inspect fixture") and not context["toolOutputs"]:
                 entered.set()
-                if not release.wait(15):
+                if not release.wait(TIMEOUT):
                     mark("fixture_wait_expired")
                     self.send_error(500)
                     return
@@ -96,7 +98,7 @@ def main():
         return tmux("capture-pane", "-p", "-S", "-" if history else "0", "-t", "fixture")
 
     def wait_for(predicate, label):
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + TIMEOUT
         while time.monotonic() < deadline:
             if predicate():
                 return
@@ -122,9 +124,8 @@ def main():
     started = False
     try:
         # The fixture never inherits real provider configuration or credentials.
-        launch = f"cd {shlex.quote(str(root))} && env " + " ".join([
-            "-u XGEN_OPENAI_API_KEY", "-u XGEN_MODEL_PROFILE", "-u XGEN_OPENAI_BASE_URL",
-            "-u XGEN_OPENAI_MODEL", "-u XGEN_OPENAI_TOKENIZER",
+        unsets = [f"-u {shlex.quote(key)}" for key in os.environ if key.startswith("XGEN_")]
+        launch = f"cd {shlex.quote(str(root))} && env " + " ".join(unsets + [
             shlex.quote(f"XGEN_CONFIG_HOME={config}"), shlex.quote(f"XGEN_STATE_HOME={state}"),
             shlex.quote(str(binary)),
         ]) + f"; stty -a > {shlex.quote(str(root / 'stty.txt'))}"
@@ -142,7 +143,7 @@ def main():
         wait_for(lambda: "Allow sending" in capture(), "model approval")
         send("a")
         enter()
-        assert entered.wait(15), "model call did not begin"
+        assert entered.wait(TIMEOUT), "model call did not begin"
         mark("model_entered")
         send("queued after resize")
         enter()

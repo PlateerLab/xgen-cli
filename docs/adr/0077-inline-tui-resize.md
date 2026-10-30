@@ -56,6 +56,7 @@ Lock에는 rustls·ureq-proto·webpki-roots의 연계 갱신도 포함된다. �
   provider만 사용한다. 유료 LLM이나 사용자 credential을 사용하지 않는다. 실행 중 resize·대기열, 승인 답변
   보존·읽기 완료·대기열 실행, 설계와 다른 55×18의 완료 후 resize·history, 종료 후 `icanon` 복원을 확인한다.
   예상 model call 3개 외 재요청이 없는지도 확인한다. 실패/성공 capture와 phase 기록은 출력된 임시 폴더에 남긴다.
+  `Fast / Linux` CI에서도 같은 smoke를 실행해 이후 PR의 실제 TUI 회귀를 검사한다.
 - 실제 화면 관찰은 Linux/tmux 범위다. 다른 OS의 native terminal 화면 확인과 CI의 build/unit 검증을 구분한다.
 - 기존 binary로 같은 tmux smoke를 실행하면 첫 40×12 축소에서 stale-pane assertion이 실패했다.
   변경 binary는 전체 흐름을 통과했다. 전체 Rust 회귀 766개(4 ignored), Clippy·fmt·protocol·문서·배포 workflow·
