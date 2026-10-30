@@ -1,17 +1,19 @@
 //! Terminal frontend for the interactive REPL (ADR-0074).
 //!
 //! The REPL keeps writing plain terminal text and reading lines. This layer interprets that text
-//! the way a terminal would: every finished line goes to the scrollback above a pane pinned to the
+//! the way a terminal would: finished ordinary lines and result previews go above a pane pinned to the
 //! bottom of the screen, and the unfinished tail (a prompt, or the live progress line the REPL keeps
 //! rewriting with `\r`) is shown inside the pane. The pane holds an input box that stays editable
 //! while a Run is in flight, so the next goal can be typed and queued, and Ctrl+C cancels the Run.
 //!
 //! Only this thread writes to the terminal, so scrollback output and pane redraws never interleave.
+//! Explicit answer/change sections retain their full rendered text for a read-only result viewer.
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -23,7 +25,10 @@ use crossterm::event::{
 use crossterm::{cursor, queue, terminal};
 use unicode_width::UnicodeWidthChar as _;
 
-use crate::repl::{Cancellation, InputMessage, InterruptibleInput, MAX_REPL_LINE_BYTES};
+use crate::repl::{
+    Cancellation, InputMessage, InterruptibleInput, MAX_REPL_LINE_BYTES, ReplOutput, ResultKind,
+};
+use crate::tui_results::{ResultHistory, ResultViewer, ViewerAction};
 
 const MAX_HISTORY_ENTRIES: usize = 500;
 /// Keep keyboard/resize bursts from starving output and shutdown messages.
@@ -32,6 +37,8 @@ const MAX_EVENTS_PER_TICK: usize = 256;
 const MAX_INPUT_ROWS: usize = 8;
 const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
 const REDRAW_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_DEFERRED_BYTES: usize = 8 * 1024 * 1024;
+static ALTERNATE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Prompts the REPL writes before reading a goal or the next line of one.
 const GOAL_PROMPT: &str = "xgen> ";
@@ -39,6 +46,7 @@ const CONTINUATION_PROMPT: &str = "...> ";
 
 enum Message {
     Output(Vec<u8>),
+    Section(ResultKind, Vec<u8>),
     Request,
     Shutdown,
 }
@@ -46,6 +54,22 @@ enum Message {
 /// The REPL's output: bytes are handed to the frontend thread in write order.
 pub(crate) struct TuiOutput {
     sender: Sender<Message>,
+    folding: bool,
+}
+
+impl ReplOutput for TuiOutput {
+    fn supports_sections(&self) -> bool {
+        self.folding
+    }
+
+    fn section(&mut self, kind: ResultKind, bytes: &[u8]) -> io::Result<()> {
+        if !self.folding {
+            return self.write_all(bytes);
+        }
+        self.sender
+            .send(Message::Section(kind, bytes.to_vec()))
+            .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))
+    }
 }
 
 impl Write for TuiOutput {
@@ -79,6 +103,9 @@ impl Drop for TuiGuard {
 
 fn restore_terminal() {
     let mut stdout = io::stdout();
+    if ALTERNATE_ACTIVE.swap(false, Ordering::SeqCst) {
+        let _ = queue!(stdout, terminal::LeaveAlternateScreen);
+    }
     let _ = queue!(stdout, DisableBracketedPaste, cursor::Show);
     let _ = stdout.flush();
     let _ = terminal::disable_raw_mode();
@@ -89,6 +116,7 @@ pub(crate) fn start(
     cancellation: Cancellation,
     history: Option<PathBuf>,
     footer: String,
+    folding: bool,
 ) -> io::Result<(InterruptibleInput, TuiOutput, TuiGuard)> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -119,6 +147,7 @@ pub(crate) fn start(
         input,
         TuiOutput {
             sender: sender.clone(),
+            folding,
         },
         TuiGuard {
             sender,
@@ -143,6 +172,12 @@ struct Frontend {
     cancelling: bool,
     started: Instant,
     drawn: DrawnPane,
+    results: ResultHistory,
+    viewer: Option<ResultViewer>,
+    alternate: bool,
+    deferred: Vec<Vec<u8>>,
+    deferred_bytes: usize,
+    viewer_frame: Option<((u16, u16), Vec<String>)>,
 }
 
 #[derive(Default)]
@@ -205,6 +240,12 @@ impl Frontend {
             cancelling: false,
             started: Instant::now(),
             drawn: DrawnPane::default(),
+            results: ResultHistory::default(),
+            viewer: None,
+            alternate: false,
+            deferred: Vec::new(),
+            deferred_bytes: 0,
+            viewer_frame: None,
         }
     }
 
@@ -216,6 +257,18 @@ impl Frontend {
             loop {
                 match receiver.try_recv() {
                     Ok(Message::Output(bytes)) => finished.extend(self.screen.push(&bytes)),
+                    Ok(Message::Section(kind, bytes)) => {
+                        let lines = self.screen.push(&bytes);
+                        let width = terminal::size().map_or(80, |size| usize::from(size.0));
+                        finished.extend(self.results.capture(kind, lines, width));
+                        if self
+                            .viewer
+                            .as_ref()
+                            .is_some_and(|viewer| !self.results.contains(viewer.id))
+                        {
+                            self.viewer = None;
+                        }
+                    }
                     Ok(Message::Request) => self.on_request(&mut finished),
                     Ok(Message::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => {
                         let _ = self.draw(&finished, false);
@@ -285,6 +338,9 @@ impl Frontend {
         match event {
             Event::Key(key) if key.kind != KeyEventKind::Release => self.on_key(key, finished),
             Event::Paste(text) => {
+                if self.viewer.is_some() {
+                    return false;
+                }
                 self.editor
                     .insert_str(&text.replace("\r\n", "\n").replace('\r', "\n"));
                 true
@@ -295,10 +351,23 @@ impl Frontend {
     }
 
     fn on_key(&mut self, key: KeyEvent, finished: &mut Vec<Vec<u8>>) -> bool {
+        if let Some(viewer) = &mut self.viewer {
+            return match viewer.key(key, &self.results) {
+                ViewerAction::Close => {
+                    self.viewer = None;
+                    true
+                }
+                ViewerAction::Redraw => true,
+                ViewerAction::Ignore => false,
+            };
+        }
         let control = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         match key.code {
+            KeyCode::Char('o') if control => {
+                self.viewer = self.results.latest().map(ResultViewer::new);
+            }
             KeyCode::Char('c') if control => self.interrupt(),
             KeyCode::Char('d') if control => {
                 if self.requested && self.editor.is_empty() {
@@ -393,9 +462,78 @@ impl Frontend {
         let _ = self.lines.send(message);
     }
 
+    fn draw_result_viewer(
+        &mut self,
+        stdout: &mut impl Write,
+        finished: &[Vec<u8>],
+        size: (u16, u16),
+    ) -> io::Result<bool> {
+        let (width, height) = size;
+        let bytes = finished
+            .iter()
+            .map(|line| line.len().saturating_add(1))
+            .sum::<usize>();
+        let notice = if self.requested
+            && !matches!(self.prompt().as_str(), GOAL_PROMPT | CONTINUATION_PROMPT)
+        {
+            "Approval pending · Esc return"
+        } else if !self.deferred.is_empty() || !finished.is_empty() {
+            "New output · Esc return · Left/Right result"
+        } else {
+            ""
+        };
+        if let Some(viewer) = &mut self.viewer
+            && self.deferred_bytes.saturating_add(bytes) <= MAX_DEFERRED_BYTES
+        {
+            self.deferred.extend_from_slice(finished);
+            self.deferred_bytes += bytes;
+            if !self.alternate {
+                ALTERNATE_ACTIVE.store(true, Ordering::SeqCst);
+                queue!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
+                self.alternate = true;
+                self.viewer_frame = None;
+            }
+            let rows = viewer.frame(
+                &self.results,
+                usize::from(width),
+                usize::from(height),
+                notice,
+            );
+            let frame = (size, rows);
+            if self.viewer_frame.as_ref() != Some(&frame) {
+                for (index, row) in frame.1.iter().enumerate() {
+                    queue!(
+                        stdout,
+                        cursor::MoveTo(0, u16::try_from(index).unwrap_or(0)),
+                        terminal::Clear(terminal::ClearType::CurrentLine)
+                    )?;
+                    stdout.write_all(row.as_bytes())?;
+                }
+                self.viewer_frame = Some(frame);
+            }
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     fn draw(&mut self, finished: &[Vec<u8>], with_pane: bool) -> io::Result<()> {
         let (width, height) = terminal::size().unwrap_or((80, 24));
         let mut stdout = io::stdout().lock();
+        if with_pane && self.draw_result_viewer(&mut stdout, finished, (width, height))? {
+            return stdout.flush();
+        }
+        self.viewer = None;
+        if self.alternate {
+            queue!(stdout, terminal::LeaveAlternateScreen, cursor::Show)?;
+            self.alternate = false;
+            self.viewer_frame = None;
+            stdout.flush()?;
+            ALTERNATE_ACTIVE.store(false, Ordering::SeqCst);
+        }
+        let mut lines = std::mem::take(&mut self.deferred);
+        self.deferred_bytes = 0;
+        lines.extend_from_slice(finished);
+        let finished = &lines;
         let origin = erase_pane(&mut stdout, &self.drawn, (width, height))?;
         for line in finished {
             stdout.write_all(line)?;
@@ -413,6 +551,7 @@ impl Frontend {
             cancelling: self.cancelling,
             queue: &self.queue,
             footer: &self.footer,
+            has_results: self.results.latest().is_some(),
             spinner: SPINNER[usize::try_from(self.started.elapsed().as_millis() / 250)
                 .unwrap_or(0)
                 % SPINNER.len()],
@@ -465,11 +604,10 @@ fn erase_pane(
     drawn: &DrawnPane,
     size: (u16, u16),
 ) -> io::Result<Option<u16>> {
-    let above = drawn.rows_above_caret(size.0);
     let origin = if drawn.size.is_some_and(|old_size| old_size != size) {
         // Resize can clamp or reflow the caret. Re-anchor to its actual screen row.
         let (_, row) = cursor::position()?;
-        Some(row.saturating_sub(above))
+        Some(row.saturating_sub(drawn.rows_above_caret(size.0)))
     } else {
         drawn.size.map(|_| drawn.origin_row)
     };
@@ -555,7 +693,7 @@ fn visible_after_carriage_return(line: Vec<u8>) -> Vec<u8> {
 }
 
 /// The text without escape sequences or control characters, for measuring and for the pane.
-fn strip_controls(bytes: &[u8]) -> String {
+pub(super) fn strip_controls(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
     let mut stripped = String::with_capacity(text.len());
     let mut characters = text.chars();
@@ -767,6 +905,7 @@ struct PaneView<'a> {
     cancelling: bool,
     queue: &'a VecDeque<String>,
     footer: &'a str,
+    has_results: bool,
     spinner: char,
 }
 
@@ -858,6 +997,11 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
     } else {
         "Enter queue · Esc drop queue · Ctrl+C cancel run"
     };
+    let hint = if view.has_results {
+        format!("Ctrl+O results · {hint}")
+    } else {
+        hint.to_owned()
+    };
     if footer {
         rows.push(format!(
             "\x1b[2m{}\x1b[0m",
@@ -872,7 +1016,7 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
 }
 
 /// Wrap the input to `width` columns; return the rows and the caret's row and column.
-fn wrap_input(text: &str, caret: usize, width: usize) -> (Vec<String>, usize, usize) {
+pub(super) fn wrap_input(text: &str, caret: usize, width: usize) -> (Vec<String>, usize, usize) {
     let width = width.max(1);
     let mut rows = vec![String::new()];
     let mut column = 0;
@@ -909,14 +1053,14 @@ fn wrap_input(text: &str, caret: usize, width: usize) -> (Vec<String>, usize, us
     (rows, caret_position.0, caret_position.1)
 }
 
-fn display_width(text: &str) -> usize {
+pub(super) fn display_width(text: &str) -> usize {
     text.chars()
         .map(|character| character.width().unwrap_or(0))
         .sum()
 }
 
 /// Cut `text` to `width` columns, marking the cut.
-fn fit(text: &str, width: usize) -> String {
+pub(super) fn fit(text: &str, width: usize) -> String {
     if width == 0 {
         return String::new();
     }
@@ -1059,6 +1203,7 @@ mod tests {
             cancelling: false,
             queue: &queue,
             footer: "~/work · trust",
+            has_results: false,
             spinner: '|',
         };
         let pane = layout(&running, &editor);
@@ -1107,6 +1252,7 @@ mod tests {
                 cancelling,
                 queue: &queue,
                 footer: "fixture",
+                has_results: false,
                 spinner: '|',
             };
             let pane = layout(&view, &editor);
@@ -1177,6 +1323,67 @@ mod tests {
             matches!(received.try_recv(), Ok(InputMessage::Line(line)) if line == "다음 goal\\")
         );
         assert!(frontend.queue.is_empty());
+    }
+
+    #[test]
+    fn viewer_keys_and_paste_never_submit_a_goal_or_an_approval() {
+        let (lines, received) = mpsc::sync_channel(1);
+        let mut frontend =
+            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        frontend
+            .results
+            .capture(ResultKind::Answer, vec![b"saved result".to_vec()], 80);
+        frontend.screen.push(b"Allow read? [y/a/N] ");
+        let mut finished = Vec::new();
+        frontend.on_request(&mut finished);
+        frontend.editor.insert('y');
+        frontend.queue.push_back("future goal".to_owned());
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL),
+            &mut finished,
+        );
+        assert!(frontend.viewer.is_some());
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &mut finished,
+        );
+        frontend.on_event(Event::Paste("injected approval".to_owned()), &mut finished);
+        frontend.on_event(Event::Resize(55, 18), &mut finished);
+        assert!(received.try_recv().is_err());
+        assert_eq!(frontend.editor.text, "y");
+        assert_eq!(frontend.queue.front().unwrap(), "future goal");
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &mut finished,
+        );
+        assert!(frontend.viewer.is_none());
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &mut finished,
+        );
+        assert!(matches!(received.try_recv(), Ok(InputMessage::Line(line)) if line == "y"));
+    }
+
+    #[test]
+    fn debug_output_does_not_emit_foldable_sections() {
+        let (sender, messages) = mpsc::channel();
+        let mut output = TuiOutput {
+            sender,
+            folding: false,
+        };
+        output
+            .section(ResultKind::Answer, b"complete answer\n")
+            .unwrap();
+        assert!(
+            matches!(messages.try_recv(), Ok(Message::Output(bytes)) if bytes == b"complete answer\n")
+        );
+        output.folding = true;
+        output
+            .section(ResultKind::Answer, b"complete answer\n")
+            .unwrap();
+        assert!(
+            matches!(messages.try_recv(), Ok(Message::Section(ResultKind::Answer, bytes)) if bytes == b"complete answer\n")
+        );
     }
 
     #[test]

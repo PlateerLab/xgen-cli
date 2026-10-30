@@ -16,6 +16,35 @@ use xgen_runtime::AgentLoopQuiescence;
 
 pub(crate) const MAX_REPL_LINE_BYTES: usize = 16 * 1024;
 const MAX_REPL_GOAL_BYTES: usize = 16 * 1024;
+
+/// Presentation boundaries supplied by the REPL, never inferred from model text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResultKind {
+    Answer,
+    Changes,
+}
+
+impl ResultKind {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Answer => "Answer",
+            Self::Changes => "Changes",
+        }
+    }
+}
+
+pub(crate) trait ReplOutput: Write + Send {
+    fn supports_sections(&self) -> bool {
+        false
+    }
+
+    fn section(&mut self, _kind: ResultKind, bytes: &[u8]) -> io::Result<()> {
+        self.write_all(bytes)
+    }
+}
+
+impl ReplOutput for std::io::Stdout {}
+impl ReplOutput for Vec<u8> {}
 const DEVELOPER_EXECUTABLES: &[&str] = &[
     "git",
     "cargo",
@@ -469,7 +498,7 @@ impl SessionOutcome {
 }
 
 #[cfg(test)]
-pub(crate) fn run<R: BufRead, W: Write + Send, H: ReplHost>(
+pub(crate) fn run<R: BufRead, W: ReplOutput, H: ReplHost>(
     reader: &mut R,
     output: &mut W,
     host: &mut H,
@@ -479,7 +508,7 @@ pub(crate) fn run<R: BufRead, W: Write + Send, H: ReplHost>(
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
+pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
     reader: &mut R,
     output: &mut W,
     host: &mut H,
@@ -745,7 +774,7 @@ pub(crate) fn run_with_display<R: BufRead, W: Write + Send, H: ReplHost>(
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
+fn handle_result<R: BufRead, W: ReplOutput, H: ReplHost>(
     reader: &mut R,
     output: &mut W,
     host: &mut H,
@@ -786,7 +815,13 @@ fn handle_result<R: BufRead, W: Write + Send, H: ReplHost>(
                 if !interactive_display {
                     writeln!(output, "{}: {run_id}", outcome.label())?;
                 }
-                write_answer(output, &summary, interactive_display)?;
+                if output.supports_sections() {
+                    let mut rendered = Vec::new();
+                    write_answer(&mut rendered, &summary, interactive_display)?;
+                    output.section(ResultKind::Answer, &rendered)?;
+                } else {
+                    write_answer(output, &summary, interactive_display)?;
+                }
                 return Ok(());
             }
             Ok(LocalCommandResult::Paused { run_id, reason }) => {
@@ -1215,7 +1250,7 @@ where
 /// journal records, not the model's summary, so a wrong or overstated summary is visible
 /// (ADR-0057).
 fn finish_goal_output<H: ReplHost>(
-    output: &mut impl Write,
+    output: &mut impl ReplOutput,
     host: &mut H,
     run_id: Option<&str>,
     session_context: &mut SessionContext,
@@ -1231,7 +1266,13 @@ fn finish_goal_output<H: ReplHost>(
         match host.changes(run_id) {
             Ok(changes) => {
                 if changes.len() > already {
-                    print_changes(output, &changes[already..], styled)?;
+                    if output.supports_sections() {
+                        let mut rendered = Vec::new();
+                        print_changes(&mut rendered, &changes[already..], styled, true)?;
+                        output.section(ResultKind::Changes, &rendered)?;
+                    } else {
+                        print_changes(output, &changes[already..], styled, false)?;
+                    }
                 }
                 session_context.reported_changes = Some((run_id.to_owned(), changes.len()));
             }
@@ -1257,6 +1298,7 @@ fn print_changes(
     output: &mut impl Write,
     changes: &[CommittedChange],
     styled: bool,
+    full: bool,
 ) -> io::Result<()> {
     let (removed_style, added_style, dim, plain) = if styled {
         ("\x1b[31m", "\x1b[32m", DIM, PLAIN)
@@ -1303,7 +1345,7 @@ fn print_changes(
                 let verb = if *created { "created" } else { "replaced" };
                 if *changed {
                     writeln!(output, " {dim}{verb}, {count} lines{plain}")?;
-                    if *created {
+                    if *created || full {
                         lines.extend(content.lines().map(|line| ('+', line)));
                     }
                 } else {
@@ -1317,7 +1359,11 @@ fn print_changes(
                     command.push_str(argument);
                 }
                 write!(output, "ran ")?;
-                write_terminal_line(output, &bounded_command(&command))?;
+                if full {
+                    write_terminal_line(output, &command)?;
+                } else {
+                    write_terminal_line(output, &bounded_command(&command))?;
+                }
                 writeln!(output, " {dim}(file changes not tracked){plain}")?;
             }
             CommittedChange::Terminal => {
@@ -1327,7 +1373,11 @@ fn print_changes(
                 )?;
             }
         }
-        let shown = lines.len().min(MAX_CHANGE_LINES).min(budget);
+        let shown = if full {
+            lines.len()
+        } else {
+            lines.len().min(MAX_CHANGE_LINES).min(budget)
+        };
         for (sign, line) in &lines[..shown] {
             let style = if *sign == '+' {
                 added_style
@@ -1345,7 +1395,7 @@ fn print_changes(
                 lines.len() - shown
             )?;
         }
-        budget -= shown;
+        budget = budget.saturating_sub(shown);
     }
     Ok(())
 }
@@ -2243,6 +2293,79 @@ mod tests {
             });
             self.next()
         }
+    }
+
+    #[test]
+    fn result_sections_keep_complete_answers_and_replacement_contents() {
+        use std::fmt::Write as _;
+        #[derive(Default)]
+        struct Sections {
+            plain: Vec<u8>,
+            sections: Vec<(ResultKind, Vec<u8>)>,
+        }
+        impl Write for Sections {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.plain.write(bytes)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        impl ReplOutput for Sections {
+            fn supports_sections(&self) -> bool {
+                true
+            }
+            fn section(&mut self, kind: ResultKind, bytes: &[u8]) -> io::Result<()> {
+                self.sections.push((kind, bytes.to_vec()));
+                Ok(())
+            }
+        }
+        let run_id = "run-55555555555555555555555555555555";
+        let answer = format!("{}untrusted\u{1b}[2J\n", "answer row\n".repeat(40));
+        let mut host = FakeHost::new([LocalCommandResult::Responded {
+            run_id: run_id.to_owned(),
+            summary: answer,
+        }]);
+        let mut output = Sections::default();
+        let mut input = io::Cursor::new(b"Explain the fixture.\ny\n/exit\n");
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        assert_eq!(output.sections.len(), 1);
+        assert_eq!(output.sections[0].0, ResultKind::Answer);
+        let body = String::from_utf8(output.sections[0].1.clone()).unwrap();
+        assert_eq!(body.matches("answer row").count(), 40);
+        assert!(body.contains("untrusted\\u{1b}[2J"));
+        assert!(!body.contains('\u{1b}'));
+        assert!(!String::from_utf8_lossy(&output.plain).contains("answer row"));
+
+        let mut replacement = String::new();
+        for n in 0..60 {
+            writeln!(&mut replacement, "replacement-{n:02}").unwrap();
+        }
+        host.changes = vec![CommittedChange::Write {
+            path: "replacement.txt".to_owned(),
+            created: false,
+            changed: true,
+            content: replacement,
+        }];
+        finish_goal_output(
+            &mut output,
+            &mut host,
+            Some(run_id),
+            &mut SessionContext::default(),
+            SessionOutcome::Completed,
+            RunTally {
+                committed_steps: 1,
+                ..RunTally::default()
+            },
+            false,
+        )
+        .unwrap();
+        assert_eq!(output.sections[1].0, ResultKind::Changes);
+        let changes = String::from_utf8(output.sections[1].1.clone()).unwrap();
+        assert!(changes.contains("replacement-30") && changes.contains("replacement-59"));
+        let mut plain = Vec::new();
+        print_changes(&mut plain, &host.changes, false, false).unwrap();
+        assert!(!String::from_utf8_lossy(&plain).contains("replacement-30"));
     }
 
     #[test]

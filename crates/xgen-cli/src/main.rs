@@ -24,6 +24,7 @@ use zeroize::Zeroizing;
 
 mod repl;
 mod tui;
+mod tui_results;
 use xgen_cli::tools;
 
 const PROJECT_LICENSE: &str = include_str!("../../../LICENSE");
@@ -863,9 +864,12 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
     let result = if terminal {
         // ADR-0074: a pane pinned to the bottom keeps the input editable while a Run is in flight.
         let footer = interactive_footer(trust);
-        let Ok((mut input, mut output, _guard)) =
-            tui::start(cancellation.clone(), xgen_cli::repl_history_path(), footer)
-        else {
+        let Ok((mut input, mut output, _guard)) = tui::start(
+            cancellation.clone(),
+            xgen_cli::repl_history_path(),
+            footer,
+            !debug,
+        ) else {
             eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
             return ExitCode::from(PublicRunError::Internal.exit_code());
         };

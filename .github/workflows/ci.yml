@@ -66,6 +66,7 @@ jobs:
             sudo apt-get install --yes tmux
           fi
           python3 scripts/smoke-inline-tui.py
+          python3 scripts/smoke-inline-tui.py --results
 
       - name: Test Python scripts without API calls
         run: python3 -m unittest discover -s scripts/tests
