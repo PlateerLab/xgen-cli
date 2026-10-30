@@ -20,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=Path("target/debug/xgen"))
     parser.add_argument("--results", action="store_true", help="Also check folding and the full-result viewer")
-    parser.add_argument("--rapid-resize", action="store_true", help="Stress consecutive resizes without settling; known inline-pane edge case")
+    parser.add_argument("--rapid-resize", action="store_true", help="Stress consecutive resizes without settling")
     args = parser.parse_args()
     binary = args.binary.resolve(strict=True)
     root = Path(tempfile.mkdtemp(prefix="xgen-inline-tui-"))
@@ -180,6 +180,12 @@ def main():
         send("한글 draft that wraps across the terminal and remains editable")
         for width, height in [(40, 12), (100, 30), (100, 12), (80, 24)]:
             resize(width, height, f"draft-{width}x{height}")
+        if args.rapid_resize:
+            # Held-out sizes: send a burst without waiting for an intermediate frame.
+            mark("heldout-resize-burst")
+            for burst_width, burst_height in [(53, 17), (91, 26), (28, 9), (80, 24)] * 3:
+                tmux("resize-window", "-t", "fixture", "-x", str(burst_width), "-y", str(burst_height))
+            resize(80, 24, "heldout-burst-restored")
         tmux("send-keys", "-t", "fixture", "C-c")
         send("Inspect fixture")
         enter()

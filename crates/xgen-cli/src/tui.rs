@@ -517,8 +517,8 @@ impl Frontend {
     }
 
     fn draw(&mut self, finished: &[Vec<u8>], with_pane: bool) -> io::Result<()> {
-        let (width, height) = terminal::size().unwrap_or((80, 24));
         let mut stdout = io::stdout().lock();
+        let (width, height) = screen_size(&mut stdout, !self.alternate)?;
         if with_pane && self.draw_result_viewer(&mut stdout, finished, (width, height))? {
             return stdout.flush();
         }
@@ -593,9 +593,38 @@ impl Frontend {
     }
 }
 
+/// A PTY's ioctl size can lag behind its terminal's resized screen (for example tmux).
+/// Ask the screen itself by moving to a clipped coordinate, then restore the caret.
+fn screen_size(output: &mut impl Write, cursor_visible: bool) -> io::Result<(u16, u16)> {
+    #[cfg(unix)]
+    {
+        queue!(
+            output,
+            cursor::Hide,
+            cursor::SavePosition,
+            cursor::MoveTo(u16::MAX - 1, u16::MAX - 1)
+        )?;
+        output.flush()?;
+        let size = cursor::position().map(|(column, row)| (column + 1, row + 1));
+        // Restore even when the cursor report times out.
+        queue!(output, cursor::RestorePosition)?;
+        if cursor_visible {
+            queue!(output, cursor::Show)?;
+        }
+        output.flush()?;
+        size
+    }
+    #[cfg(windows)]
+    {
+        let _ = (output, cursor_visible);
+        Ok(terminal::size().unwrap_or((80, 24)))
+    }
+}
+
 fn clear_pane(drawn: &DrawnPane) -> io::Result<()> {
     let mut stdout = io::stdout();
-    erase_pane(&mut stdout, drawn, terminal::size().unwrap_or((80, 24)))?;
+    let size = screen_size(&mut stdout, true)?;
+    erase_pane(&mut stdout, drawn, size)?;
     stdout.flush()
 }
 
