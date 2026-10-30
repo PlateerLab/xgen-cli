@@ -58,3 +58,6 @@ Unix의 `XGEN_STATE_HOME`이 0775이면 기존 group/other 접근 거절 검사�
 Unix mode 비트 검사의 설명을 개선했으며 ACL·소유자 UID 검사나 Windows ACL 정책을 새로 도입하지 않는다.
 
 로컬 전체 회귀는 Rust 778 passed·4 ignored(47 suites), Clippy·fmt·protocol·공개 문서·배포 workflow 검사 통과다.
+
+변경 추적: [PR #137](https://github.com/PlateerLab/xgen-cli/pull/137), 코드 `7edf540`,
+[5개 플랫폼을 포함한 전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41077456833).

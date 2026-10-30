@@ -156,3 +156,4 @@
 - 빠른 resize 변경 추적: [PR #136](https://github.com/PlateerLab/xgen-cli/pull/136), 코드 `f1171ba`, [전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41071470733). 강제 PTY 지연 fixture는 후속 PR 검사에 포함한다.
 
 - 상태 폴더 권한 진단(2026-10-31, ADR-0080, 구현·개별 검증 완료): Unix mode의 group/other 비트 거절은 유지하고, root·runs·개별 Run 폴더 오류를 `state_directory_permissions`/exit64로 전달한다. CLI run/resume/usage/recover·REPL에서 문제 경로·현재 mode·`chmod go-rwx -- PATH` 안내를 표시하며 자동 chmod·재귀 수정은 없다. 명시적 로컬 진단만 경로를 escape해 표시하고 일반 Debug·오류 Display·journal·모델·progress에서는 가린다. 설계 root0775/runs0755와 별도 run0770·symlink·space·개행/ESC·비UTF8 경로를 검증했다. 사용자가 직접0700으로 고치면 권한 검사 다음 단계로 진행하며 fixture DB는 생성되지 않는다. 전체 Rust 회귀778개(4 ignored)·Clippy·fmt·protocol·공개 문서·배포 workflow 검사를 통과했다. 소유자는 xgen CLI이며 외부 도구 변경은 없다.
+- 상태 폴더 진단 변경 추적: [PR #137](https://github.com/PlateerLab/xgen-cli/pull/137), 코드 `7edf540`, [전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41077456833). 실제 외부 모델·다른 OS의 terminal 화면 실측은 하지 않았다.
