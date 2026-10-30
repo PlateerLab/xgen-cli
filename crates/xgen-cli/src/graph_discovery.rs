@@ -19,7 +19,7 @@ pub(crate) const SEARCH: &str = "xgen.tools/search";
 pub(crate) const DESCRIBE: &str = "xgen.tools/describe";
 pub(crate) const VERSION: &str = "1.0.0";
 pub(crate) fn version(operation: &str) -> &'static str {
-    if operation == DESCRIBE {
+    if matches!(operation, DESCRIBE | crate::http_read::READ) {
         "2.0.0"
     } else {
         VERSION
@@ -205,7 +205,7 @@ impl DiscoveryCatalog {
     }
     pub(crate) fn execution_contract(&self, name: &str, tool: &str) -> Result<Value, &'static str> {
         let output = crate::tools::invoke_offline(
-            &json!({"operation":"execution_contract","root":self.root.to_str().ok_or("invalid_state_home")?,"name":name,"tool":tool,"expected_digest":self.snapshots.get(name).ok_or("collection_not_found")?}),
+            &json!({"http_policy":self.connection(name).map(crate::http_read::Connection::policy),"operation":"execution_contract","root":self.root.to_str().ok_or("invalid_state_home")?,"name":name,"tool":tool,"expected_digest":self.snapshots.get(name).ok_or("collection_not_found")?}),
         )?;
         // Full execution contracts stay on the host; the model's 64 KiB limit
         // applies only to discovery observations, never to schema validation.
@@ -338,6 +338,10 @@ impl DiscoveryAdapter {
             request["query"] = input["query"].clone();
             request["top_k"] = input["topK"].clone();
         } else {
+            request["http_policy"] = self
+                .catalog
+                .connection(name)
+                .map_or(Value::Null, crate::http_read::Connection::policy);
             request["tool"] = input["tool"].clone();
             request["parameter_offset"] = input.get("parameterOffset").cloned().unwrap_or(json!(0));
         }

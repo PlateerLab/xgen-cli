@@ -37,9 +37,25 @@ xgen tools remove --name my-system       # collection, 연결, 저장된 토큰�
 - 연결 저장소가 사용자 전용이 아니거나, 연결 파일이 symlink거나, 저장소를 읽을 수 없으면(권한 오류를 "연결 없음"으로 보지 않는다) 아무것도 지우지 않고 실패한다.
 - 연결을 바꾸면 그 연결로 시작한 Run은 재개 시 기존처럼 거절된다.
 
+## 호스트가 지정한 POST 조회
+
+```bash
+xgen tools connect --name my-system --base-url https://api.example.com \
+  --allow-get --read-operation searchRecords --read-operation inspectRecords --bearer-env API_TOKEN
+```
+
+`--read-operation`은 원본 OpenAPI operationId를 반복 지정한다. `--allow-get` 없이 선택한 GET/POST만
+허용할 수도 있다. 지정하지 않은 POST, 유일하지 않거나 없는 ID, PUT/PATCH/DELETE는 거절한다.
+이는 호스트의 조회 선언이며 서버의 실제 부작용을 xgen이 추론하거나 보장하는 기능이 아니다.
+
+POST는 OpenAPI `requestBody`의 단일 `application/json`과 원본 schema를 사용한다. read 입력의
+선택 필드 `body`에 JSON을 넣고 required·전체 schema를 검증한다. 입력 전체8KiB 한도는 유지한다.
+Swagger2 body와 여러 미디어 형식은 아직 지원하지 않는다. 목록은 연결·manifest·execution profile에
+고정되어 바꾸면 기존 Run 재개가 거절된다. [ADR-0083](../adr/0083-host-selected-post-reads.md).
+
 ## 실행 계약
 
-agent loop에는 연결이 있을 때 `xgen.http/read@1.0.0`이 추가된다. 외부 도구마다 실행용 Definition을 자동 등록하는 기능과는 구분한다. 검색과 describe는 후보를 제공하고, read 프록시는 exact collection·tool·원본 HTTP 계약 digest·입력을 기존 material/policy/executor/verifier 경로에 연결한다.
+agent loop에는 연결이 있을 때 `xgen.http/read@2.0.0`이 추가된다. 외부 도구마다 실행용 Definition을 자동 등록하는 기능과는 구분한다. 검색과 describe는 후보를 제공하고, read 프록시는 exact collection·tool·원본 HTTP 계약 digest·입력을 기존 material/policy/executor/verifier 경로에 연결한다.
 
 입력은 `collection`, `tool`, describe의 `http_read.contract_digest`를 복사한 `contractDigest`, `parameters: {path: {...}, query: {...}}`다. 모델은 URL·인증·헤더·HTTP method를 지정하지 못한다. collection snapshot과 연결 설정은 manifest와 execution profile에 고정된다. 새 연결은 이전 Run에 추가하지 않고, 기존 연결이 바뀌면 재개를 거절한다. 인증 값 자체는 manifest에 넣지 않으며 만료된 토큰의 교체는 같은 호스트 인증 참조를 통해 가능하다.
 
@@ -49,7 +65,7 @@ agent loop에는 연결이 있을 때 `xgen.http/read@1.0.0`이 추가된다. �
 
 ## 지원 범위와 한도
 
-- 새로 가져온 **로컬 JSON 문서만으로 구성한 collection**의 GET. OpenAPI 3.1/3.0 및 Swagger 2의 아래 부분집합을 지원한다.
+- 새로 가져온 **로컬 JSON 문서만으로 구성한 collection**의 GET과 호스트 지정 POST 조회. OpenAPI 3.1/3.0 및 Swagger 2의 아래 부분집합을 지원한다.
 - 지원 밖인 선택 파라미터는 operation을 막지 않고 실행 입력에서 제외한다. 모델용 describe의
   `http_read.excluded_parameters`에 이름 preview·위치·고정 이유를 표시하고 count/digest/complete를
   함께 준다. 제외한 이름을 입력에 넣으면 HTTP 호출 전에 거절한다. required와 path 파라미터가

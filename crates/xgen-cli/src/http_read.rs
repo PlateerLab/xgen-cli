@@ -1,4 +1,4 @@
-//! Host-approved HTTP GET connections. Credentials never enter graph or model material.
+//! Host-approved HTTP read connections. Credentials never enter graph or model material.
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read as _, Write as _};
@@ -17,7 +17,7 @@ use xgen_runtime::{
 use zeroize::Zeroizing;
 
 pub(crate) const READ: &str = "xgen.http/read";
-pub(crate) const PROFILE: &str = "xgen.http.read/v2";
+pub(crate) const PROFILE: &str = "xgen.http.read/v3";
 pub(crate) const SCOPE: &str = "http.read";
 pub(crate) type Connections = BTreeMap<String, Connection>;
 const MAX_BODY: usize = 32 * 1024;
@@ -29,6 +29,8 @@ pub(crate) struct Connection {
     format_version: u32,
     base_url: String,
     allow_get: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    read_operations: Vec<String>,
     bearer_env: Option<String>,
     credential_ref: Option<String>,
 }
@@ -36,7 +38,13 @@ impl Connection {
     fn validate(&self) -> Result<(), &'static str> {
         let url = Url::parse(&self.base_url).map_err(|_| "invalid_http_base_url")?;
         if self.format_version != 1
-            || !self.allow_get
+            || (!self.allow_get && self.read_operations.is_empty())
+            || self.read_operations.len() > 32
+            || self
+                .read_operations
+                .iter()
+                .any(|s| s.is_empty() || s.len() > 128 || s.chars().any(char::is_control))
+            || self.read_operations.windows(2).any(|p| p[0] >= p[1])
             || self.base_url.len() > 1024
             || !url.username().is_empty()
             || url.password().is_some()
@@ -66,6 +74,9 @@ impl Connection {
             return Err("invalid_http_auth_reference");
         }
         Ok(())
+    }
+    pub(crate) fn policy(&self) -> Value {
+        json!({"allow_get": self.allow_get, "read_operations": self.read_operations})
     }
     fn credential(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
         let secret = if let Some(name) = &self.bearer_env {
@@ -102,9 +113,34 @@ fn connection_root() -> Result<std::path::PathBuf, &'static str> {
     Ok(state.join("http-connections"))
 }
 
+fn validate_selection(name: &str, connection: &Connection) -> Result<(), &'static str> {
+    let snapshots = DiscoveryCatalog::discover().map_err(|()| "http_catalog_unavailable")?;
+    if !snapshots.contains_key(name) {
+        return Err("collection_not_found");
+    }
+    let catalog_root = crate::run_layout::discover_state_root()
+        .map_err(|_| "invalid_state_home")?
+        .join("tool-collections");
+    let result = crate::tools::invoke_offline(
+        &json!({"operation":"validate_read_operations", "root":catalog_root.to_str().ok_or("invalid_state_home")?, "name":name, "expected_digest":snapshots[name], "read_operations":connection.read_operations}),
+    )?;
+    if result["ok"] != true {
+        return Err("http_read_operation_invalid");
+    }
+    if serde_json::to_vec(&connection)
+        .map_err(|_| "invalid_http_connection")?
+        .len()
+        > 4096
+    {
+        return Err("invalid_http_connection");
+    }
+    Ok(())
+}
+
 pub(crate) fn connect(
     name: &str,
     base_url: String,
+    policy: (bool, Vec<String>),
     bearer_env: Option<String>,
     token_stdin: bool,
     bearer_prompt: bool,
@@ -114,18 +150,19 @@ pub(crate) fn connect(
     {
         return Err("invalid_http_connection");
     }
+    let (allow_get, mut read_operations) = policy;
+    read_operations.sort();
+    read_operations.dedup();
     let mut connection = Connection {
         format_version: 1,
         base_url,
-        allow_get: true,
+        allow_get,
+        read_operations,
         bearer_env,
         credential_ref: None,
     };
     connection.validate()?;
-    let snapshots = DiscoveryCatalog::discover().map_err(|()| "http_catalog_unavailable")?;
-    if !snapshots.contains_key(name) {
-        return Err("collection_not_found");
-    }
+    validate_selection(name, &connection)?;
     let root = connection_root()?;
     crate::run_layout::ensure_private_state_root(root.parent().ok_or("invalid_state_home")?)
         .map_err(|_| "invalid_state_home")?;
@@ -194,7 +231,7 @@ pub(crate) fn connect(
     }
     saved?;
     Ok(
-        json!({"ok":true,"collection":name,"connected":true,"methods":["GET"],"authentication":if secret.is_some() {"os_secret_store"} else if connection.bearer_env.is_some() {"local_environment"} else {"none"}}),
+        json!({"ok":true,"collection":name,"connected":true,"policy":connection.policy(),"authentication":if secret.is_some() {"os_secret_store"} else if connection.bearer_env.is_some() {"local_environment"} else {"none"}}),
     )
 }
 
@@ -307,7 +344,9 @@ pub(crate) fn discover(snapshots: &graph_discovery::Snapshots) -> Result<Connect
 }
 
 pub(crate) fn accepts(catalog: &DiscoveryCatalog, input: &Value) -> bool {
-    input.as_object().is_some_and(|o| o.len() == 4)
+    input
+        .as_object()
+        .is_some_and(|o| o.len() == 4 || (o.len() == 5 && o.contains_key("body")))
         && input["collection"]
             .as_str()
             .is_some_and(|name| catalog.connection(name).is_some())
@@ -515,7 +554,8 @@ pub(crate) fn prepare(
             .build(schema)
             .map_err(|_| AdapterPrepareFailure::InvalidMaterial)?;
     }
-    if contract["method"] != "GET" {
+    validate_body(&contract, input).map_err(|()| AdapterPrepareFailure::InvalidMaterial)?;
+    if !matches!(contract["method"].as_str(), Some("GET" | "POST")) {
         return Err(AdapterPrepareFailure::UnsupportedProtocol);
     }
     let credential = connection
@@ -539,9 +579,36 @@ struct PreparedRead {
     url: Url,
     credential: Option<Zeroizing<String>>,
 }
+impl PreparedRead {
+    fn send(&self, agent: &ureq::Agent) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+        if self.contract["method"] == "POST" {
+            let mut request = agent
+                .post(self.url.as_str())
+                .header("Accept", "application/json");
+            if let Some(secret) = &self.credential {
+                request = request.header("Authorization", format!("Bearer {}", secret.as_str()));
+            }
+            if let Some(body) = self.input.get("body") {
+                request
+                    .header("Content-Type", "application/json")
+                    .send(serde_jcs::to_vec(body).expect("validated JSON"))
+            } else {
+                request.send_empty()
+            }
+        } else {
+            let mut request = agent
+                .get(self.url.as_str())
+                .header("Accept", "application/json");
+            if let Some(secret) = &self.credential {
+                request = request.header("Authorization", format!("Bearer {}", secret.as_str()));
+            }
+            request.call()
+        }
+    }
+}
 impl PreparedAdapterInvocation for PreparedRead {
     fn execute(self: Box<Self>) -> AdapterExecutionObservation {
-        let mut output = json!({"ok":false,"error":"http_request_failed","collection":self.input["collection"],"tool":self.input["tool"],"contractDigest":self.input["contractDigest"],"artifact_digest":self.catalog.snapshot(self.input["collection"].as_str().expect("validated collection")),"backend_version":"0.47.0","execution_enabled":true,"request":self.input,"method":"GET","target":self.url.as_str(),"status":null,"body":null});
+        let mut output = json!({"ok":false,"error":"http_request_failed","collection":self.input["collection"],"tool":self.input["tool"],"contractDigest":self.input["contractDigest"],"artifact_digest":self.catalog.snapshot(self.input["collection"].as_str().expect("validated collection")),"backend_version":"0.47.0","execution_enabled":true,"request":self.input,"method":self.contract["method"],"target":self.url.as_str(),"status":null,"body":null});
         let agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(30)))
             .max_redirects(0)
@@ -551,13 +618,8 @@ impl PreparedAdapterInvocation for PreparedRead {
             .user_agent("xgen-http-read/1.0")
             .build()
             .new_agent();
-        let mut request = agent
-            .get(self.url.as_str())
-            .header("Accept", "application/json");
-        if let Some(secret) = &self.credential {
-            request = request.header("Authorization", format!("Bearer {}", secret.as_str()));
-        }
-        if let Ok(mut response) = request.call() {
+        let response = self.send(&agent);
+        if let Ok(mut response) = response {
             let status = response.status().as_u16();
             output["status"] = json!(status);
             let json_media = response
@@ -650,13 +712,35 @@ fn response_valid(contract: &Value, status: u16, body: &Value) -> bool {
         })
 }
 
+fn validate_body(contract: &Value, input: &Value) -> Result<(), ()> {
+    match (contract.get("request_body"), input.get("body")) {
+        (Some(definition), Some(body)) if contract["method"] == "POST" => {
+            let schema = &definition["schema"];
+            jsonschema::meta::options()
+                .validate(schema)
+                .map_err(|_| ())?;
+            jsonschema::options()
+                .with_draft(jsonschema::Draft::Draft202012)
+                .offline()
+                .build(schema)
+                .map_err(|_| ())?
+                .validate(body)
+                .map_err(|_| ())
+        }
+        (Some(definition), None) if definition["required"] == false => Ok(()),
+        (None, None) => Ok(()),
+        _ => Err(()),
+    }
+}
+
 pub(crate) fn inspect(catalog: &DiscoveryCatalog, input: &Value, output: &Value) -> Result<(), ()> {
     let contract = descriptor(catalog, input).map_err(|_| ())?;
+    validate_body(&contract, input)?;
     let name = input["collection"].as_str().ok_or(())?;
     let connection = catalog.connection(name).ok_or(())?;
     let target = request_url(connection, &contract, input).map_err(|_| ())?;
     if output.as_object().is_none_or(|object| object.len() != 13)
-        || output["method"] != "GET"
+        || output["method"] != contract["method"]
         || output["target"] != target.as_str()
         || output["tool"] != input["tool"]
         || output["contractDigest"] != input["contractDigest"]
@@ -875,6 +959,7 @@ mod tests {
             format_version: 1,
             base_url: "https://example.test/api".into(),
             allow_get: true,
+            read_operations: Vec::new(),
             bearer_env: None,
             credential_ref: None,
         }
@@ -886,6 +971,27 @@ mod tests {
             {"name":"active","location":"query","required":false,"schema":{"type":"boolean"}}
         ],"responses":{"200":{"type":"object","required":["value"],"properties":{"value":{"type":"integer","minimum":0}},"additionalProperties":false}}})
     }
+    #[test]
+    fn post_body_uses_the_entire_original_schema_and_presence_rules() {
+        let mut contract = json!({"method":"POST","request_body":{"required":true,"schema":{
+            "type":"object","required":["ids"],"properties":{"ids":{"type":"array","items":{"type":"integer","minimum":1},"minItems":1,"uniqueItems":true}},"additionalProperties":false}}});
+        assert!(validate_body(&contract, &json!({"body":{"ids":[1,2]}})).is_ok());
+        for input in [
+            json!({}),
+            json!({"body":null}),
+            json!({"body":{"ids":[0]}}),
+            json!({"body":{"ids":[1,1]}}),
+            json!({"body":{"ids":[1],"extra":true}}),
+        ] {
+            assert!(validate_body(&contract, &input).is_err());
+        }
+        contract["request_body"]["required"] = json!(false);
+        assert!(validate_body(&contract, &json!({})).is_ok());
+        contract["method"] = json!("GET");
+        assert!(validate_body(&contract, &json!({"body":{"ids":[1]}})).is_err());
+        assert!(validate_body(&json!({"method":"POST"}), &json!({"body":{}})).is_err());
+    }
+
     #[test]
     fn url_uses_fixed_origin_and_typed_encoded_parameters() {
         let input =

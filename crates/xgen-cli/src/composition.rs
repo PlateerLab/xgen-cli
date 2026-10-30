@@ -1673,7 +1673,7 @@ fn continue_incomplete(
         );
     }
     if discovery.has_connections() {
-        planning_constraints.push(PlanningConstraint::new("http.read-connections", "Host-approved GET connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host.").map_err(|_| PublicRunError::Internal)?);
+        planning_constraints.push(PlanningConstraint::new("http.read-connections", "Host-approved read connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. For explicitly host-approved POST reads, also pass body according to http_read.request_body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host.").map_err(|_| PublicRunError::Internal)?);
     }
     if let Some(process) = process {
         planning_constraints.push(
@@ -3142,7 +3142,7 @@ fn execution_profile_with_discovery(
         "material_provider":graph_discovery::PROVIDER,
         "material_recipe_domain":"xgen.cli.tool-discovery-recipe/v1",
         "host_policy_profile":"xgen.cli.host-tool-discovery/v1",
-        "http_read_profile": if connections.is_empty() { serde_json::Value::Null } else { serde_json::json!({"profile":crate::http_read::PROFILE,"get_only":true,"max_body_bytes":32768,"timeout_seconds":30,"redirects":false,"proxy":false}) },
+        "http_read_profile": if connections.is_empty() { serde_json::Value::Null } else { serde_json::json!({"profile":crate::http_read::PROFILE,"host_selected_post":true,"max_body_bytes":32768,"timeout_seconds":30,"redirects":false,"proxy":false}) },
     });
     if connections.is_empty() {
         profile
