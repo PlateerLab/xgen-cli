@@ -50,6 +50,10 @@ agent loop에는 연결이 있을 때 `xgen.http/read@1.0.0`이 추가된다. �
 ## 지원 범위와 한도
 
 - 새로 가져온 **로컬 JSON 문서만으로 구성한 collection**의 GET. OpenAPI 3.1/3.0 및 Swagger 2의 아래 부분집합을 지원한다.
+- 지원 밖인 선택 파라미터는 operation을 막지 않고 실행 입력에서 제외한다. 모델용 describe의
+  `http_read.excluded_parameters`에 이름 preview·위치·고정 이유를 표시하고 count/digest/complete를
+  함께 준다. 제외한 이름을 입력에 넣으면 HTTP 호출 전에 거절한다. required와 path 파라미터가
+  지원 밖이면 operation 전체를 거절한다. [ADR-0081](../adr/0081-optional-http-parameters.md).
 - scalar path/query: string/integer/number/boolean, simple path·form query, 원본 required·enum·pattern·수치/길이 제약. 값은 URL library로 encode한다. path의 dot segment·slash·역슬래시·percent 입력과 혼합 template는 거절한다.
 - 명시적인 숫자 2xx 응답의 `application/json` 스키마. 실제 응답도 해당 Content-Type이어야 한다. 순환 없는 문서 내부 `$ref`를 해제한다.
 - 인증 없음 또는 OpenAPI HTTP bearer. OAuth·API key·cookie·header parameter·본문·배열 파라미터·외부/순환 ref·ref sibling·nullable/legacy boolean exclusive bound·dynamic ref는 호출 전에 거절한다. JSON Schema 2020-12에 호환되는 스키마만 실행한다. format은 annotation이며 추가 format 보증은 없다.

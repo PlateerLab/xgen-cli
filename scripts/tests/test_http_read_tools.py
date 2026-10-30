@@ -34,6 +34,122 @@ def held_out_spec(name):
             "responses":{"200":{"description":"Measurement","schema":{"type":"object","required":["values"],"properties":{"values":{"type":"array","items":{"type":"number"}}},"additionalProperties":False}}}}}}}
 
 
+class OptionalParameterContractTests(unittest.TestCase):
+    @staticmethod
+    def describe(source, path="/assets", method="get"):
+        artifact = {"metadata": {"xgen_http_sources": {"fixture": source}}}
+        tool = {"name": "fixture", "metadata": {"source_url": "fixture", "path": path, "method": method}}
+        contract = WORKER.http_read_contract(artifact, tool)
+        return contract, tool
+
+    def test_optional_unsupported_parameters_preserve_independent_contracts(self):
+        for source, path in [(asset_spec(), "/assets"), (calendar_spec(), "/events")]:
+            with self.subTest(path=path):
+                parameters = [{"name":"keep","in":"query","type":"string","schema":{"type":"string"}},
+                              {"name":"filters","in":"query","type":"array","schema":{"type":"array","items":{"type":"string"}}},
+                              {"name":"trace","in":"header","schema":{"type":"string"}}]
+                source["paths"][path]["get"]["parameters"] = parameters
+                result, tool = self.describe(source, path)
+                self.assertTrue(result["supported"], result)
+                contract = result["contract"]
+                self.assertEqual([p["name"] for p in contract["parameters"]], ["keep"])
+                self.assertEqual(contract["excluded_parameters"], [
+                    {"location":"query","name":"filters","reason":"http_parameter_type_unsupported"},
+                    {"location":"header","name":"trace","reason":"http_parameter_location_unsupported"}])
+                self.assertEqual(result["contract_digest"], WORKER.digest(contract))
+                view = WORKER.describe_view({"collection":"fixture","artifact_digest":"a"*64,"artifact":{"tools":[tool],"metadata":{"source_count":1}}}, tool, result, 0)
+                self.assertEqual([p["name"]["text"] for p in view["tool"]["parameters"]], ["keep"])
+                self.assertEqual([p["name"]["text"] for p in view["http_read"]["excluded_parameters"]], ["filters","trace"])
+                self.assertTrue(view["http_read"]["excluded_parameters_complete"])
+
+    def test_required_shapes_and_path_parameters_still_close_the_operation(self):
+        for location, required in [("query",True),("header",True),("path",False)]:
+            source = asset_spec()
+            source["paths"]["/assets"]["get"]["parameters"] = [{"name":"bad","in":location,"required":required,"schema":{"type":"array","items":{"type":"string"}}}]
+            result, _ = self.describe(source)
+            self.assertFalse(result["supported"], result)
+
+    def test_overrides_precede_support_classification(self):
+        source = asset_spec()
+        source["paths"]["/assets"]["parameters"] = [{"name":"filter","in":"query","required":True,"schema":{"type":"array","items":{"type":"string"}}}]
+        source["paths"]["/assets"]["get"]["parameters"] = [{"name":"filter","in":"query","schema":{"type":"string"}}]
+        result, _ = self.describe(source)
+        self.assertTrue(result["supported"], result)
+        self.assertEqual(result["contract"]["parameters"][0]["schema"], {"type":"string"})
+        self.assertNotIn("excluded_parameters", result["contract"])
+
+    def test_missing_or_malformed_schema_is_not_treated_as_optional_unsupported_shape(self):
+        for fields in [{}, {"schema":None}, {"schema":"invalid"},
+                       {"schema":{"type":"string"},"content":{"application/json":{}}}]:
+            source = asset_spec()
+            source["paths"]["/assets"]["get"]["parameters"] = [{"name":"bad","in":"query",**fields}]
+            self.assertEqual(self.describe(source)[0], {"supported":False,"error":"http_original_contract_invalid"})
+        source = asset_spec()
+        source["paths"]["/assets"]["get"]["parameters"] = [
+            {"name":"json","in":"query","content":{"application/json":{"schema":{"type":"string"}}}}]
+        result, _ = self.describe(source)
+        self.assertTrue(result["supported"], result)
+        self.assertEqual(result["contract"]["excluded_parameters"][0]["reason"], "http_parameter_serialization_unsupported")
+
+    def test_duplicate_or_malformed_parameters_do_not_remove_required_constraints(self):
+        for level in ["path", "operation"]:
+            source = asset_spec()
+            item = source["paths"]["/assets"]
+            owner = item if level == "path" else item["get"]
+            owner["parameters"] = [
+                {"name":"same","in":"query","required":True,"schema":{"type":"string"}},
+                {"name":"same","in":"query","schema":{"type":"array"}}]
+            self.assertEqual(self.describe(source)[0], {"supported":False,"error":"http_original_contract_invalid"})
+        for bad in [[None], {"name":"not-a-list"}, [{"name":"bad","in":"query","required":0,"schema":{"type":"array"}}]]:
+            source = asset_spec()
+            source["paths"]["/assets"]["get"]["parameters"] = bad
+            self.assertEqual(self.describe(source)[0], {"supported":False,"error":"http_original_contract_invalid"})
+
+    def test_optional_schema_references_are_isolated_but_unknown_parameter_refs_are_not(self):
+        source = asset_spec()
+        operation = source["paths"]["/assets"]["get"]
+        operation["parameters"] = [{"name":"remote","in":"query","schema":{"$ref":"https://example.com/schema.json"}}]
+        result, _ = self.describe(source)
+        self.assertTrue(result["supported"], result)
+        self.assertEqual(result["contract"]["excluded_parameters"][0]["reason"], "http_schema_reference_unsupported")
+        operation["parameters"][0]["required"] = True
+        self.assertFalse(self.describe(source)[0]["supported"])
+        operation["parameters"] = [{"$ref":"https://example.com/parameter.json"}]
+        self.assertFalse(self.describe(source)[0]["supported"])
+        source["components"] = {"schemas":{"Scalar":{"type":"integer","minimum":2}}}
+        operation["parameters"] = [{"name":"value","in":"query","required":True,"schema":{"$ref":"#/components/schemas/Scalar"}}]
+        self.assertEqual(self.describe(source)[0]["contract"]["parameters"][0]["schema"], {"type":"integer","minimum":2})
+
+    def test_exclusion_metadata_is_bounded_and_committed_in_the_contract_digest(self):
+        source = asset_spec()
+        source["paths"]["/assets"]["get"]["parameters"] = [
+            {"name": "filter" + str(i) + "x" * 2048, "in":"query", "schema":{"type":"array"}}
+            for i in range(100)]
+        result, tool = self.describe(source)
+        self.assertTrue(result["supported"], result)
+        view = WORKER.describe_view({"collection":"fixture","artifact_digest":"a"*64,
+            "artifact":{"tools":[tool],"metadata":{"source_count":1}}}, tool, result, 0)
+        self.assertLessEqual(len(WORKER.canonical(view)), 48 * 1024)
+        self.assertEqual(view["http_read"]["excluded_parameter_count"], 100)
+        self.assertFalse(view["http_read"]["excluded_parameters_complete"])
+        old_digest = result["contract_digest"]
+        source["paths"]["/assets"]["get"]["parameters"][0]["name"] += "changed"
+        self.assertNotEqual(self.describe(source)[0]["contract_digest"], old_digest)
+
+    def test_optional_serialization_and_dialect_are_reported_but_security_is_not_dropped(self):
+        source = asset_spec()
+        source["paths"]["/assets"]["get"]["parameters"] = [
+            {"name":"shape","in":"query","style":"deepObject","schema":{"type":"string"}},
+            {"name":"legacy","in":"query","schema":{"type":"string","nullable":True}}]
+        result, _ = self.describe(source)
+        self.assertTrue(result["supported"], result)
+        self.assertEqual([p["reason"] for p in result["contract"]["excluded_parameters"]],
+                         ["http_parameter_serialization_unsupported","http_schema_dialect_unsupported"])
+        source["security"] = [{"unsupported":[]}]
+        result, _ = self.describe(source)
+        self.assertEqual(result, {"supported":False,"error":"http_security_unsupported"})
+
+
 @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
 class ContractTests(unittest.TestCase):
     setUp = base.WorkerTests.setUp
@@ -61,8 +177,8 @@ class ContractTests(unittest.TestCase):
             source=asset_spec()
             op=source["paths"]["/assets"]["get"]
             if kind=="post": source["paths"]["/assets"]={"post":op}
-            elif kind=="header": op["parameters"]=[{"name":"x","in":"header","schema":{"type":"string"}}]
-            elif kind=="array": op["parameters"]=[{"name":"x","in":"query","schema":{"type":"array","items":{"type":"string"}}}]
+            elif kind=="header": op["parameters"]=[{"name":"x","in":"header","required":True,"schema":{"type":"string"}}]
+            elif kind=="array": op["parameters"]=[{"name":"x","in":"query","required":True,"schema":{"type":"array","items":{"type":"string"}}}]
             elif kind=="xml": op["responses"]["200"]["content"]={"application/xml":{"schema":{"type":"object"}}}
             else:
                 source["components"]={"schemas":{"Recursive":{"$ref":"#/components/schemas/Recursive"}}}
@@ -138,8 +254,8 @@ class HttpCliTests(unittest.TestCase):
         self.assertNotIn(self.secret.encode(),result.stdout+result.stderr)
         return result
 
-    def install(self,name="shipments"):
-        source=self.directory/(name+".json");source.write_text(json.dumps(held_out_spec(name)))
+    def install(self,name="shipments",spec=None):
+        source=self.directory/(name+".json");source.write_text(json.dumps(held_out_spec(name) if spec is None else spec))
         self.cli("tools","import","--name",name,"--source",str(source))
         args=["tools","connect","--name",name,"--base-url",f"http://127.0.0.1:{self.api.server_port}","--allow-get"]
         if name=="shipments": args += ["--bearer-env","XGEN_FIXTURE_BEARER"]
@@ -205,17 +321,60 @@ class HttpCliTests(unittest.TestCase):
                 for path in self.state.rglob("*"):
                     if path.is_file(): self.assertNotIn(self.secret.encode(),path.read_bytes(),str(path))
 
+    def test_optional_array_is_hidden_and_injected_input_is_rejected_before_http(self):
+        for name, path, tool in [("shipments","/shipments/{tracking}","readShipment"),
+                                 ("sensors","/sensors/{sensorId}","readSensor")]:
+            with self.subTest(name=name):
+                source = held_out_spec(name)
+                parameter = {"name":"states","in":"query","required":False,
+                             "schema":{"type":"array","items":{"type":"string"}}}
+                if name == "sensors":
+                    parameter = {"name":"states","in":"query","required":False,
+                                 "type":"array","items":{"type":"integer"}}
+                source["paths"][path]["get"]["parameters"].append(parameter)
+                arguments = self.install(name, source)
+                view = json.loads(self.cli("tools","describe","--name",name,tool).stdout)
+                self.assertNotIn("states", [row["name"] for row in view["http_read"]["contract"]["parameters"]])
+                self.assertEqual(view["http_read"]["contract"]["excluded_parameters"][0]["name"], "states")
+                self.assertEqual(view["http_read"]["contract"]["excluded_parameters"][0]["reason"], "http_parameter_type_unsupported")
+                self.response = {"tracking":"A42","delivered":True} if name == "shipments" else {"values":[2.5]}
+                self.calls.clear(); self.requests.clear()
+                self.proposals = [self.plan("describe", "xgen.tools/describe", {"collection":name,"tool":tool}),
+                                  self.plan("read", "xgen.http/read", arguments)]
+                result = self.run_cli()
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertEqual(len(self.calls), 1)
+                self.assertNotIn("states", self.calls[0][0])
+                model_view = self.context(self.requests[1])["toolOutputs"][0]["output"]
+                self.assertNotIn("states", [row["name"]["text"] for row in model_view["tool"]["parameters"]])
+                self.assertEqual(model_view["http_read"]["excluded_parameters"][0]["name"]["text"], "states")
+                self.calls.clear(); self.requests.clear()
+                bad = copy.deepcopy(arguments)
+                bad["parameters"]["query"]["states"] = ["open"]
+                self.proposals = [self.plan("bad", "xgen.http/read", bad)]
+                result = self.run_cli()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.calls, [])
+
     def test_http_failures_do_not_publish_unverified_body_or_follow_redirect(self):
         arguments=self.install()
         cases=[(302,b"redirect"),(500,b"internal"),(200,b"not-json"),(200,{"tracking":42,"delivered":True}),(200,b"x"*32769),(200,{"tracking":self.secret,"delivered":True}), (200,json.dumps({"tracking":self.secret,"delivered":True}).replace(self.secret, "".join("\\u%04x" % ord(c) for c in self.secret)).encode())]
-        for status,body in cases:
+        for case_index, (status,body) in enumerate(cases):
             self.calls.clear();self.requests.clear();self.status=status;self.response=body
             self.redirect=f"http://127.0.0.1:{self.api.server_port}/must-not-follow"
-            self.proposals=[self.plan("read","xgen.http/read",arguments)]
+            def report_failure(payload):
+                context = self.context(payload)
+                self.assertEqual(context["toolOutputs"], [])
+                self.assertEqual(context["steps"][0]["status"], "failed", f"HTTP failure case {case_index}")
+                return {"formatVersion":1,"kind":"completion_candidate","steps":[],
+                        "summary":"Fixture API failed; no verified data available."}
+            self.proposals=[self.plan("read","xgen.http/read",arguments), report_failure]
             result=self.run_cli()
-            self.assertNotEqual(result.returncode,0)
+            # ADR-0052: failed read Receipts are observations; the model may report failure.
+            self.assertEqual(result.returncode,0,result.stderr.decode())
+            self.assertIn(b"no verified data available",result.stdout)
             self.assertEqual(len(self.calls),1)
-            self.assertEqual(len(self.requests),1)
+            self.assertEqual(len(self.requests),2)
         # Each run stores a failed receipt, never the rejected response body.
         for db in (self.state/"runs").glob("*/run.sqlite3"):
             with sqlite3.connect(db) as store:
