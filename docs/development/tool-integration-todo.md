@@ -149,3 +149,10 @@
    [ADR-0084](../adr/0084-run-bearer-overrides.md), [PR #142](https://github.com/PlateerLab/xgen-cli/pull/142).
 5. **별도 설계, 대회 후:** 승인 있는 POST/PUT/PATCH/DELETE 쓰기·host Idempotency-Key·NonIdempotent
    Unknown의 no-retry. 1~4 완료 뒤 진행하며 이번 조회 확장에 포함하지 않는다.
+
+### HTTP 지원 범위 점검 (2026-10-31)
+
+- **구현·로컬 검증 완료:** `tools check-http --name COLLECTION`으로 import된 도구의 지원·거절·선택 파라미터 제외를 집계한다.
+- 기존 classifier·저장된 조회 정책을 재사용하며 API·모델·credential 조회는 하지 않는다. 실제 실행 가능 과업 수와 구분한다.
+- 원본 operation이 import에서 누락됐는지와 실제 인증·API 응답·기존 에이전트 비교는 별도 통합 검증이다.
+- [ADR-0085](../adr/0085-http-read-support-report.md), [사용법](http-read-tools.md#http-지원-범위-점검).

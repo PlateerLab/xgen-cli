@@ -81,6 +81,15 @@ pub enum ToolsCommand {
         #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..=20))]
         top_k: u8,
     },
+    /// Inspect HTTP contract support for a saved collection without API or credential access.
+    CheckHttp {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+        #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u16).range(1..=500))]
+        limit: u16,
+    },
     /// Read the normalized schema and retained API contract of an exact saved tool.
     Describe {
         #[arg(long)]
@@ -203,6 +212,13 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
             }
             json!({"operation": "search", "name": name, "query": query, "top_k": top_k})
         }
+        ToolsCommand::CheckHttp {
+            name,
+            offset,
+            limit,
+        } => {
+            json!({"operation":"check_http", "name":name, "offset":offset, "limit":limit})
+        }
         ToolsCommand::Describe {
             name,
             tool,
@@ -230,7 +246,7 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
     value["root"] = json!(root.to_str().ok_or("invalid_state_home")?);
     if matches!(
         value["operation"].as_str(),
-        Some("describe" | "describe_view")
+        Some("describe" | "describe_view" | "check_http")
     ) {
         let snapshots = crate::graph_discovery::DiscoveryCatalog::discover()
             .map_err(|()| "http_catalog_unavailable")?;
