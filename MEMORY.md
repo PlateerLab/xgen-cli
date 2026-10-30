@@ -53,7 +53,7 @@
 - 일반: 저장한 그래프에는 원본 명세·관찰의 출처와 버전을 연결하고, 변경 시 갱신한다. 인증 정보는 모델 입력과 그래프에 저장하지 않는다.
 - 일반: 다른 언어의 도구를 내부에서 자동 실행할 수 있다. Rust 재구현이나 MCP 사용 자체가 목표는 아니다.
 - 초기 구현: 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 호출하고 uv가 Python 3.12·graph-tool-call 0.47.0을 자동 준비한다(2026-10-09 0.46.0에서 갱신, 이전 버전 collection은 재import 필요). 별도 서버는 없지만 현재 개발 버전은 uv가 필요하다. uv 포함 배포·OS별 검증은 남았다.
-- 구현: agent loop의 저장 collection 자동 연결·검색·정확한 명세 조회와 연결된 GET 실행·로컬 인증 참조. 미구현: HTTP 계약 지원 확대, browser-use 연결, 화면 정보 변환 어댑터.
+- 구현: agent loop의 저장 collection 자동 연결·검색·정확한 명세 조회와 연결된 GET·호스트 지정 POST 조회·로컬 인증 참조. HTTP query 배열과 Run별 bearer 확장은 아래 결과를 따른다. 미구현: 승인 있는 HTTP 쓰기, browser-use 연결, 화면 정보 변환 어댑터.
 
 ## 역할별 모델 연결: 설계 후보
 
@@ -169,3 +169,8 @@
 - HTTP 확장2는 [PR #140](https://github.com/PlateerLab/xgen-cli/pull/140)로 main `4fbbcc9`에 머지했고 Fast/Linux 검사가 통과했다.
 - HTTP 확장3(ADR-0083, 구현·로컬 검증 완료): host operationId 목록으로 GET/POST 조회를 지정하고 POST JSON 본문을 원본 schema로 검증한다. Capability2.0.0/profilev3로 고정하며 목록 변경은 기존 http_connections drift로 거절한다. shipment/measurement loopback POST·잘못된 본문0회 요청·미지정POST0회·drift를 확인했다. 실제 외부 서비스 통합과 모델 품질은 아직 미검증이다.
 - HTTP 확장3 검증: Rust782개(4 ignored), Python148개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 전체 Rust 검사 도중 별도 빌드가 xgen 실행 파일을 바꿔 기존 executable drift 검사1건이 거절됐고, 빌드와 분리해 다시 돌린 전체 검사는 통과했다. 독립 diff 검토의 가설은 원본 계약·승인 경계·실행 전 body 검증과 대조했으며 추가 재현된 결함은 없었다.
+
+- HTTP 확장3은 [PR #141](https://github.com/PlateerLab/xgen-cli/pull/141)로 머지했고 Fast/Linux PR 검사가 통과했다.
+- HTTP 확장4(ADR-0084, 구현·로컬 검증 완료): run/resume의 연결별 bearer env override를 별도 map으로 받으며 저장된 연결 인증을 바꾸지 않는다. 참조만 manifest/profile에 결합하고 누락·변경·값 부재/invalid에서 fallback 없이 거절한다. shipment/sensor의 다른 토큰·연결 불변·상태/모델 비노출·토큰 회전·완료 replay와 echo 차단을 loopback에서 확인했다. 서버의 사용자 인증·대리 권한·Run 접근 제어·process/state 격리는 외부 호스트 책임이며 실제 통합은 미검증이다.
+- HTTP 확장4 검증: Rust784개(4 ignored), pinned backend+컴파일 CLI Python153개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 한 Run의 연결2개/서로 다른 토큰도 올바르게 전달됐고 모든 상태 파일·모델 요청에 값이 없었다. 참조만 profile에 결합하며 override 없는 기존 binding은 유지했다. 승인 있는 쓰기는 아직 구현하지 않았다.
+- HTTP 확장4 변경 추적: [PR #142](https://github.com/PlateerLab/xgen-cli/pull/142), 구현 코드 `67d1d40`. PR의 CI 결과와 merge 상태를 정본으로 참조한다.

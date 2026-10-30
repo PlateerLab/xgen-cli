@@ -37,6 +37,27 @@ xgen tools remove --name my-system       # collection, 연결, 저장된 토큰�
 - 연결 저장소가 사용자 전용이 아니거나, 연결 파일이 symlink거나, 저장소를 읽을 수 없으면(권한 오류를 "연결 없음"으로 보지 않는다) 아무것도 지우지 않고 실패한다.
 - 연결을 바꾸면 그 연결로 시작한 Run은 재개 시 기존처럼 거절된다.
 
+## Run별 bearer 주입
+
+```bash
+xgen run --workspace . --allow-dir . --allow-read --allow-remote-model-egress \
+  --bearer-env-for my-system=USER_API_TOKEN "연결된 API를 조회해줘"
+xgen resume RUN_ID --workspace . --allow-dir . --allow-read --allow-remote-model-egress \
+  --bearer-env-for my-system=USER_API_TOKEN
+```
+
+토큰은 호출 프로세스의 `USER_API_TOKEN`에 호스트가 설정한다. 인자에는 값 대신 **환경변수 이름**만
+넣는다. 여러 연결이면 옵션을 반복한다. 연결 파일의 bearer 참조는 바뀌지 않고 이 Run에서만 우선한다.
+변수가 없거나 빈 값·잘못된 bearer면 저장 토큰으로 넘어가지 않고 거절한다. process 도구의 safe
+환경으로 전달되는 `LANG`·`PATH` 같은 변수는 인증 참조로 사용할 수 없다.
+
+미완료 Run을 재개할 때 원래 참조들을 다시 지정해야 한다. map 누락·변경은 재개를 거절하고, 같은
+참조에서 토큰 값만 바꾸는 것은 가능하다. 값은 manifest·Receipt·모델에 남지 않는다. 완료 Run의
+재생은 참조 옵션이나 토큰 없이 가능하다. [ADR-0084](../adr/0084-run-bearer-overrides.md).
+
+서버는 사용자별 자식 프로세스 환경으로 주입한다. 공유 프로세스의 전역 환경을 요청마다 바꾸는 방식은
+사용자 격리가 아니다. 사용자 인증·대리 권한·Run 접근 제어·상태 저장소 격리는 호출 서버가 담당한다.
+
 ## 호스트가 지정한 POST 조회
 
 ```bash

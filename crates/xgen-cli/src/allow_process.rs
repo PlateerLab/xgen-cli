@@ -19,6 +19,10 @@ const MAX_ALLOW_EXECUTABLES: usize = 64;
 const MAX_EXECUTABLE_SPEC_BYTES: usize = 8 * 1024;
 const MAX_PLANNER_HINT_BYTES: usize = 8 * 1024;
 
+pub(crate) fn forwarded_environment_key(name: &str) -> bool {
+    SAFE_ENVIRONMENT_KEYS.contains(&name)
+}
+
 const SAFE_ENVIRONMENT_KEYS: &[&str] = &[
     "PATH",
     "PATHEXT",

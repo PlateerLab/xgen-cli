@@ -16,7 +16,7 @@
 
 POST 본문은 OpenAPI requestBody의 application/json 단일 미디어 형식만 지원한다. 내부 ref를
 해제한 원본 schema, required를 보존하고 native host가 전체 schema로 검증한다. Swagger2 body,
-여러 미디어 형식은 지원하지 않는다. 본문 없는 POST는 원본에 requestBody가 없을 때만 가능하다.
+여러 미디어 형식은 지원하지 않는다. 원본에 requestBody가 없거나 required=false이면 본문을 생략할 수 있다.
 정의하지 않은 본문, 필수 본문 누락, schema 위반은 HTTP 전에 거절한다. 입력 전체8KiB 한도는 유지한다.
 
 `xgen.http/read@2.0.0`에 선택 입력 `body`를 추가한다. method는 모델 입력이 아니라 원본 계약에서

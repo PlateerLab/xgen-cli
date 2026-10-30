@@ -283,6 +283,9 @@ struct RunArgs {
     /// Approve each one-shot read-only action selected within the declared file/directory scope.
     #[arg(long)]
     allow_read: bool,
+    /// Override one connection's bearer reference for this run; never saves the token.
+    #[arg(long, value_name = "CONNECTION=ENV_NAME", value_parser = parse_bearer_override)]
+    bearer_env_for: Vec<(String, String)>,
     /// Approve each one-shot atomic file write selected within an allow-dir scope.
     #[arg(long)]
     allow_write: bool,
@@ -356,6 +359,9 @@ struct ResumeArgs {
     /// Approve each one-shot read-only action selected within the declared file/directory scope.
     #[arg(long)]
     allow_read: bool,
+    /// Override one connection's bearer reference for this run; never saves the token.
+    #[arg(long, value_name = "CONNECTION=ENV_NAME", value_parser = parse_bearer_override)]
+    bearer_env_for: Vec<(String, String)>,
     /// Approve each one-shot atomic file write selected within an allow-dir scope.
     #[arg(long)]
     allow_write: bool,
@@ -741,6 +747,7 @@ impl repl::ReplHost for InteractiveHost {
                 allow_executables: Vec::new(),
                 allow_remote_model_egress: grants.model,
                 allow_read: grants.read,
+                bearer_env_for: std::collections::BTreeMap::new(),
                 allow_write: grants.write,
                 allow_execute: grants.execute,
                 max_ticks: repl_max_ticks(self.max_model_turns),
@@ -790,6 +797,7 @@ impl repl::ReplHost for InteractiveHost {
             },
             allow_remote_model_egress: grants.model,
             allow_read: grants.read,
+            bearer_env_for: std::collections::BTreeMap::new(),
             allow_write: grants.write,
             allow_execute: grants.execute,
             max_ticks: repl_max_ticks(self.max_model_turns),
@@ -1153,6 +1161,37 @@ fn run_model_command(command: ModelCommand) -> ExitCode {
     }
 }
 
+fn parse_bearer_override(value: &str) -> Result<(String, String), String> {
+    let (connection, variable) = value
+        .split_once('=')
+        .ok_or("expected CONNECTION=ENV_NAME")?;
+    if connection.is_empty()
+        || connection.len() > 64
+        || !connection
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        || variable.is_empty()
+        || variable.len() > 128
+        || !variable
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+    {
+        return Err("expected a connection name and environment variable name".into());
+    }
+    Ok((connection.into(), variable.into()))
+}
+fn bearer_overrides(
+    values: Vec<(String, String)>,
+) -> Result<std::collections::BTreeMap<String, String>, PublicRunError> {
+    let mut result = std::collections::BTreeMap::new();
+    for (connection, variable) in values {
+        if result.insert(connection, variable).is_some() {
+            return Err(PublicRunError::Configuration);
+        }
+    }
+    Ok(result)
+}
+
 fn run_command(args: RunArgs, debug: bool) -> ExitCode {
     let mut final_response_schema = match args.response_schema {
         Some(path) => {
@@ -1232,6 +1271,10 @@ fn run_command(args: RunArgs, debug: bool) -> ExitCode {
         allow_executables,
         allow_remote_model_egress: args.allow_remote_model_egress,
         allow_read: args.allow_read,
+        bearer_env_for: match bearer_overrides(args.bearer_env_for) {
+            Ok(value) => value,
+            Err(error) => return present(Err(error)),
+        },
         allow_write: args.allow_write,
         allow_execute: args.allow_execute,
         max_ticks: args.max_ticks,
@@ -1262,6 +1305,7 @@ fn resume_command(args: ResumeArgs, debug: bool) -> ExitCode {
         allow_path_executables,
         allow_remote_model_egress,
         allow_read,
+        bearer_env_for,
         allow_write,
         allow_execute,
         max_ticks,
@@ -1278,6 +1322,10 @@ fn resume_command(args: ResumeArgs, debug: bool) -> ExitCode {
         allow_executables: executable_catalog(allow_executables, allow_path_executables),
         allow_remote_model_egress,
         allow_read,
+        bearer_env_for: match bearer_overrides(bearer_env_for) {
+            Ok(value) => value,
+            Err(error) => return present(Err(error)),
+        },
         allow_write,
         allow_execute,
         max_ticks,
