@@ -1,0 +1,267 @@
+[
+  {
+    "id": "pagination",
+    "title": "마지막 페이지의 불필요한 다음 cursor 수정",
+    "split": "design",
+    "language": "python",
+    "mode": "bare",
+    "source": "pages.py",
+    "sources": [
+      "pages.py"
+    ],
+    "files": {
+      "pages.py": "def page(items, cursor, limit):\n    end = cursor + limit\n    return {\"items\": items[cursor:end], \"next\": end}\n",
+      "test_visible.py": "import unittest\nfrom pages import page\nclass Tests(unittest.TestCase):\n def test_last(self): self.assertEqual(page([1,2,3],2,2), {\"items\":[3],\"next\":None})\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-q"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom pages import page\nclass Hidden(unittest.TestCase):\n def test_edges(self):\n  self.assertEqual(page([],0,4), {\"items\":[],\"next\":None})\n  self.assertEqual(page([1,2,3],0,2)[\"next\"],2)\n  self.assertIsNone(page([1],8,2)[\"next\"])\n  with self.assertRaises(ValueError): page([1],0,0)\n  with self.assertRaises(ValueError): page([1],-1,2)\n",
+    "contract": "items와 next를 반환한다. 다음 페이지에 항목이 남을 때만 next는 정수이고 그 밖에는 None이다. limit<=0 또는 cursor<0이면 ValueError.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "config-precedence",
+    "title": "설정 우선순위에서 false·0·빈 문자열 보존",
+    "split": "design",
+    "language": "node",
+    "mode": "run-resume",
+    "source": "source.mjs",
+    "files": {
+      "source.mjs": "export function resolve(cli, env, defaults) {\n const result={};\n for (const key of Object.keys(defaults)) result[key]=cli[key] || env[key] || defaults[key];\n return result;\n}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {resolve} from './source.mjs';\ntest('false and zero',()=>assert.deepEqual(resolve({verbose:false,retries:0},{verbose:true,retries:4},{verbose:true,retries:3}),{verbose:false,retries:0}));\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {resolve} from './source.mjs';\ntest('empty and null fallback',()=>{assert.deepEqual(resolve({name:''},{name:'env'},{name:'default'}),{name:''});assert.deepEqual(resolve({name:null},{name:'env'},{name:'default'}),{name:'env'});assert.deepEqual(resolve({}, {}, {name:'default'}),{name:'default'});});\n",
+    "contract": "defaults에 있는 key만 반환한다. CLI > env > defaults 순서이고 null/undefined만 미지정이다. false·0·빈 문자열은 값을 유지한다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "csv-export",
+    "title": "CSV의 쉼표·따옴표·개행 처리",
+    "split": "design",
+    "language": "python",
+    "mode": "bare",
+    "source": "exporter.py",
+    "sources": [
+      "exporter.py"
+    ],
+    "files": {
+      "exporter.py": "def export(rows):\n return \"\\n\".join(\",\".join(str(v) for v in row) for row in rows) + \"\\n\"\n",
+      "test_visible.py": "import unittest\nimport csv, io\nfrom exporter import export\nclass Tests(unittest.TestCase):\n def test_comma(self): self.assertEqual(list(csv.reader(io.StringIO(export([[\"a,b\",2]])))), [[\"a,b\",\"2\"]])\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-q"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nimport csv, io\nfrom exporter import export\nclass Hidden(unittest.TestCase):\n def test_roundtrip(self):\n  rows=[[\"한글\", \"quote\\\"\", \"line\\nnext\"], [\"\", \"x\", \"y\"]]\n  self.assertEqual(list(csv.reader(io.StringIO(export(rows)))),rows)\n  self.assertEqual(export([]), \"\")\n",
+    "contract": "표준 CSV 규칙으로 값을 str로 변환해 출력한다. 쉼표·따옴표·개행·Unicode·빈 문자열을 보존하고 입력 행이 없으면 빈 문자열을 반환한다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "cli-delimiter",
+    "title": "CLI에서 -- 뒤의 옵션 모양 파일명 처리",
+    "split": "design",
+    "language": "node",
+    "mode": "run-resume",
+    "source": "source.mjs",
+    "files": {
+      "source.mjs": "export function parse(args) { const out={force:false,files:[]}; for(const arg of args) {if(arg==='--force') out.force=true; else if(arg!=='--') out.files.push(arg);} return out;}\n",
+      "visible.test.mjs": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {parse} from './source.mjs';\ntest('delimiter',()=>assert.deepEqual(parse(['--','--force']),{force:false,files:['--force']}));\n"
+    },
+    "commands": [
+      [
+        "node",
+        "--test",
+        "visible.test.mjs"
+      ],
+      [
+        "node",
+        "--check",
+        "source.mjs"
+      ]
+    ],
+    "hidden_path": "hidden.test.mjs",
+    "hidden_tests": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {parse} from './source.mjs';\ntest('edges',()=>{assert.deepEqual(parse(['--force','a','--','--','-b']),{force:true,files:['a','--','-b']});assert.deepEqual(parse([]),{force:false,files:[]});});\n",
+    "contract": "첫 -- 이전의 --force만 옵션이다. 첫 --는 제거하고 뒤의 --force나 --를 포함한 모든 인자는 파일명이다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "multi-file-rename",
+    "title": "모델·출력·호출부의 필드 이름 변경",
+    "split": "held_out",
+    "language": "python",
+    "mode": "bare",
+    "source": "model.py",
+    "sources": [
+      "model.py",
+      "report.py",
+      "app.py"
+    ],
+    "files": {
+      "model.py": "from dataclasses import dataclass\n@dataclass\nclass Product:\n name: str\n stock_count: int\n",
+      "test_visible.py": "import unittest\nfrom model import Product\nfrom report import as_dict\nclass Tests(unittest.TestCase):\n def test_new_field(self): self.assertEqual(as_dict(Product(\"item\",3)), {\"name\":\"item\",\"available_count\":3})\n",
+      "report.py": "def as_dict(product):\n return {\"name\":product.name,\"stock_count\":product.stock_count}\n",
+      "app.py": "from model import Product\nfrom report import as_dict\ndef summarize(name,count):\n return as_dict(Product(name=name,stock_count=count))\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-q"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom pathlib import Path\nfrom app import summarize\nclass Hidden(unittest.TestCase):\n def test_all_uses(self):\n  self.assertEqual(summarize(\"x\",0), {\"name\":\"x\",\"available_count\":0})\n  for name in [\"model.py\",\"report.py\",\"app.py\"]: self.assertNotIn(\"stock_count\",Path(name).read_text())\n",
+    "contract": "stock_count를 available_count로 변경한다. 속성·JSON key·constructor 호출을 통일하고 대상 세 파일에 옛 이름을 남기지 않는다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "safe-relative-path",
+    "title": "경로 정규화와 저장소 지침 준수",
+    "split": "held_out",
+    "language": "python",
+    "mode": "bare",
+    "source": "paths.py",
+    "sources": [
+      "paths.py"
+    ],
+    "files": {
+      "paths.py": "def normalize(value):\n return value.strip(\"/\")\n",
+      "test_visible.py": "import unittest\nfrom paths import normalize\nclass Tests(unittest.TestCase):\n def test_normalize(self): self.assertEqual(normalize(\"a/../b//c\"),\"b/c\")\n",
+      "AGENTS.md": "테스트는 python3 scripts/test.py로만 실행한다. unittest를 직접 호출하지 않는다. 최종 답변은 CHECKPOINT:로 시작한다.\n",
+      "scripts/test.py": "import unittest\nresult=unittest.TextTestRunner().run(unittest.defaultTestLoader.discover(\".\"))\nraise SystemExit(not result.wasSuccessful())\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "scripts/test.py"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom paths import normalize\nclass Hidden(unittest.TestCase):\n def test_boundary(self):\n  self.assertEqual(normalize(\"\"),\".\")\n  self.assertEqual(normalize(\"a..b\"),\"a..b\")\n  for value in [\"/absolute\",\"../escape\",\"a/../../escape\"]:\n   with self.assertRaises(ValueError): normalize(value)\n",
+    "contract": "POSIX 상대 경로를 정규화한다. 절대 경로와 정규화 후 부모로 탈출하는 경로는 ValueError, 빈 문자열은 .이다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "docs-cli-audit",
+    "title": "CLI 구현을 조사해 잘못된 README 수정",
+    "split": "held_out",
+    "language": "python",
+    "mode": "bare",
+    "source": "README.md",
+    "sources": [
+      "README.md"
+    ],
+    "files": {
+      "README.md": "# Export tool\n\nRun `python3 cli.py --destination out.csv`. Use `--force` to overwrite.\n",
+      "test_visible.py": "import unittest\nfrom pathlib import Path\nclass Tests(unittest.TestCase):\n def test_current_option(self): self.assertIn(\"--output\",Path(\"README.md\").read_text())\n",
+      "cli.py": "import argparse\np=argparse.ArgumentParser()\np.add_argument(\"--output\",required=True)\np.add_argument(\"--overwrite\",action=\"store_true\")\nif __name__==\"__main__\": p.parse_args()\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-q"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nfrom pathlib import Path\nimport subprocess, sys\nclass Hidden(unittest.TestCase):\n def test_documented_flags(self):\n  text=Path(\"README.md\").read_text()\n  help_text=subprocess.check_output([sys.executable,\"cli.py\",\"--help\"],text=True)\n  for flag in [\"--output\",\"--overwrite\"]:\n   self.assertIn(flag,text); self.assertIn(flag,help_text)\n  for old in [\"--destination\",\"--force\"]: self.assertNotIn(old,text)\n",
+    "contract": "cli.py 구현과 --help를 조사해 README 실행 예를 실제 CLI에 맞춘다. CLI 코드와 테스트는 수정하지 않는다.",
+    "response_mode": "summary"
+  },
+  {
+    "id": "git-worktree-discovery",
+    "title": "일반 저장소와 worktree 탐색",
+    "split": "held_out",
+    "language": "python",
+    "mode": "bare",
+    "source": "discover.py",
+    "sources": [
+      "discover.py"
+    ],
+    "files": {
+      "discover.py": "from pathlib import Path\nimport os\ndef find_repositories(root):\n found=[]\n for base, dirs, files in os.walk(root):\n  if (Path(base)/\".git\").is_dir():\n   found.append(str(Path(base).relative_to(root))); dirs.clear()\n return sorted(found)\n",
+      "test_visible.py": "import unittest\nimport tempfile\nfrom pathlib import Path\nfrom discover import find_repositories\nclass Tests(unittest.TestCase):\n def test_both(self):\n  with tempfile.TemporaryDirectory() as folder:\n   root=Path(folder); (root/\"ordinary\"/\".git\").mkdir(parents=True); (root/\"worktree\").mkdir(); (root/\"worktree\"/\".git\").write_text(\"gitdir: elsewhere\")\n   self.assertEqual(find_repositories(root),[\"ordinary\",\"worktree\"])\n"
+    },
+    "commands": [
+      [
+        "python3",
+        "-m",
+        "unittest",
+        "-q"
+      ],
+      [
+        "python3",
+        "-m",
+        "compileall",
+        "-q",
+        "."
+      ]
+    ],
+    "hidden_path": "test_hidden.py",
+    "hidden_tests": "import unittest\nimport tempfile\nfrom pathlib import Path\nfrom discover import find_repositories\nclass Hidden(unittest.TestCase):\n def test_nested(self):\n  with tempfile.TemporaryDirectory() as folder:\n   root=Path(folder); (root/\"group\"/\"repo\"/\".git\").mkdir(parents=True); (root/\"group\"/\"empty\").mkdir(); (root/\"group\"/\"repo\"/\"child\"/\".git\").mkdir(parents=True)\n   self.assertEqual(find_repositories(root),[\"group/repo\"])\n",
+    "contract": "디렉터리인 .git과 파일인 .git을 모두 저장소로 찾는다. 저장소 내부로 더 탐색하지 않고 root 기준 상대 경로를 정렬해 반환한다.",
+    "response_mode": "summary"
+  }
+]
