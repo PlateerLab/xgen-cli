@@ -174,3 +174,7 @@
 - HTTP 확장4(ADR-0084, 구현·로컬 검증 완료): run/resume의 연결별 bearer env override를 별도 map으로 받으며 저장된 연결 인증을 바꾸지 않는다. 참조만 manifest/profile에 결합하고 누락·변경·값 부재/invalid에서 fallback 없이 거절한다. shipment/sensor의 다른 토큰·연결 불변·상태/모델 비노출·토큰 회전·완료 replay와 echo 차단을 loopback에서 확인했다. 서버의 사용자 인증·대리 권한·Run 접근 제어·process/state 격리는 외부 호스트 책임이며 실제 통합은 미검증이다.
 - HTTP 확장4 검증: Rust784개(4 ignored), pinned backend+컴파일 CLI Python153개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 한 Run의 연결2개/서로 다른 토큰도 올바르게 전달됐고 모든 상태 파일·모델 요청에 값이 없었다. 참조만 profile에 결합하며 override 없는 기존 binding은 유지했다. 승인 있는 쓰기는 아직 구현하지 않았다.
 - HTTP 확장4 변경 추적: [PR #142](https://github.com/PlateerLab/xgen-cli/pull/142), 구현 코드 `67d1d40`. PR의 CI 결과와 merge 상태를 정본으로 참조한다.
+
+- 다음 범용 작업(사용자 승인, 2026-10-31): 명세별 HTTP 지원 범위를 한번에 보는 `tools check-http` 진단을 진행한다. 개별 describe/execution의 classifier를 재사용하고 저장된 조회 지정 정책을 적용한다. 판정 범위는 import된 도구이며 실제 API·인증·모델 검증과 구분한다.
+- HTTP 지원 보고서(ADR-0085, 구현·로컬 검증 완료): 전체 지원/거절·제외 이유 집계, 이름순 bounded page, artifact/policy digest를 제공한다. assets/calendar 설계와 shipment/sensor 실제 CLI 대조에서 개별 describe와 일치했고, bearer 환경변수가 없어도 API·모델 호출0회였다. 외부 통합 과업 수는 계속 미확정이다.
+- HTTP 지원 보고서 검증: Rust784개(4 ignored), pinned backend+컴파일 CLI Python159개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 독립 diff 검토의 policy 전달·pagination 가설은 실제 native 정책 주입·행 크기 상한·마지막 페이지 검사와 대조했다. Run 계약/profile·HTTP 지원 규칙은 바꾸지 않았다.

@@ -37,6 +37,28 @@ xgen tools remove --name my-system       # collection, 연결, 저장된 토큰�
 - 연결 저장소가 사용자 전용이 아니거나, 연결 파일이 symlink거나, 저장소를 읽을 수 없으면(권한 오류를 "연결 없음"으로 보지 않는다) 아무것도 지우지 않고 실패한다.
 - 연결을 바꾸면 그 연결로 시작한 Run은 재개 시 기존처럼 거절된다.
 
+## HTTP 지원 범위 점검
+
+```bash
+xgen tools check-http --name my-system
+xgen tools check-http --name my-system --offset 0 --limit 100
+```
+
+개별 `describe`와 같은 판정으로 import된 도구의 지원·거절·선택 파라미터 제외를 JSON으로 모은다.
+`summary`는 전체 집계이고 `tools`는 이름순 페이지다. 제외 파라미터 수는 지원된 계약에서 실제로 제외한 항목만 센다. 다음 페이지는 반환된 `page.next_offset`을
+`--offset`으로 넣는다. 값이 null이면 끝이다. 기본100개·최대500개이며 행 byte 한도에 먼저 닿으면
+더 적게 반환할 수 있다. 페이지를 합칠 때 `artifact_digest`와 `policy_digest`가 같은지 확인한다.
+
+연결이 있으면 저장된 GET/POST 조회 지정 정책을 반영한다. 연결이 없으면 기존 describe와 같은
+GET 계약 판정이며 `connection_present=false`다. tool·원본 operationId·method·path는
+`text`/`omitted` preview이므로 잘린 이름으로 operation 지정을 시도하지 않는다.
+제외한 파라미터는 count·complete와 함께 이름·위치·이유를 제공한다.
+
+이 명령은 토큰을 읽거나 API·모델을 호출하지 않는다. `supported`는 **계약 판정**이며 인증·실제 입력값·
+API 응답의 검증이나 과업 성공을 뜻하지 않는다. `scope=imported_tools`이므로 import에서 빠진 원본
+operation의 수까지 확인한 결과도 아니다. unsupported 도구가 있어도 보고서 생성에 성공하면 exit0이다.
+[ADR-0085](../adr/0085-http-read-support-report.md).
+
 ## Run별 bearer 주입
 
 ```bash

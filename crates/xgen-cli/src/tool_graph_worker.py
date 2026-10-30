@@ -334,6 +334,9 @@ def dispatch(request):
                 raise WorkerError("http_read_operation_invalid")
         return {"ok": True}
     graph = graph_from_artifact(envelope["artifact"])
+    if operation == "check_http":
+        return http_read_report(envelope, [tool.to_dict() for tool in graph.tools.values()],
+                                request.get("http_policy"), request.get("offset", 0), request.get("limit", 100))
     if operation in ("describe", "describe_view", "execution_contract"):
         tool = graph.tools.get(request["tool"])
         if tool is None:
@@ -644,6 +647,58 @@ def http_read_contract(artifact, tool, policy=None):
         return {"supported":False,"error":str(error)}
     except (KeyError,TypeError,ValueError):
         return {"supported":False,"error":"http_original_contract_invalid"}
+
+
+def http_read_report(envelope, tools, policy, offset, limit):
+    # Diagnostic projection of the same contract classifier used by describe and execution.
+    if type(offset) is not int or type(limit) is not int or offset < 0 or not 1 <= limit <= 500:
+        raise WorkerError("invalid_http_report_page")
+    tools = sorted(tools, key=lambda tool: tool["name"])
+    if offset > len(tools):
+        raise WorkerError("invalid_http_report_page")
+    supported, excluded_count, reasons, rows = 0, 0, collections.Counter(), []
+    excluded_reasons = collections.Counter()
+    end, page_bytes, page_full = offset, 0, False
+    for index, tool in enumerate(tools):
+        result = http_read_contract(envelope["artifact"], tool, policy)
+        supported += int(result["supported"])
+        excluded = result.get("contract", {}).get("excluded_parameters", [])
+        excluded_count += len(excluded)
+        excluded_reasons.update(item["reason"] for item in excluded)
+        if not result["supported"]:
+            reasons[result["error"]] += 1
+        if index < offset or page_full:
+            continue
+        metadata = tool.get("metadata", {})
+        operation_id = None
+        try:
+            source = envelope["artifact"]["metadata"]["xgen_http_sources"][metadata["source_url"]]
+            operation = dereference(source["paths"][metadata["path"]], source, recursive=False)[metadata["method"]]
+            operation_id = operation.get("operationId")
+        except (KeyError, TypeError, AttributeError, WorkerError):
+            pass
+        row = {"tool": preview(tool["name"], 1024), "operation_id": preview(operation_id, 128) if isinstance(operation_id, str) else None,
+               "method": preview(metadata.get("method"), 16), "path": preview(metadata.get("path"), 1024),
+               "supported": result["supported"]}
+        if result["supported"]:
+            row.update({"contract_digest": result["contract_digest"], "excluded_parameter_count": len(excluded),
+                        "excluded_parameters": [{"location": item["location"], "name": preview(item["name"], 256), "reason": item["reason"]} for item in excluded[:32]],
+                        "excluded_parameters_complete": len(excluded) <= 32 and all(len(item["name"].encode()) <= 256 for item in excluded)})
+        else:
+            row["error"] = result["error"]
+        size = len(canonical(row))
+        if len(rows) >= limit or page_bytes + size > 1024 * 1024:
+            page_full = True
+            continue
+        rows.append(row)
+        page_bytes += size
+        end = index + 1
+    return {"ok": True, **summarize(envelope), "report_version": 1, "scope": "imported_tools", "policy_digest": digest(policy),
+            "connection_present": policy is not None, "credentials_checked": False, "network_checked": False,
+            "summary": {"total": len(tools), "supported": supported, "unsupported": len(tools) - supported,
+                        "excluded_parameter_count": excluded_count, "unsupported_reasons": dict(sorted(reasons.items())),
+                        "excluded_parameter_reasons": dict(sorted(excluded_reasons.items()))},
+            "page": {"offset": offset, "limit": limit, "next_offset": end if end < len(tools) else None}, "tools": rows}
 
 
 def main():
