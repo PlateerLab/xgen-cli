@@ -60,6 +60,10 @@ Unix symlink 거절을 확인한다. 보류 CLI E2E는 무시된 파일의 명�
 전체 지원 target의 third-party license notice 생성을 통과했다. 독립 diff 검토에서 제기된 상대 경로·앵커와
 읽기 예산 경계는 crate 소스와 추가 회귀로 재확인했다.
 
+브랜치 전체 [CI 7개 job](https://github.com/PlateerLab/xgen-cli/actions/runs/41035044774)이 코드 commit
+`04036d1`에서 통과했다. Linux x86-64·ARM64, macOS Intel·Apple Silicon, Windows x64의 release 빌드와
+설치 smoke를 포함한다. Intel macOS job은 기존 CI 정책대로 테스트를 생략하고 macOS 테스트는 Apple Silicon에서 실행한다.
+
 ## 참고
 
 - [ignore GitignoreBuilder](https://docs.rs/ignore/0.4.34/ignore/gitignore/struct.GitignoreBuilder.html)
