@@ -494,11 +494,23 @@ def http_read_parameter(parameter, source):
     if "schema" not in parameter and source.get("swagger") == "2.0" and "type" in parameter:
         schema = {key: value for key, value in parameter.items() if key in (
             "type", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
-            "minLength", "maxLength", "pattern", "format", "default", "multipleOf")}
+            "minLength", "maxLength", "pattern", "format", "default", "multipleOf",
+            "items", "minItems", "maxItems", "uniqueItems")}
     if not isinstance(schema, (dict, bool)):
         raise WorkerError("http_original_contract_invalid")
     schema = dereference(schema, source)
-    if not isinstance(schema, dict) or schema.get("type") not in ("string", "integer", "number", "boolean"):
+    scalar_types = ("string", "integer", "number", "boolean")
+    array = isinstance(schema, dict) and schema.get("type") == "array"
+    if array:
+        items = schema.get("items")
+        if location != "query" or not isinstance(items, dict) or items.get("type") not in scalar_types or "prefixItems" in schema:
+            raise WorkerError("http_parameter_type_unsupported")
+        if source.get("swagger") == "2.0":
+            if parameter.get("collectionFormat", "csv") != "multi":
+                raise WorkerError("http_parameter_serialization_unsupported")
+        elif parameter.get("explode", True) is not True:
+            raise WorkerError("http_parameter_serialization_unsupported")
+    elif not isinstance(schema, dict) or schema.get("type") not in scalar_types:
         raise WorkerError("http_parameter_type_unsupported")
     if parameter.get("style", "simple" if location == "path" else "form") != ("simple" if location == "path" else "form") or parameter.get("allowReserved", False):
         raise WorkerError("http_parameter_serialization_unsupported")

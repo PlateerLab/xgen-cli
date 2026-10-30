@@ -138,9 +138,9 @@
 비교 실행기는 해당 저장소 담당자의 작업이다. xgen 엔진에는 시스템별 규칙을 넣지 않는다.
 
 1. **구현·로컬 검증:** 지원 밖 선택 파라미터 제외, required/path 거절, describe 제외 이유, 제외 입력 호출 전 거절.
-   [ADR-0081](../adr/0081-optional-http-parameters.md). 단독 PR로 먼저 제공한다.
-2. **다음:** OpenAPI 3 form/explode=true와 Swagger 2 multi 배열 query, scalar items 및 배열 제약 검증.
-   다른 직렬화·object items는 1번의 제외/거절 규칙을 따른다.
+   [ADR-0081](../adr/0081-optional-http-parameters.md), [PR #139](https://github.com/PlateerLab/xgen-cli/pull/139)로 main에 머지했다.
+2. **구현·로컬 검증 완료:** OpenAPI 3 form/explode=true와 Swagger 2 multi 배열 query, scalar items 및 배열 제약 검증.
+   다른 직렬화·object items는 1번의 제외/거절 규칙을 따른다. [ADR-0082](../adr/0082-array-query-parameters.md).
 3. **이후:** 연결별 반복 `--read-operation`으로 호스트가 지정한 POST 조회, JSON body 원본 schema 검증,
    지정 목록의 연결·execution profile 고정과 drift 거절. 지정하지 않은 POST는 거절한다.
 4. **이후:** run/resume의 `--bearer-env-for CONNECTION=ENV_NAME`으로 저장된 연결을 바꾸지 않고

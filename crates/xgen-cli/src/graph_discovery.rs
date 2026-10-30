@@ -298,7 +298,7 @@ pub(crate) struct DiscoveryAdapter {
 impl DiscoveryAdapter {
     pub(crate) fn binding(&self) -> InstanceBinding {
         let encoded = if self.operation == crate::http_read::READ {
-            serde_jcs::to_vec(&serde_json::json!({"snapshots":self.catalog.snapshots,"connections":self.catalog.connections,"profile":"xgen.http.read/v1"})).expect("finite host profile")
+            serde_jcs::to_vec(&serde_json::json!({"snapshots":self.catalog.snapshots,"connections":self.catalog.connections,"profile":crate::http_read::PROFILE})).expect("finite host profile")
         } else {
             serde_jcs::to_vec(&self.catalog.snapshots).expect("finite snapshot map")
         };

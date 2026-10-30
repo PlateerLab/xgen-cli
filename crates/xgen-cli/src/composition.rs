@@ -3142,7 +3142,7 @@ fn execution_profile_with_discovery(
         "material_provider":graph_discovery::PROVIDER,
         "material_recipe_domain":"xgen.cli.tool-discovery-recipe/v1",
         "host_policy_profile":"xgen.cli.host-tool-discovery/v1",
-        "http_read_profile": if connections.is_empty() { serde_json::Value::Null } else { serde_json::json!({"version":1,"get_only":true,"max_body_bytes":32768,"timeout_seconds":30,"redirects":false,"proxy":false}) },
+        "http_read_profile": if connections.is_empty() { serde_json::Value::Null } else { serde_json::json!({"profile":crate::http_read::PROFILE,"get_only":true,"max_body_bytes":32768,"timeout_seconds":30,"redirects":false,"proxy":false}) },
     });
     if connections.is_empty() {
         profile
