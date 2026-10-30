@@ -173,3 +173,4 @@
 - HTTP 확장3은 [PR #141](https://github.com/PlateerLab/xgen-cli/pull/141)로 머지했고 Fast/Linux PR 검사가 통과했다.
 - HTTP 확장4(ADR-0084, 구현·로컬 검증 완료): run/resume의 연결별 bearer env override를 별도 map으로 받으며 저장된 연결 인증을 바꾸지 않는다. 참조만 manifest/profile에 결합하고 누락·변경·값 부재/invalid에서 fallback 없이 거절한다. shipment/sensor의 다른 토큰·연결 불변·상태/모델 비노출·토큰 회전·완료 replay와 echo 차단을 loopback에서 확인했다. 서버의 사용자 인증·대리 권한·Run 접근 제어·process/state 격리는 외부 호스트 책임이며 실제 통합은 미검증이다.
 - HTTP 확장4 검증: Rust784개(4 ignored), pinned backend+컴파일 CLI Python153개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 한 Run의 연결2개/서로 다른 토큰도 올바르게 전달됐고 모든 상태 파일·모델 요청에 값이 없었다. 참조만 profile에 결합하며 override 없는 기존 binding은 유지했다. 승인 있는 쓰기는 아직 구현하지 않았다.
+- HTTP 확장4 변경 추적: [PR #142](https://github.com/PlateerLab/xgen-cli/pull/142), 구현 코드 `67d1d40`. PR의 CI 결과와 merge 상태를 정본으로 참조한다.

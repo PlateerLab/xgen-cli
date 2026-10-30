@@ -146,6 +146,6 @@
 4. **구현·로컬 검증 완료:** run/resume의 `--bearer-env-for CONNECTION=ENV_NAME`으로 저장된 연결을 바꾸지 않고
    요청별 bearer를 주입한다. 값은 manifest·Receipt·모델에 남기지 않는다. 참조 binding·resume 누락 시
    저장 token으로의 암묵적 fallback 차단을 검증했다. 서버 process/state 격리는 호출 호스트 책임이다.
-   [ADR-0084](../adr/0084-run-bearer-overrides.md).
+   [ADR-0084](../adr/0084-run-bearer-overrides.md), [PR #142](https://github.com/PlateerLab/xgen-cli/pull/142).
 5. **별도 설계, 대회 후:** 승인 있는 POST/PUT/PATCH/DELETE 쓰기·host Idempotency-Key·NonIdempotent
    Unknown의 no-retry. 1~4 완료 뒤 진행하며 이번 조회 확장에 포함하지 않는다.
