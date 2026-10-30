@@ -30,15 +30,18 @@ pub enum ToolsCommand {
         #[arg(long, required = true, num_args = 1..)]
         source: Vec<String>,
     },
-    /// Connect an imported collection to a host-approved GET-only API base URL.
+    /// Connect an imported collection to a host-approved read API base URL.
     Connect {
         #[arg(long)]
         name: String,
         #[arg(long)]
         base_url: String,
         /// Confirm that this system's GET operations are non-mutating read operations.
-        #[arg(long, required = true)]
+        #[arg(long)]
         allow_get: bool,
+        /// Declare an exact `OpenAPI` operationId to be a non-mutating read.
+        #[arg(long)]
+        read_operation: Vec<String>,
         /// Read the bearer token from a local environment variable at execution time.
         #[arg(long)]
         bearer_env: Option<String>,
@@ -105,12 +108,20 @@ pub fn run(command: ToolsCommand) -> ExitCode {
             name,
             base_url,
             allow_get,
+            read_operation,
             bearer_env,
             bearer,
             token_stdin,
         } => {
-            if allow_get {
-                crate::http_read::connect(&name, base_url, bearer_env, token_stdin, bearer)
+            if allow_get || !read_operation.is_empty() {
+                crate::http_read::connect(
+                    &name,
+                    base_url,
+                    (allow_get, read_operation),
+                    bearer_env,
+                    token_stdin,
+                    bearer,
+                )
             } else {
                 Err("http_get_consent_required")
             }
@@ -217,6 +228,21 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
     crate::run_layout::ensure_private_state_root(&state_root).map_err(|_| "invalid_state_home")?;
     let root = state_root.join("tool-collections");
     value["root"] = json!(root.to_str().ok_or("invalid_state_home")?);
+    if matches!(
+        value["operation"].as_str(),
+        Some("describe" | "describe_view")
+    ) {
+        let snapshots = crate::graph_discovery::DiscoveryCatalog::discover()
+            .map_err(|()| "http_catalog_unavailable")?;
+        let connections =
+            crate::http_read::discover(&snapshots).map_err(|()| "http_connection_unavailable")?;
+        if let Some(connection) = value["name"]
+            .as_str()
+            .and_then(|name| connections.get(name))
+        {
+            value["http_policy"] = connection.policy();
+        }
+    }
     Ok(value)
 }
 

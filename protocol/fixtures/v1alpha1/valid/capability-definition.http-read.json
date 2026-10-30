@@ -3,14 +3,14 @@
   "kind": "CapabilityDefinition",
   "metadata": {
     "id": "xgen.http/read",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "displayName": "Read a connected HTTP API",
     "labels": {
       "xgeny.io/pack": "core-os"
     }
   },
   "spec": {
-    "summary": "Execute one host-approved GET operation from an exact retained OpenAPI contract and connected collection. Credentials and target origin are host-owned. Use the http_read contract digest from describe; results require successful HTTP status and response schema verification.",
+    "summary": "Execute one host-approved GET or explicitly host-selected POST read operation from an exact retained OpenAPI contract and connected collection. Credentials and target origin are host-owned. Use the http_read contract digest from describe; results require successful HTTP status and response schema verification.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -50,7 +50,8 @@
             }
           },
           "additionalProperties": false
-        }
+        },
+        "body": {}
       },
       "additionalProperties": false
     },
@@ -128,7 +129,8 @@
                 }
               },
               "additionalProperties": false
-            }
+            },
+            "body": {}
           },
           "additionalProperties": false
         },
@@ -142,7 +144,10 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "method": {
-          "const": "GET"
+          "enum": [
+            "GET",
+            "POST"
+          ]
         },
         "target": {
           "type": "string",

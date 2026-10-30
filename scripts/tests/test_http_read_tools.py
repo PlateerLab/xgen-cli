@@ -197,6 +197,23 @@ class ArrayQueryContractTests(unittest.TestCase):
             self.assertEqual(result["contract"]["excluded_parameters"][0]["reason"],"http_parameter_serialization_unsupported")
 
 
+class PostReadContractTests(unittest.TestCase):
+    def test_only_selected_post_has_original_json_body_contract(self):
+        for source,path in ((asset_spec(),"/assets"),(held_out_spec("shipments"),"/shipments/{tracking}")):
+            operation=source["paths"][path].pop("get")
+            source["paths"][path]["post"]=operation
+            operation["requestBody"]={"required":True,"content":{"application/json":{"schema":{"type":"object","required":["limit"],"properties":{"limit":{"type":"integer","minimum":1}},"additionalProperties":False}}}}
+            artifact={"metadata":{"xgen_http_sources":{"fixture":source}}}
+            tool={"metadata":{"source_url":"fixture","path":path,"method":"post"}}
+            self.assertFalse(WORKER.http_read_contract(artifact,tool)["supported"])
+            policy={"allow_get":False,"read_operations":[operation["operationId"]]}
+            result=WORKER.http_read_contract(artifact,tool,policy)
+            self.assertTrue(result["supported"],result)
+            self.assertEqual(result["contract"]["request_body"]["schema"],operation["requestBody"]["content"]["application/json"]["schema"])
+            operation["requestBody"]["content"]={"application/xml":{"schema":{}}}
+            self.assertFalse(WORKER.http_read_contract(artifact,tool,policy)["supported"])
+
+
 @unittest.skipUnless(importlib.util.find_spec("graph_tool_call"),"run with pinned graph-tool-call environment")
 class ContractTests(unittest.TestCase):
     setUp = base.WorkerTests.setUp
@@ -251,6 +268,7 @@ class HttpCliTests(unittest.TestCase):
         self.secret=secrets.token_hex(24)
         self.env=dict(os.environ,XGEN_STATE_HOME=str(self.state),XGEN_FIXTURE_BEARER=self.secret)
         self.env.pop("XGEN_OPENAI_API_KEY",None)
+        self.bodies=[]
         self.calls=[]
         self.requests=[]
         self.response={"tracking":"A42","delivered":True}
@@ -262,6 +280,9 @@ class HttpCliTests(unittest.TestCase):
         test=self
         class ApiHandler(http.server.BaseHTTPRequestHandler):
             def log_message(self,*args): pass
+            def do_POST(self):
+                test.bodies.append(json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))) or b"null"))
+                self.do_GET()
             def do_GET(self):
                 test.calls.append((self.path,self.headers.get("Authorization")))
                 test.accepted.set()
@@ -316,7 +337,7 @@ class HttpCliTests(unittest.TestCase):
 
     @staticmethod
     def plan(key,capability,args):
-        return {"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Read connected API","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"2.0.0" if capability=="xgen.tools/describe" else "1.0.0"},"arguments":args}]}
+        return {"formatVersion":1,"kind":"plan","summary":"","steps":[{"key":key,"objective":"Read connected API","dependsOn":[],"capability":{"capabilityId":capability,"contractVersion":"2.0.0" if capability in ("xgen.tools/describe", "xgen.http/read") else "1.0.0"},"arguments":args}]}
 
     @staticmethod
     def context(payload):
@@ -438,6 +459,7 @@ class HttpCliTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("XGEN_HTTP_V1_TEST_BINARY"),"previous HTTP profile binary opt-in")
     def test_previous_http_profile_does_not_resume_under_new_wire_rules(self):
         arguments=self.install();self.proposals=[self.plan("read","xgen.http/read",arguments)]
+        self.proposals[0]["steps"][0]["capability"]["contractVersion"]="1.0.0"
         paused=self.run_cli(allow=False,binary=os.environ["XGEN_HTTP_V1_TEST_BINARY"])
         self.assertEqual(paused.returncode,10,paused.stderr.decode())
         run_id=self.manifest()["record"]["runId"]
@@ -451,6 +473,7 @@ class HttpCliTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("XGEN_HTTP_V1_TEST_BINARY"),"previous HTTP profile binary opt-in")
     def test_completed_previous_http_profile_replays_without_network(self):
         arguments=self.install();self.proposals=[self.plan("read","xgen.http/read",arguments)]
+        self.proposals[0]["steps"][0]["capability"]["contractVersion"]="1.0.0"
         completed=self.run_cli(binary=os.environ["XGEN_HTTP_V1_TEST_BINARY"])
         self.assertEqual(completed.returncode,0,completed.stderr.decode())
         calls=len(self.calls);requests=len(self.requests)
@@ -458,6 +481,83 @@ class HttpCliTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr.decode())
         self.assertEqual(len(self.calls),calls)
         self.assertEqual(len(self.requests),requests)
+
+    def install_post(self, name="shipments", approve=True):
+        source=held_out_spec(name)
+        if name=="shipments":
+            item=source["paths"]["/shipments/{tracking}"]
+        else:
+            source={"openapi":"3.1.0","info":{"title":"Measurements","version":"1"},"paths":{
+                "/sensors/{sensorId}":{"get":{"operationId":"readSensor","parameters":[{"name":"sensorId","in":"path","required":True,"schema":{"type":"integer","minimum":1}}],
+                "responses":{"200":{"description":"Values","content":{"application/json":{"schema":{"type":"object","required":["values"],"properties":{"values":{"type":"array","items":{"type":"number"}}},"additionalProperties":False}}}}}}}}}
+            item=source["paths"]["/sensors/{sensorId}"]
+        operation=item.pop("get")
+        operation["requestBody"]={"required":True,"content":{"application/json":{"schema":{
+            "type":"object","required":["limit"],"properties":{"limit":{"type":"integer","minimum":1,"maximum":5}},"additionalProperties":False}}}}
+        item["post"]=operation
+        target=operation["operationId"]
+        path=self.directory/(name+".json");path.write_text(json.dumps(source))
+        self.cli("tools","import","--name",name,"--source",str(path))
+        args=["tools","connect","--name",name,"--base-url",f"http://127.0.0.1:{self.api.server_port}","--allow-get"]
+        if name=="shipments": args += ["--bearer-env","XGEN_FIXTURE_BEARER"]
+        if approve: args += ["--read-operation",target]
+        self.cli(*args)
+        result=json.loads(self.cli("tools","describe","--name",name,target).stdout)
+        return {"collection":name,"tool":target,"contractDigest":result["http_read"].get("contract_digest","0"*64),
+            "parameters":{"path":{"tracking":"A42"} if name=="shipments" else {"sensorId":7},"query":{}},"body":{"limit":2}},result
+
+    def test_host_selected_post_body_and_unapproved_operation(self):
+        for name in ("shipments","sensors"):
+            with self.subTest(name=name):
+                args,result=self.install_post(name)
+                self.assertTrue(result["http_read"]["supported"],result)
+                self.assertEqual(result["http_read"]["contract"]["method"],"POST")
+                view=json.loads(self.cli("tools","describe","--name",name,args["tool"],"--model-view").stdout)
+                self.assertTrue(view["http_read"]["request_body"]["required"])
+                self.response={"tracking":"A42","delivered":True} if name=="shipments" else {"values":[1.5]}
+                self.requests.clear();self.calls.clear();self.bodies.clear()
+                self.proposals=[self.plan("post","xgen.http/read",args)]
+                completed=self.run_cli()
+                self.assertEqual(completed.returncode,0,completed.stderr.decode())
+                self.assertEqual(self.bodies,[{"limit":2}])
+                for body in ({"limit":0},{"limit":2,"extra":True},None):
+                    bad=copy.deepcopy(args);bad["body"]=body
+                    self.requests.clear();self.calls.clear();self.bodies.clear()
+                    self.proposals=[self.plan("bad","xgen.http/read",bad)]
+                    self.run_cli()
+                    self.assertEqual(self.calls,[])
+        args,result=self.install_post("unapproved",approve=False)
+        self.assertFalse(result["http_read"]["supported"])
+        self.requests.clear();self.calls.clear();self.proposals=[self.plan("bad","xgen.http/read",args)]
+        self.run_cli();self.assertEqual(self.calls,[])
+
+    def test_connection_rejects_unknown_and_mutating_operation_selections(self):
+        source=asset_spec()
+        source["paths"]["/assets"]["delete"]={"operationId":"removeAssets","responses":{"204":{"description":"Deleted"}}}
+        path=self.directory/"selection.json";path.write_text(json.dumps(source))
+        self.cli("tools","import","--name","selection","--source",str(path))
+        for selected in ("missingOperation","removeAssets"):
+            result=self.cli("tools","connect","--name","selection","--base-url",f"http://127.0.0.1:{self.api.server_port}","--read-operation",selected,check=False)
+            self.assertNotEqual(result.returncode,0)
+            self.assertFalse((self.state/"http-connections"/"selection.json").exists())
+        self.cli("tools","connect","--name","selection","--base-url",f"http://127.0.0.1:{self.api.server_port}","--read-operation","listAssets")
+        saved=json.loads((self.state/"http-connections"/"selection.json").read_text())
+        self.assertFalse(saved["allow_get"])
+        self.assertEqual(saved["read_operations"],["listAssets"])
+
+    def test_selected_post_operation_drift_rejects_resume(self):
+        args,_=self.install_post()
+        self.proposals=[self.plan("post","xgen.http/read",args)]
+        paused=self.run_cli(allow=False)
+        self.assertEqual(paused.returncode,10,paused.stderr.decode())
+        path=self.state/"http-connections"/"shipments.json"
+        connection=json.loads(path.read_text());connection["read_operations"]=[]
+        path.write_text(json.dumps(connection));path.chmod(0o600)
+        result=self.cli("resume",self.manifest()["record"]["runId"],"--workspace",str(self.workspace),"--allow-dir",".",
+            "--base-url",f"http://127.0.0.1:{self.model.server_port}/v1","--allow-read",check=False)
+        self.assertEqual(result.returncode,64,result.stderr.decode())
+        self.assertIn(b"configuration=http_connections",result.stderr)
+        self.assertEqual(self.calls,[]);self.assertEqual(len(self.requests),1)
 
     def test_http_failures_do_not_publish_unverified_body_or_follow_redirect(self):
         arguments=self.install()

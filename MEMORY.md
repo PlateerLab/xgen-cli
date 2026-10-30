@@ -165,3 +165,7 @@
 
 - HTTP 확장1은 [PR #139](https://github.com/PlateerLab/xgen-cli/pull/139)로 main `0c29e15`에 머지했다. [Fast/Linux PR 검사](https://github.com/PlateerLab/xgen-cli/actions/runs/41084874587) 통과.
 - HTTP 확장2(ADR-0082, 구현·로컬 검증 완료): query 배열은 OpenAPI3 form/explode=true와 Swagger2 multi만 지원한다. scalar items와 배열 제약을 전체 schema로 검증하고 반복 query pair를 host에서 인코딩한다. 다른 직렬화·object items는 선택 제외/required 거절을 유지한다. 실행 profile은 한 상수 `xgen.http.read/v2`로 binding/profile에 고정한다. 이전 바이너리의 미완료 HTTP Run은 새 바이너리 resume에서 execution_profile drift로 요청0회 거절, 완료 Run은 네트워크 없이 재생됨을 실제 loopback fixture로 확인했다. 배열 wire·잘못된 값 0회 요청도 shipment/sensor에서 확인했으며 Rust781개(4 ignored)·pinned backend/컴파일 CLI 전체144개 검사(7 skipped)·Clippy·fmt·문서·workflow 검사를 통과했다.
+
+- HTTP 확장2는 [PR #140](https://github.com/PlateerLab/xgen-cli/pull/140)로 main `4fbbcc9`에 머지했고 Fast/Linux 검사가 통과했다.
+- HTTP 확장3(ADR-0083, 구현·로컬 검증 완료): host operationId 목록으로 GET/POST 조회를 지정하고 POST JSON 본문을 원본 schema로 검증한다. Capability2.0.0/profilev3로 고정하며 목록 변경은 기존 http_connections drift로 거절한다. shipment/measurement loopback POST·잘못된 본문0회 요청·미지정POST0회·drift를 확인했다. 실제 외부 서비스 통합과 모델 품질은 아직 미검증이다.
+- HTTP 확장3 검증: Rust782개(4 ignored), Python148개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 전체 Rust 검사 도중 별도 빌드가 xgen 실행 파일을 바꿔 기존 executable drift 검사1건이 거절됐고, 빌드와 분리해 다시 돌린 전체 검사는 통과했다. 독립 diff 검토의 가설은 원본 계약·승인 경계·실행 전 body 검증과 대조했으며 추가 재현된 결함은 없었다.

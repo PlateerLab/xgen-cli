@@ -319,12 +319,26 @@ def dispatch(request):
     envelope = load(root, name)
     if request.get("expected_digest") is not None and request["expected_digest"] != envelope["artifact_digest"]:
         raise WorkerError("collection_snapshot_changed")
+    if operation == "validate_read_operations":
+        sources = envelope["artifact"].get("metadata", {}).get("xgen_http_sources", {})
+        for selected in request["read_operations"]:
+            matches = []
+            for source in sources.values():
+                for path_item in source.get("paths", {}).values():
+                    path_item = dereference(path_item, source, recursive=False)
+                    for method in ("get", "post", "put", "patch", "delete", "head", "options", "trace"):
+                        value = path_item.get(method, {})
+                        if isinstance(value, dict) and value.get("operationId") == selected:
+                            matches.append(method)
+            if len(matches) != 1 or matches[0] not in ("get", "post"):
+                raise WorkerError("http_read_operation_invalid")
+        return {"ok": True}
     graph = graph_from_artifact(envelope["artifact"])
     if operation in ("describe", "describe_view", "execution_contract"):
         tool = graph.tools.get(request["tool"])
         if tool is None:
             raise WorkerError("tool_not_found")
-        contract = http_read_contract(envelope["artifact"], tool.to_dict())
+        contract = http_read_contract(envelope["artifact"], tool.to_dict(), request.get("http_policy"))
         if operation == "execution_contract":
             return {"ok": True, **summarize(envelope), "tool_name": tool.name,
                     "http_read": contract, "contract_kind": "host_http_contract"}
@@ -449,6 +463,9 @@ def describe_view(envelope, tool, http, offset):
                           "bearer_required": contract["bearer_required"],
                           "response_schema_digests": {status: digest(schema) for status, schema in list(contract["responses"].items())[:32] if len(status) <= 3},
                           "response_schema_count": len(contract["responses"]), "response_schemas_complete": False})
+    if http["supported"] and "request_body" in http["contract"]:
+        body = http["contract"]["request_body"]
+        http_view["request_body"] = {"required": body["required"], **schema_view(body["schema"])}
     if http["supported"] and http["contract"].get("excluded_parameters"):
         excluded = http["contract"]["excluded_parameters"]
         excluded_rows = []
@@ -519,7 +536,7 @@ def http_read_parameter(parameter, source):
             "required": bool(parameter.get("required")) or location == "path", "schema": schema}
 
 
-def http_read_contract(artifact, tool):
+def http_read_contract(artifact, tool, policy=None):
     # The normalized graph is discovery data. Invoke only against retained source schemas.
     metadata = tool.get("metadata", {})
     source = artifact.get("metadata", {}).get("xgen_http_sources", {}).get(metadata.get("source_url"))
@@ -527,17 +544,35 @@ def http_read_contract(artifact, tool):
         if not isinstance(source, dict):
             raise WorkerError("http_original_source_unavailable")
         method, path = metadata.get("method"), metadata.get("path")
-        if method != "get":
+        policy = policy or {"allow_get": True, "read_operations": []}
+        if method not in ("get", "post"):
             raise WorkerError("http_method_not_read_approved")
         item = dereference(source["paths"][path], source, recursive=False)
         operation = item[method]
         if not isinstance(operation, dict):
             raise WorkerError("http_original_contract_invalid")
+        operation_id = operation.get("operationId")
+        selected = operation_id in policy.get("read_operations", [])
+        if not ((method == "get" and policy.get("allow_get")) or selected):
+            raise WorkerError("http_method_not_read_approved")
+        body = None
+        if method == "post" and "requestBody" in operation:
+            body_definition = dereference(operation["requestBody"], source)
+            if not isinstance(body_definition, dict) or type(body_definition.get("required", False)) is not bool:
+                raise WorkerError("http_original_contract_invalid")
+            media = body_definition.get("content", {})
+            if set(media) != {"application/json"} or not isinstance(media["application/json"], dict):
+                raise WorkerError("http_request_media_unsupported")
+            schema = media["application/json"].get("schema")
+            if not isinstance(schema, (dict, bool)):
+                raise WorkerError("http_request_schema_missing")
+            check_http_schema(schema)
+            body = {"required": body_definition.get("required", False), "schema": schema}
         parameter_groups = [item.get("parameters", []), operation.get("parameters", [])]
         if any(not isinstance(group, list) or any(not isinstance(p, dict) for p in group)
                for group in parameter_groups):
             raise WorkerError("http_original_contract_invalid")
-        if operation.get("requestBody") or any(p.get("in") == "body" for p in parameter_groups[1]):
+        if (method == "get" and operation.get("requestBody")) or any(p.get("in") == "body" for group in parameter_groups for p in group):
             raise WorkerError("http_get_body_unsupported")
         # Operation overrides are allowed across groups; duplicates within one group are invalid.
         merged = {}
@@ -597,7 +632,9 @@ def http_read_contract(artifact, tool):
                     raise WorkerError("http_security_unsupported")
         for schema in responses.values():
             check_http_schema(schema)
-        contract = {"format_version":1,"method":"GET","path":path,"base_path":source.get("basePath", ""),"parameters":included,"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
+        contract = {"format_version":1,"method":method.upper(),"path":path,"base_path":source.get("basePath", ""),"parameters":included,"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
+        if body is not None:
+            contract["request_body"] = body
         if excluded:
             contract["excluded_parameters"] = excluded
         if len(canonical(contract)) > 8 * 1024 * 1024:
