@@ -52,7 +52,12 @@
 
 - 연속 resize stress(`--rapid-resize`)에서는 축소 직후 확대하면 inline pane의 이전 테두리
   한 줄이 남는 경우를 발견했다. viewer가 닫힌 draft·실행 중 queue 두 상태에서 재현했다.
+  변경 전 main `ad2a898`을 별도 archive에서 빌드한 바이너리도 같은 40×12 → 100×30 stress에서 실패했다.
   이번 결과 접기와 별도로 기존 cursor 기반 pane 위치 복구를 더 검토해야 한다.
   origin clamp·오른쪽 여백·absolute row 출력 가설은 해결하지 못해 채택하지 않았다.
 - PR smoke는 resize 후 완성된 frame·caret이 250ms 유지되는 정상 상호작용을 검사한다.
   rapid stress는 알려진 실패를 재현하는 선택 실행이며 통과를 주장하지 않는다.
+
+- 최종 로컬 회귀는 Rust 773 passed·4 ignored(46 suites), Clippy·fmt 통과다.
+- 변경 추적: [PR #135](https://github.com/PlateerLab/xgen-cli/pull/135), 코드 `45c4c0b`,
+  [5개 플랫폼을 포함한 전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41055760380).
