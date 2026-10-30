@@ -1,0 +1,92 @@
+{
+  "registration": {
+    "source_commit": "c8bacaedc83e6a33d52d46e295c5e11ce0267d36",
+    "cases_sha256": "83ae1d36460b5554aaccd3f677dafa47da7f1de7d6327bf37442aa5154cb7be1",
+    "oracle_sha256": "9b9e044befef1f432c94abf18882d89d54b264497f38b8fcd86cfbaf069d5f02",
+    "runner_sha256": "ca3894897968f7bc45aa8fbcf6581a0eb77994590293b5f0d23c7d540ad130fa",
+    "preflight_sha256": "5e4d1455be7895d607304ebf82e4466731bb11eb0a95808ffc91260105a1e01c",
+    "binary_sha256": "ed29b6d91a2cf4dddfb71e51a06daa618e178054fc78fbbf8851dbaa0559a5d2",
+    "attempts": 2,
+    "timeout_seconds": 240,
+    "task_count": 8,
+    "status": "blocked_model_configuration",
+    "live_model_calls": 0,
+    "check_codes": [
+      "authentication_rejected"
+    ]
+  },
+  "preflight": [
+    {
+      "case": "pagination",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "config-precedence",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "csv-export",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "cli-delimiter",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "multi-file-rename",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "safe-relative-path",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "docs-cli-audit",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    },
+    {
+      "case": "git-worktree-discovery",
+      "initial_tests_failed": true,
+      "reference_visible_passed": true,
+      "reference_build_passed": true,
+      "reference_hidden_passed": true,
+      "protected_files_preserved": true,
+      "pass": true
+    }
+  ]
+}

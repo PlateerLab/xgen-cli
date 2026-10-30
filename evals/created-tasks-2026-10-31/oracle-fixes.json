@@ -1,0 +1,28 @@
+{
+  "pagination": {
+    "pages.py": "def page(items, cursor, limit):\n    if limit <= 0 or cursor < 0:\n        raise ValueError(\"invalid page\")\n    end = cursor + limit\n    return {\"items\": items[cursor:end], \"next\": end if end < len(items) else None}\n"
+  },
+  "config-precedence": {
+    "source.mjs": "export function resolve(cli, env, defaults) {\n const result={};\n for (const key of Object.keys(defaults)) result[key]=cli[key] ?? env[key] ?? defaults[key];\n return result;\n}\n"
+  },
+  "csv-export": {
+    "exporter.py": "import csv\nimport io\ndef export(rows):\n out=io.StringIO(newline=\"\")\n csv.writer(out, lineterminator=\"\\n\").writerows(rows)\n return out.getvalue()\n"
+  },
+  "cli-delimiter": {
+    "source.mjs": "export function parse(args) { const out={force:false,files:[]}; let literal=false; for(const arg of args) {if(!literal && arg==='--') literal=true; else if(!literal && arg==='--force') out.force=true; else out.files.push(arg);} return out;}\n"
+  },
+  "multi-file-rename": {
+    "model.py": "from dataclasses import dataclass\n@dataclass\nclass Product:\n name: str\n available_count: int\n",
+    "report.py": "def as_dict(product):\n return {\"name\":product.name,\"available_count\":product.available_count}\n",
+    "app.py": "from model import Product\nfrom report import as_dict\ndef summarize(name,count):\n return as_dict(Product(name=name,available_count=count))\n"
+  },
+  "safe-relative-path": {
+    "paths.py": "import posixpath\ndef normalize(value):\n if value.startswith(\"/\"):\n  raise ValueError(\"absolute\")\n result=posixpath.normpath(value)\n if result==\"..\" or result.startswith(\"../\"):\n  raise ValueError(\"escape\")\n return result\n"
+  },
+  "docs-cli-audit": {
+    "README.md": "# Export tool\n\nRun `python3 cli.py --output out.csv`. Use `--overwrite` to overwrite.\n"
+  },
+  "git-worktree-discovery": {
+    "discover.py": "from pathlib import Path\nimport os\ndef find_repositories(root):\n found=[]\n for base, dirs, files in os.walk(root):\n  marker=Path(base)/\".git\"\n  if marker.is_dir() or marker.is_file():\n   found.append(str(Path(base).relative_to(root))); dirs.clear()\n return sorted(found)\n"
+  }
+}
