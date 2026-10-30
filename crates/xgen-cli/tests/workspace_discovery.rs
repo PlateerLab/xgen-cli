@@ -563,6 +563,86 @@ fn process_execution_count(marker: &Path) -> usize {
 }
 
 #[test]
+fn search_filters_generated_files_but_preserves_explicit_reads_and_offline_replay() {
+    // Held-out Rust layout: globbed build files, a negated exception, and an exact ignored read.
+    let fixture = tempdir().unwrap();
+    let state_root = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir_all(workspace.join("build")).unwrap();
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(workspace.join(".ignore"), "/build/*\n!/build/keep.rs\n").unwrap();
+    fs::write(workspace.join("build/keep.rs"), NEEDLE).unwrap();
+    fs::write(
+        workspace.join("build/generated.rs"),
+        format!("{NEEDLE}\n").repeat(150),
+    )
+    .unwrap();
+    fs::write(workspace.join("src/lib.rs"), NEEDLE).unwrap();
+    let server = SequentialServer::spawn_responses(vec![
+        plan_response(
+            "search",
+            "Find source references",
+            "xgeny.fs/search-text",
+            &json!({"path": ".", "query": NEEDLE}),
+        ),
+        plan_response(
+            "read",
+            "Read an explicitly requested generated file",
+            "xgeny.fs/read-text",
+            &json!({"path": "build/generated.rs"}),
+        ),
+        completion_response(),
+    ]);
+    let output = bounded_output(xgen(&state_root).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-read",
+        "--allow-remote-model-egress",
+        "Search source references, then read the generated file.",
+    ]))
+    .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), COMPLETION);
+    let run_id = extract_run_id(&stderr(&output));
+    let requests: Vec<_> = (0..3)
+        .map(|_| server.requests.recv_timeout(TEST_TIMEOUT).unwrap())
+        .collect();
+    server.handle.join().unwrap();
+    let after_search = planning_context(&requests[1]);
+    let result = tool_output(&after_search, "xgeny.fs/search-text");
+    let paths: Vec<_> = result["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, ["build/keep.rs", "src/lib.rs"]);
+    assert_eq!(result["truncated"], false);
+    let after_read = planning_context(&requests[2]);
+    assert!(
+        tool_output(&after_read, "xgeny.fs/read-text")["content"]
+            .as_str()
+            .unwrap()
+            .contains(NEEDLE)
+    );
+
+    // Completed replay consumes the recorded observation, never current ignore rules.
+    fs::write(workspace.join(".ignore"), "**\n").unwrap();
+    let replay = bounded_output(xgen(&state_root).args(["resume", &run_id])).unwrap();
+    assert_eq!(replay.status.code(), Some(0), "{}", stderr(&replay));
+    assert_eq!(replay.stdout, output.stdout);
+}
+
+#[test]
 fn dynamic_search_material_survives_process_pause_and_resume() {
     let fixture = tempdir().expect("test directory should exist");
     let state_root = fixture.path().join("state");
@@ -1580,7 +1660,7 @@ fn plan_response(key: &str, objective: &str, capability_id: &str, arguments: &Va
             "capability": {
                 "capabilityId": capability_id,
                 "contractVersion": match capability_id {
-                    "xgen.tools/describe" | "xgeny.fs/read-text-lines" | "xgeny.fs/apply-patch" => "2.0.0",
+                    "xgen.tools/describe" | "xgeny.fs/read-text-lines" | "xgeny.fs/apply-patch" | "xgeny.fs/search-text" => "2.0.0",
                     _ => "1.0.0",
                 }
             },

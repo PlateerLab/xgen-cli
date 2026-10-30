@@ -61,7 +61,7 @@ pub const STAT_OPERATION_REF: &str = "stat";
 /// Exact public Capability identifier for recursive literal text search.
 pub const SEARCH_TEXT_CAPABILITY_ID: &str = "xgeny.fs/search-text";
 /// Exact immutable search-text contract version.
-pub const SEARCH_TEXT_CONTRACT_VERSION: &str = "1.0.0";
+pub const SEARCH_TEXT_CONTRACT_VERSION: &str = "2.0.0";
 /// Exact operation name used in the root-bound search Instance.
 pub const SEARCH_TEXT_OPERATION_REF: &str = "searchText";
 /// Exact public Capability identifier for one bounded line range of a UTF-8 text file.

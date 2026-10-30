@@ -383,6 +383,7 @@ mod tests {
 
     fn capability(id: &str) -> CapabilityRef {
         let contract_version = match id {
+            SEARCH_TEXT_CAPABILITY_ID => SEARCH_TEXT_CONTRACT_VERSION,
             READ_TEXT_LINES_CAPABILITY_ID => READ_TEXT_LINES_CONTRACT_VERSION,
             APPLY_PATCH_CAPABILITY_ID => APPLY_PATCH_CONTRACT_VERSION,
             _ => "1.0.0",
@@ -449,12 +450,16 @@ mod tests {
                 !catalog.authorizes_material(&capability(SEARCH_TEXT_CAPABILITY_ID), &arguments,)
             );
         }
-        let mut wrong = capability(SEARCH_TEXT_CAPABILITY_ID);
-        wrong.contract_version = "2.0.0".to_owned();
-        assert!(
-            !catalog
-                .authorizes_material(&wrong, &json!({"path": "workspace:fixture", "query": "ok"}),)
-        );
+        for version in ["1.0.0", "3.0.0"] {
+            let mut wrong = capability(SEARCH_TEXT_CAPABILITY_ID);
+            wrong.contract_version = version.to_owned();
+            assert!(
+                !catalog.authorizes_material(
+                    &wrong,
+                    &json!({"path": "workspace:fixture", "query": "ok"}),
+                )
+            );
+        }
     }
 
     #[test]

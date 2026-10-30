@@ -3,14 +3,14 @@
   "kind": "CapabilityDefinition",
   "metadata": {
     "id": "xgeny.fs/search-text",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "displayName": "Search workspace text",
     "labels": {
       "xgeny.io/pack": "core-os"
     }
   },
   "spec": {
-    "summary": "Search recursively for one literal UTF-8 query under a workspace directory without following symbolic links.",
+    "summary": "Search recursively for one literal UTF-8 query under a workspace directory, respecting workspace-local .gitignore and .ignore files without following symbolic links. Ignore rules filter results; excluded files remain accessible through read-text or read-text-lines.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
