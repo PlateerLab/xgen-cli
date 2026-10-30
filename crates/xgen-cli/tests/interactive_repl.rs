@@ -1258,3 +1258,42 @@ fn extract_run_id(stderr: &str) -> String {
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
+
+#[cfg(unix)]
+#[test]
+#[allow(clippy::unnecessary_debug_formatting)]
+fn state_permission_failure_is_actionable_in_the_repl() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let fixture = tempdir().unwrap();
+    let root = fixture.path().join("state");
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o775)).unwrap();
+    let output = bounded_scripted_output(
+        Command::new(env!("CARGO_BIN_EXE_xgen"))
+            .current_dir(fixture.path())
+            .env("XGEN_STATE_HOME", &root)
+            .env("XGEN_CONFIG_HOME", fixture.path().join("config"))
+            .env("XGEN_OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+            .env("XGEN_OPENAI_MODEL", MODEL)
+            .env("XGEN_OPENAI_TOKENIZER", TOKENIZER)
+            .env_remove("XGEN_OPENAI_API_KEY"),
+        b"Inspect fixture.\ny\n/exit\n",
+    )
+    .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        text.contains("error: state_directory_permissions"),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!("state_directory={root:?}")),
+        "{text}"
+    );
+    assert!(text.contains("permissions=0775"));
+    assert!(text.contains("chmod go-rwx -- PATH"));
+    assert!(!root.join("runs").exists());
+    assert_eq!(
+        fs::metadata(root).unwrap().permissions().mode() & 0o777,
+        0o775
+    );
+}

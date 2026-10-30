@@ -446,6 +446,7 @@ fn usage_command(args: &UsageArgs) -> ExitCode {
         }
         Err(error) => {
             eprintln!("XGEN_ERROR code={}", error.code());
+            print_state_directory_details(&error);
             ExitCode::from(error.exit_code())
         }
     }
@@ -2133,6 +2134,14 @@ fn prompt_model(models: &[String]) -> Result<String, ModelCliError> {
     Ok(models[selected - 1].clone())
 }
 
+fn print_state_directory_details(error: &PublicRunError) {
+    if let Some(details) = error.state_directory_details() {
+        for line in details.lines() {
+            eprintln!("  {line}");
+        }
+    }
+}
+
 fn present_model_command_error(command: &str, error: ModelCliError) -> ExitCode {
     eprintln!("XGEN model {command}: FAIL");
     eprintln!("  reason={}", error.code());
@@ -2274,6 +2283,7 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
         }
         Err(error) => {
             eprintln!("XGEN_ERROR code={}", error.code());
+            print_state_directory_details(&error);
             if let Some((field, items, hint)) = error.configuration_details() {
                 eprintln!("  configuration={field}");
                 if !items.is_empty() {

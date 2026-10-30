@@ -196,7 +196,8 @@ recovery 상태를 반복 반환한다. Effect `Started` 뒤 결과가 없는 �
 | `75` | 다른 process가 Run lease 보유 |
 
 stdout은 성공 summary 전용이다. 상태와 fixed reason code는 stderr에만 출력하며 내부 error chain,
-endpoint, path와 provider response body를 출력하지 않는다. 새 Run ID는 OS random source로 만들고
+endpoint, path와 provider response body를 출력하지 않는다. 상태 폴더 권한 거절의 명시적 로컬 복구 진단은
+[ADR-0080](0080-state-directory-permission-diagnostics.md)에서 추가했다. 새 Run ID는 OS random source로 만들고
 manifest, DB와 `RunCreated`를 durable commit한 뒤 외부 호출 전에 `XGEN_STARTED`로 알린다.
 
 ## 검증 기준

@@ -655,6 +655,7 @@ pub enum PublicRunError {
         field: &'static str,
         changed_items: Vec<String>,
     },
+    StateDirectoryPermissions(crate::StateDirectoryPermissions),
     Busy,
     Integrity,
     Internal,
@@ -724,8 +725,7 @@ fn local_model_call_recovery(
     expected_head: Option<&str>,
 ) -> Result<ModelCallRecoveryReport, PublicRunError> {
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout =
-        RunLayout::existing(&state_root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let layout = RunLayout::existing(&state_root, run_id).map_err(map_layout_existing)?;
     let lease = acquire_lease(&layout, run_id)?;
     let manifest = layout
         .read_manifest()
@@ -807,6 +807,7 @@ impl PublicRunError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::Configuration | Self::ConfigurationMismatch { .. } => "configuration_mismatch",
+            Self::StateDirectoryPermissions(_) => "state_directory_permissions",
             Self::Busy => "run_busy",
             Self::Integrity => "run_integrity_failure",
             Self::Internal => "internal_safety_failure",
@@ -816,9 +817,20 @@ impl PublicRunError {
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::Configuration | Self::ConfigurationMismatch { .. } => 64,
+            Self::Configuration
+            | Self::ConfigurationMismatch { .. }
+            | Self::StateDirectoryPermissions(_) => 64,
             Self::Busy => 75,
             Self::Integrity | Self::Internal => 70,
+        }
+    }
+
+    /// Explicit local diagnostics; quoted paths escape terminal controls and stay out of Debug.
+    #[must_use]
+    pub fn state_directory_details(&self) -> Option<String> {
+        match self {
+            Self::StateDirectoryPermissions(details) => Some(details.terminal_details()),
+            _ => None,
         }
     }
 
@@ -1241,8 +1253,7 @@ where
 {
     validate_max_ticks(request.max_ticks)?;
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout = RunLayout::existing(&state_root, &request.run_id)
-        .map_err(|_| PublicRunError::Configuration)?;
+    let layout = RunLayout::existing(&state_root, &request.run_id).map_err(map_layout_existing)?;
     let lease = acquire_lease(&layout, &request.run_id)?;
     let manifest = layout
         .read_manifest()
@@ -2318,8 +2329,20 @@ fn acquire_lease(layout: &RunLayout, run_id: &str) -> Result<LocalRunLease, Publ
     })
 }
 
+pub(crate) fn map_layout_existing(error: crate::run_layout::RunLayoutError) -> PublicRunError {
+    match error {
+        crate::run_layout::RunLayoutError::Permissions(details) => {
+            PublicRunError::StateDirectoryPermissions(details)
+        }
+        _ => PublicRunError::Configuration,
+    }
+}
+
 fn map_layout_create(error: crate::run_layout::RunLayoutError) -> PublicRunError {
     match error {
+        crate::run_layout::RunLayoutError::Permissions(details) => {
+            PublicRunError::StateDirectoryPermissions(details)
+        }
         crate::run_layout::RunLayoutError::InvalidRunId => PublicRunError::Configuration,
         crate::run_layout::RunLayoutError::AlreadyExists
         | crate::run_layout::RunLayoutError::Unavailable
