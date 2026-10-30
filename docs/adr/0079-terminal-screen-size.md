@@ -41,6 +41,10 @@ tmux는 screen을 즉시 resize하지만 PTY resize 통지는 queue·timer로 �
   수정 전에는 100×30 복원에서 실패했고 수정 후 연속 5회 통과했다. 모델 요청은 실행당 3회다.
 - 별도 검증: 53×17·91×26·28×9·80×24를 세 번씩 중간 frame 대기 없이 변경한 뒤 복원한다.
   설계와 다른 크기의 burst에서도 scrollback·입력·승인·완료·history·종료 후 icanon 복원을 확인했다.
+- timing과 무관한 회귀 fixture로 화면은 100×30에 둔 채 `TIOCSWINSZ`로 PTY만 73×19로 바꾼다.
+  입력 문자열을 새로 그린 화면에서 border 100열·한 세트와 PTY 73×19 유지 상태를 함께 검사한 뒤
+  원래 PTY 크기를 복원한다. 이 검사는 tmux timer가 우연히 빨리 끝나도 지연 상황을 보장한다.
+  변경 전 main `6215e93`의 별도 archive 빌드는 이 assertion에서 실패했고 수정 빌드는 통과했다.
 - 결과 viewer를 포함한 smoke도 빠른 resize로 통과했다. 전체 보기 이동·승인 Enter 격리·보류 출력·입력 복원을
   유지하며 모델 요청은 5회다. 새 유료 모델 호출이나 provider 재요청은 없다.
 - Fast/Linux CI는 기존 정상 속도 smoke에 기본·결과 viewer의 `--rapid-resize` smoke를 추가한다.
@@ -51,3 +55,6 @@ tmux는 screen을 즉시 resize하지만 PTY resize 통지는 queue·timer로 �
 
 PTY와 screen의 갱신 순서는 tmux의 구현 특성이다. xgen이 두 크기를 같다고 가정하고 그린 것이 표시 결함의 원인이다.
 수정 책임은 xgen TUI에 있으며 tmux 자체 변경이나 다른 도구 저장소의 patch는 필요하지 않다.
+
+변경 추적: [PR #136](https://github.com/PlateerLab/xgen-cli/pull/136), 코드 `f1171ba`,
+[전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41071470733). 강제 PTY 지연 fixture는 후속 PR 검사에 포함한다.
