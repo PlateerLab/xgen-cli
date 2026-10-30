@@ -287,7 +287,8 @@ class HttpCliTests(unittest.TestCase):
                 test.calls.append((self.path,self.headers.get("Authorization")))
                 test.accepted.set()
                 if test.release: test.release.wait(timeout=30)
-                body=test.response if isinstance(test.response,bytes) else json.dumps(test.response).encode()
+                value=test.response(self.path) if callable(test.response) else test.response
+                body=value if isinstance(value,bytes) else json.dumps(value).encode()
                 self.send_response(test.status)
                 self.send_header("Content-Type",test.media)
                 if test.redirect: self.send_header("Location",test.redirect)
@@ -343,10 +344,10 @@ class HttpCliTests(unittest.TestCase):
     def context(payload):
         return json.loads(next(m["content"] for m in payload["messages"] if m["role"]=="user"))["planningContext"]
 
-    def run_cli(self,allow=True,binary=None):
+    def run_cli(self,allow=True,binary=None,extra=()):
         args=["run","--workspace",str(self.workspace),"--base-url",f"http://127.0.0.1:{self.model.server_port}/v1","--model","fixture-model","--tokenizer","fixture-tokenizer","--allow-dir",".","--allow-remote-model-egress"]
         if allow: args += ["--allow-read"]
-        return self.cli(*args,"Read connected fixture API.",check=False,binary=binary)
+        return self.cli(*args,*extra,"Read connected fixture API.",check=False,binary=binary)
 
     def manifest(self):
         return json.loads(next((self.state/"runs").glob("*/manifest.json")).read_text())
@@ -558,6 +559,105 @@ class HttpCliTests(unittest.TestCase):
         self.assertEqual(result.returncode,64,result.stderr.decode())
         self.assertIn(b"configuration=http_connections",result.stderr)
         self.assertEqual(self.calls,[]);self.assertEqual(len(self.requests),1)
+
+    def assert_tokens_absent(self, tokens):
+        for path in self.state.rglob("*"):
+            if path.is_file():
+                data=path.read_bytes()
+                for token in tokens:
+                    self.assertFalse(token.encode() in data,"credential persisted in state")
+        serialized=json.dumps(self.requests).encode()
+        for token in tokens:
+            self.assertFalse(token.encode() in serialized,"credential reached model")
+
+    def test_run_bearer_override_changes_neither_connection_nor_persisted_material(self):
+        tokens=[]
+        for name in ("shipments","sensors"):
+            args=self.install(name)
+            path=self.state/"http-connections"/(name+".json");original=path.read_bytes()
+            self.response={"tracking":"A42","delivered":True} if name=="shipments" else {"values":[2.5]}
+            for variable in ("FIXTURE_REQUEST_A","FIXTURE_REQUEST_B"):
+                token=secrets.token_hex(24);tokens.append(token);self.env[variable]=token
+                self.requests.clear();self.calls.clear();self.proposals=[self.plan("read","xgen.http/read",args)]
+                result=self.run_cli(extra=("--bearer-env-for",name+"="+variable))
+                self.assertEqual(result.returncode,0,result.stderr.decode())
+                self.assertEqual(len(self.calls),1)
+                self.assertTrue(self.calls[0][1]=="Bearer "+token,"override authorization mismatch")
+                self.assertEqual(path.read_bytes(),original)
+                self.assert_tokens_absent(tokens)
+        self.requests.clear();self.calls.clear();self.proposals=[self.plan("read","xgen.http/read",args)]
+        result=self.run_cli()
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertIsNone(self.calls[0][1])
+
+    def test_multiple_connections_use_separate_run_bearers(self):
+        shipment=self.install();sensor=self.install("sensors")
+        tokens=[secrets.token_hex(24),secrets.token_hex(24)]
+        self.env["FIXTURE_SHIPMENT_TOKEN"],self.env["FIXTURE_SENSOR_TOKEN"]=tokens
+        self.response=lambda path: {"tracking":"A42","delivered":True} if path.startswith("/shipments") else {"values":[3]}
+        self.proposals=[self.plan("shipment","xgen.http/read",shipment),self.plan("sensor","xgen.http/read",sensor)]
+        result=self.run_cli(extra=("--bearer-env-for","shipments=FIXTURE_SHIPMENT_TOKEN","--bearer-env-for","sensors=FIXTURE_SENSOR_TOKEN"))
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertEqual(len(self.calls),2)
+        for call,token in zip(self.calls,tokens):
+            self.assertTrue(call[1]=="Bearer "+token,"connection token routing mismatch")
+        self.assert_tokens_absent(tokens)
+
+    def test_bearer_resume_pins_reference_but_allows_token_rotation_and_offline_replay(self):
+        args=self.install();variable="FIXTURE_REQUEST_TOKEN"
+        first=secrets.token_hex(24);second=secrets.token_hex(24)
+        self.env[variable]=first;self.proposals=[self.plan("read","xgen.http/read",args)]
+        paused=self.run_cli(allow=False,extra=("--bearer-env-for","shipments="+variable))
+        self.assertEqual(paused.returncode,10,paused.stderr.decode())
+        manifest=self.manifest();run_id=manifest["record"]["runId"]
+        self.assertEqual(manifest["record"]["httpBearerOverrides"],{"shipments":variable})
+        resume=["resume",run_id,"--workspace",str(self.workspace),"--allow-dir",".","--allow-read"]
+        for extra in ([],["--bearer-env-for","shipments=FIXTURE_OTHER_TOKEN"]):
+            result=self.cli(*resume,*extra,check=False)
+            self.assertEqual(result.returncode,64,result.stderr.decode())
+            self.assertIn(b"configuration=http_bearer_overrides",result.stderr)
+        self.assertEqual(self.calls,[]);self.assertEqual(len(self.requests),1)
+        self.env.pop(variable)
+        result=self.cli(*resume,"--bearer-env-for","shipments="+variable,check=False)
+        self.assertEqual(result.returncode,64,result.stderr.decode());self.assertEqual(self.calls,[])
+        self.env[variable]=second
+        result=self.cli(*resume,"--bearer-env-for","shipments="+variable,check=False)
+        self.assertEqual(result.returncode,10,result.stderr.decode())
+        self.assertEqual(len(self.calls),1)
+        self.assertTrue(self.calls[0][1]=="Bearer "+second,"rotated authorization mismatch")
+        result=self.cli(*resume,"--bearer-env-for","shipments="+variable,"--allow-remote-model-egress", "--base-url",f"http://127.0.0.1:{self.model.server_port}/v1",check=False)
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.env.pop(variable);calls=len(self.calls);requests=len(self.requests)
+        replay=self.cli("resume",run_id,check=False)
+        self.assertEqual(replay.returncode,0,replay.stderr.decode())
+        self.assertEqual((len(self.calls),len(self.requests)),(calls,requests))
+        self.assert_tokens_absent([first,second])
+
+    def test_invalid_bearer_override_never_falls_back_to_stored_token(self):
+        self.install()
+        for reference,value in (("shipments=FIXTURE_MISSING",None),("shipments=FIXTURE_EMPTY",""),
+                                ("shipments=FIXTURE_INVALID","bad token"),("unknown=FIXTURE_UNKNOWN","synthetic"),
+                                ("shipments=LANG","synthetic")):
+            variable=reference.split("=",1)[1]
+            if value is not None: self.env[variable]=value
+            result=self.run_cli(extra=("--bearer-env-for",reference))
+            self.assertEqual(result.returncode,64,result.stderr.decode())
+            self.assertEqual(self.calls,[]);self.assertEqual(self.requests,[])
+        result=self.run_cli(extra=("--bearer-env-for","shipments=FIXTURE_EMPTY","--bearer-env-for","shipments=FIXTURE_INVALID"))
+        self.assertEqual(result.returncode,64,result.stderr.decode())
+        self.assertFalse((self.state/"runs").exists())
+
+    def test_override_credential_echo_is_not_persisted(self):
+        args=self.install();token=secrets.token_hex(24);self.env["FIXTURE_REQUEST_TOKEN"]=token
+        self.response={"tracking":token,"delivered":True}
+        def report(payload):
+            self.assertEqual(self.context(payload)["toolOutputs"],[])
+            return {"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":"No verified API result."}
+        self.proposals=[self.plan("read","xgen.http/read",args),report]
+        result=self.run_cli(extra=("--bearer-env-for","shipments=FIXTURE_REQUEST_TOKEN"))
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertEqual(len(self.calls),1)
+        self.assert_tokens_absent([token])
 
     def test_http_failures_do_not_publish_unverified_body_or_follow_redirect(self):
         arguments=self.install()

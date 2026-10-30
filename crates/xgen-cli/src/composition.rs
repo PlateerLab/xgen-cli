@@ -135,6 +135,8 @@ pub struct LocalRunRequest {
     pub allow_executables: Vec<String>,
     pub allow_remote_model_egress: bool,
     pub allow_read: bool,
+    /// Per-invocation HTTP authentication environment references; values stay host-only.
+    pub bearer_env_for: std::collections::BTreeMap<String, String>,
     pub allow_write: bool,
     pub allow_execute: bool,
     pub max_ticks: u32,
@@ -179,6 +181,7 @@ impl LocalRunRequest {
             allow_executables: Vec::new(),
             allow_remote_model_egress: false,
             allow_read: false,
+            bearer_env_for: std::collections::BTreeMap::new(),
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,
@@ -204,6 +207,8 @@ pub struct LocalResumeRequest {
     pub allow_executables: Vec<String>,
     pub allow_remote_model_egress: bool,
     pub allow_read: bool,
+    /// Per-invocation HTTP authentication environment references; values stay host-only.
+    pub bearer_env_for: std::collections::BTreeMap<String, String>,
     pub allow_write: bool,
     pub allow_execute: bool,
     pub max_ticks: u32,
@@ -849,6 +854,9 @@ impl PublicRunError {
                         "Restore the original --allow-file and --allow-dir selections."
                     }
                     "model_profile" => "Restore the original model profile and inference options.",
+                    "http_bearer_overrides" => {
+                        "Repeat the original --bearer-env-for CONNECTION=ENV_NAME references; token values may be rotated locally."
+                    }
                     _ => {
                         "Restore the original executable selections, binaries and safe process environment; the binding cannot be overridden."
                     }
@@ -1101,12 +1109,15 @@ where
         request.final_response_schema.as_ref(),
         request.completion_checks.as_deref(),
     )?;
+    crate::http_read::validate_override_credentials(&request.bearer_env_for, &http_connections)
+        .map_err(|()| PublicRunError::Configuration)?;
     let local_execution_profile_digest = execution_profile_with_discovery(
         &workspace,
         &catalog,
         process.as_ref(),
         &discovery_snapshots,
         &http_connections,
+        &request.bearer_env_for,
     )?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
     let manifest = RunManifest::new(
@@ -1127,6 +1138,8 @@ where
         .with_tool_discovery_snapshots(discovery_snapshots)
         .map_err(|_| PublicRunError::Configuration)?
         .with_http_read_connections(http_connections)
+        .map_err(|_| PublicRunError::Configuration)?
+        .with_http_bearer_overrides(request.bearer_env_for.clone())
         .map_err(|_| PublicRunError::Configuration)?;
     let manifest = bind_manifest_options(manifest, process.as_ref(), conversation_responses)?
         .with_final_response_schema(request.final_response_schema)
@@ -1311,6 +1324,17 @@ where
         });
     }
 
+    if &request.bearer_env_for != manifest.http_bearer_overrides() {
+        return Err(PublicRunError::ConfigurationMismatch {
+            field: "http_bearer_overrides",
+            changed_items: Vec::new(),
+        });
+    }
+    crate::http_read::validate_override_credentials(
+        &request.bearer_env_for,
+        manifest.http_read_connections(),
+    )
+    .map_err(|()| PublicRunError::Configuration)?;
     let workspace_path = request.workspace.ok_or(PublicRunError::Configuration)?;
     let workspace = WorkspaceRoot::open_ambient(
         &workspace_path,
@@ -1356,6 +1380,7 @@ where
             process.as_ref(),
             manifest.tool_discovery_snapshots(),
             manifest.http_read_connections(),
+            manifest.http_bearer_overrides(),
         )?
     {
         let current = process
@@ -1639,6 +1664,7 @@ fn continue_incomplete(
     } = local_tool_product(workspace, &catalog, process)?;
     let discovery = DiscoveryCatalog::saved(manifest.tool_discovery_snapshots().clone())
         .and_then(|catalog| catalog.with_connections(manifest.http_read_connections().clone()))
+        .and_then(|catalog| catalog.with_bearer_overrides(manifest.http_bearer_overrides().clone()))
         .map_err(|()| PublicRunError::Integrity)?;
     let discovery = if discovery.is_empty() {
         discovery
@@ -3125,6 +3151,7 @@ fn execution_profile_with_discovery(
     process: Option<&ProcessTooling>,
     snapshots: &graph_discovery::Snapshots,
     connections: &crate::http_read::Connections,
+    overrides: &crate::http_read::BearerOverrides,
 ) -> Result<String, PublicRunError> {
     let local_digest = local_execution_profile_digest(workspace, catalog, process)?;
     if snapshots.is_empty() {
@@ -3132,6 +3159,7 @@ fn execution_profile_with_discovery(
     }
     let discovery = DiscoveryCatalog::saved(snapshots.clone())
         .and_then(|catalog| catalog.with_connections(connections.clone()))
+        .and_then(|catalog| catalog.with_bearer_overrides(overrides.clone()))
         .map_err(|()| PublicRunError::Configuration)?;
     let mut profile = serde_json::json!({
         "domain":"xgen.cli.local-and-tool-discovery-execution-profile/v1",
@@ -3641,7 +3669,8 @@ mod tests {
                 &catalog,
                 None,
                 &graph_discovery::Snapshots::new(),
-                &crate::http_read::Connections::new()
+                &crate::http_read::Connections::new(),
+                &crate::http_read::BearerOverrides::new()
             )
             .unwrap(),
             local_execution_profile_digest(&workspace, &catalog, None).unwrap()
@@ -3654,7 +3683,8 @@ mod tests {
                 &catalog,
                 None,
                 &first,
-                &crate::http_read::Connections::new()
+                &crate::http_read::Connections::new(),
+                &crate::http_read::BearerOverrides::new()
             )
             .unwrap(),
             execution_profile_with_discovery(
@@ -3662,7 +3692,8 @@ mod tests {
                 &catalog,
                 None,
                 &second,
-                &crate::http_read::Connections::new()
+                &crate::http_read::Connections::new(),
+                &crate::http_read::BearerOverrides::new()
             )
             .unwrap()
         );
@@ -3671,6 +3702,50 @@ mod tests {
         assert_eq!(specs.len(), 2);
         assert_eq!(specs[0].0.metadata.id, graph_discovery::SEARCH);
         assert_eq!(specs[1].0.metadata.id, graph_discovery::DESCRIBE);
+    }
+
+    #[test]
+    fn http_profile_pins_override_references_and_keeps_default_binding() {
+        let root = tempdir().unwrap();
+        let workspace =
+            WorkspaceRoot::open_ambient(root.path(), WorkspaceId::new(WORKSPACE_ID).unwrap())
+                .unwrap();
+        let catalog = LocalReadCatalog::build(&workspace, &[], &[".".into()]).unwrap();
+        let snapshots = graph_discovery::Snapshots::from([("sample".into(), "a".repeat(64))]);
+        let connections = crate::http_read::Connections::from([("sample".into(), serde_json::from_value(json!({"format_version":1,"base_url":"https://example.test","allow_get":true,"bearer_env":null,"credential_ref":null})).unwrap())]);
+        let profile = |overrides: &crate::http_read::BearerOverrides| {
+            execution_profile_with_discovery(
+                &workspace,
+                &catalog,
+                None,
+                &snapshots,
+                &connections,
+                overrides,
+            )
+            .unwrap()
+        };
+        let first =
+            crate::http_read::BearerOverrides::from([("sample".into(), "REQUEST_A".into())]);
+        let second =
+            crate::http_read::BearerOverrides::from([("sample".into(), "REQUEST_B".into())]);
+        assert_ne!(profile(&first), profile(&second));
+        assert_ne!(
+            profile(&first),
+            profile(&crate::http_read::BearerOverrides::new())
+        );
+        let saved = DiscoveryCatalog::saved(snapshots)
+            .unwrap()
+            .with_connections(connections)
+            .unwrap();
+        assert_eq!(
+            saved.adapter(crate::http_read::READ).binding(),
+            saved
+                .clone()
+                .with_bearer_overrides(crate::http_read::BearerOverrides::new())
+                .unwrap()
+                .adapter(crate::http_read::READ)
+                .binding()
+        );
     }
 
     #[test]
@@ -4041,6 +4116,7 @@ mod tests {
             allow_executables: Vec::new(),
             allow_remote_model_egress: false,
             allow_read: true,
+            bearer_env_for: std::collections::BTreeMap::new(),
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,
@@ -4100,6 +4176,7 @@ mod tests {
             allow_executables: vec![specification],
             allow_remote_model_egress: false,
             allow_read: false,
+            bearer_env_for: std::collections::BTreeMap::new(),
             allow_write: false,
             allow_execute: false,
             max_ticks: 32,

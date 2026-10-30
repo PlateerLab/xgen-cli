@@ -23,6 +23,39 @@ pub(crate) type Connections = BTreeMap<String, Connection>;
 const MAX_BODY: usize = 32 * 1024;
 const MAX_TARGET_BYTES: usize = 8 * 1024;
 
+pub(crate) type BearerOverrides = BTreeMap<String, String>;
+
+pub(crate) fn valid_bearer_overrides(
+    overrides: &BearerOverrides,
+    connections: &Connections,
+) -> bool {
+    overrides.len() <= 16
+        && overrides.iter().all(|(name, variable)| {
+            connections.contains_key(name)
+                && !variable.is_empty()
+                && variable.len() <= 128
+                && variable
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+                && !crate::allow_process::forwarded_environment_key(variable)
+        })
+}
+
+pub(crate) fn validate_override_credentials(
+    overrides: &BearerOverrides,
+    connections: &Connections,
+) -> Result<(), ()> {
+    if !valid_bearer_overrides(overrides, connections) {
+        return Err(());
+    }
+    for (name, variable) in overrides {
+        connections[name]
+            .credential(Some(variable))
+            .map_err(|_| ())?;
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Connection {
@@ -78,8 +111,11 @@ impl Connection {
     pub(crate) fn policy(&self) -> Value {
         json!({"allow_get": self.allow_get, "read_operations": self.read_operations})
     }
-    fn credential(&self) -> Result<Option<Zeroizing<String>>, &'static str> {
-        let secret = if let Some(name) = &self.bearer_env {
+    fn credential(
+        &self,
+        override_env: Option<&str>,
+    ) -> Result<Option<Zeroizing<String>>, &'static str> {
+        let secret = if let Some(name) = override_env.or(self.bearer_env.as_deref()) {
             Some(Zeroizing::new(
                 std::env::var(name).map_err(|_| "http_credential_unavailable")?,
             ))
@@ -559,7 +595,13 @@ pub(crate) fn prepare(
         return Err(AdapterPrepareFailure::UnsupportedProtocol);
     }
     let credential = connection
-        .credential()
+        .credential(
+            catalog.bearer_override(
+                input["collection"]
+                    .as_str()
+                    .ok_or(AdapterPrepareFailure::InvalidMaterial)?,
+            ),
+        )
         .map_err(|_| AdapterPrepareFailure::ResourceUnavailable)?;
     if contract["bearer_required"] == true && credential.is_none() {
         return Err(AdapterPrepareFailure::ResourceUnavailable);

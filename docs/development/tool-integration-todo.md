@@ -140,11 +140,12 @@
 1. **구현·로컬 검증:** 지원 밖 선택 파라미터 제외, required/path 거절, describe 제외 이유, 제외 입력 호출 전 거절.
    [ADR-0081](../adr/0081-optional-http-parameters.md), [PR #139](https://github.com/PlateerLab/xgen-cli/pull/139)로 main에 머지했다.
 2. **구현·로컬 검증 완료:** OpenAPI 3 form/explode=true와 Swagger 2 multi 배열 query, scalar items 및 배열 제약 검증.
-   다른 직렬화·object items는 1번의 제외/거절 규칙을 따른다. [ADR-0082](../adr/0082-array-query-parameters.md).
+   다른 직렬화·object items는 1번의 제외/거절 규칙을 따른다. [ADR-0082](../adr/0082-array-query-parameters.md), [PR #140](https://github.com/PlateerLab/xgen-cli/pull/140)로 main에 머지했다.
 3. **구현·로컬 검증 완료:** 연결별 반복 `--read-operation`으로 호스트가 지정한 POST 조회, JSON body 원본 schema 검증,
-   지정 목록의 연결·execution profile 고정과 drift 거절. 지정하지 않은 POST는 거절한다.
-4. **이후:** run/resume의 `--bearer-env-for CONNECTION=ENV_NAME`으로 저장된 연결을 바꾸지 않고
+   지정 목록의 연결·execution profile 고정과 drift 거절. 지정하지 않은 POST는 거절한다. [ADR-0083](../adr/0083-host-selected-post-reads.md), [PR #141](https://github.com/PlateerLab/xgen-cli/pull/141)로 main에 머지했다.
+4. **구현·로컬 검증 완료:** run/resume의 `--bearer-env-for CONNECTION=ENV_NAME`으로 저장된 연결을 바꾸지 않고
    요청별 bearer를 주입한다. 값은 manifest·Receipt·모델에 남기지 않는다. 참조 binding·resume 누락 시
-   저장 token으로의 암묵적 fallback·서버 process 격리도 검증한다.
+   저장 token으로의 암묵적 fallback 차단을 검증했다. 서버 process/state 격리는 호출 호스트 책임이다.
+   [ADR-0084](../adr/0084-run-bearer-overrides.md).
 5. **별도 설계, 대회 후:** 승인 있는 POST/PUT/PATCH/DELETE 쓰기·host Idempotency-Key·NonIdempotent
    Unknown의 no-retry. 1~4 완료 뒤 진행하며 이번 조회 확장에 포함하지 않는다.

@@ -37,6 +37,8 @@ struct RunManifestRecord {
     tool_discovery_snapshots: crate::graph_discovery::Snapshots,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     http_read_connections: crate::http_read::Connections,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    http_bearer_overrides: crate::http_read::BearerOverrides,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
@@ -164,6 +166,7 @@ impl RunManifest {
             process_fingerprints: None,
             tool_discovery_snapshots: crate::graph_discovery::Snapshots::new(),
             http_read_connections: crate::http_read::Connections::new(),
+            http_bearer_overrides: crate::http_read::BearerOverrides::new(),
             budget,
             conversation_responses: false,
             final_response_schema: None,
@@ -175,6 +178,19 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_http_bearer_overrides(
+        mut self,
+        overrides: crate::http_read::BearerOverrides,
+    ) -> Result<Self, ManifestError> {
+        self.record.http_bearer_overrides = overrides;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+    pub(crate) fn http_bearer_overrides(&self) -> &crate::http_read::BearerOverrides {
+        &self.record.http_bearer_overrides
     }
 
     pub(crate) fn with_http_read_connections(
@@ -380,7 +396,10 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     }) {
         return Err(ManifestError::Invalid);
     }
-    if !crate::http_read::valid_connections(&record.http_read_connections)
+    if !crate::http_read::valid_bearer_overrides(
+        &record.http_bearer_overrides,
+        &record.http_read_connections,
+    ) || !crate::http_read::valid_connections(&record.http_read_connections)
         || record
             .http_read_connections
             .keys()
@@ -555,6 +574,50 @@ mod tests {
         value["record"]["httpReadConnections"]["sample"]["base_url"] =
             Value::String("https://example.test/changed".into());
         assert!(RunManifest::from_bytes(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+
+    #[test]
+    fn bearer_references_are_optional_bound_and_validated_without_values() {
+        let legacy = fixture();
+        assert!(legacy.http_bearer_overrides().is_empty());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("httpBearerOverrides")
+        );
+        let bound = legacy.with_tool_discovery_snapshots(crate::graph_discovery::Snapshots::from([("sample".into(), "a".repeat(64))])).unwrap()
+            .with_http_read_connections(crate::http_read::Connections::from([("sample".into(), serde_json::from_value(serde_json::json!({"format_version":1,"base_url":"https://example.test","allow_get":true,"bearer_env":"STORED_TOKEN","credential_ref":null})).unwrap())])).unwrap();
+        let with_override = bound
+            .clone()
+            .with_http_bearer_overrides(crate::http_read::BearerOverrides::from([(
+                "sample".into(),
+                "REQUEST_TOKEN".into(),
+            )]))
+            .unwrap();
+        assert_ne!(bound.authority(), with_override.authority());
+        assert_eq!(
+            RunManifest::from_bytes(&with_override.to_bytes().unwrap()).unwrap(),
+            with_override
+        );
+        let mut altered: Value =
+            serde_json::from_slice(&with_override.to_bytes().unwrap()).unwrap();
+        altered["record"]["httpBearerOverrides"]["sample"] = serde_json::json!("OTHER_TOKEN");
+        assert!(RunManifest::from_bytes(&serde_json::to_vec(&altered).unwrap()).is_err());
+        for (name, variable) in [
+            ("unknown", "REQUEST_TOKEN"),
+            ("sample", "LANG"),
+            ("sample", "bad value"),
+        ] {
+            assert!(
+                bound
+                    .clone()
+                    .with_http_bearer_overrides(crate::http_read::BearerOverrides::from([(
+                        name.into(),
+                        variable.into()
+                    )]))
+                    .is_err()
+            );
+        }
     }
 
     #[test]

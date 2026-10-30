@@ -65,6 +65,7 @@ pub(crate) struct DiscoveryCatalog {
     root: PathBuf,
     snapshots: Snapshots,
     connections: crate::http_read::Connections,
+    bearer_overrides: crate::http_read::BearerOverrides,
     /// Documentation script of each collection whose script differs from the run goal's.
     language: BTreeMap<String, String>,
 }
@@ -131,6 +132,7 @@ impl DiscoveryCatalog {
             root: crate::tool_catalog_directory().map_err(|_| ())?,
             snapshots,
             connections: crate::http_read::Connections::new(),
+            bearer_overrides: crate::http_read::BearerOverrides::new(),
             language: BTreeMap::new(),
         })
     }
@@ -193,6 +195,19 @@ impl DiscoveryCatalog {
         }
         self.connections = connections;
         Ok(self)
+    }
+    pub(crate) fn with_bearer_overrides(
+        mut self,
+        overrides: crate::http_read::BearerOverrides,
+    ) -> Result<Self, ()> {
+        if !crate::http_read::valid_bearer_overrides(&overrides, &self.connections) {
+            return Err(());
+        }
+        self.bearer_overrides = overrides;
+        Ok(self)
+    }
+    pub(crate) fn bearer_override(&self, name: &str) -> Option<&str> {
+        self.bearer_overrides.get(name).map(String::as_str)
     }
     pub(crate) fn connection(&self, name: &str) -> Option<&crate::http_read::Connection> {
         self.connections.get(name)
@@ -298,7 +313,13 @@ pub(crate) struct DiscoveryAdapter {
 impl DiscoveryAdapter {
     pub(crate) fn binding(&self) -> InstanceBinding {
         let encoded = if self.operation == crate::http_read::READ {
-            serde_jcs::to_vec(&serde_json::json!({"snapshots":self.catalog.snapshots,"connections":self.catalog.connections,"profile":crate::http_read::PROFILE})).expect("finite host profile")
+            {
+                let mut binding = serde_json::json!({"snapshots":self.catalog.snapshots,"connections":self.catalog.connections,"profile":crate::http_read::PROFILE});
+                if !self.catalog.bearer_overrides.is_empty() {
+                    binding["bearer_overrides"] = json!(self.catalog.bearer_overrides);
+                }
+                serde_jcs::to_vec(&binding).expect("finite host profile")
+            }
         } else {
             serde_jcs::to_vec(&self.catalog.snapshots).expect("finite snapshot map")
         };
