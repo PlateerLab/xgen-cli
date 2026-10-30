@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use cap_fs_ext::{DirExt as _, FollowSymlinks, OpenOptionsFollowExt as _, OpenOptionsSyncExt as _};
 use cap_std::fs::{Dir, File, OpenOptions};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use xgen_domain::{InstanceFeatures, VerificationResult, VerificationStrategy};
@@ -40,7 +41,7 @@ pub const MAX_SEARCH_MATCHES: usize = 128;
 pub const MAX_SEARCH_VISITED_ENTRIES: usize = 4_096;
 /// Maximum bytes read from one candidate search file.
 pub const MAX_SEARCH_FILE_BYTES: usize = 256 * 1024;
-/// Maximum aggregate candidate bytes read by one search-text observation.
+/// Maximum aggregate bytes read, including ignore rules, by one search-text observation.
 pub const MAX_SEARCH_TOTAL_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum UTF-8 bytes retained in one match preview.
 pub const MAX_SEARCH_PREVIEW_BYTES: usize = 512;
@@ -712,7 +713,13 @@ fn search_text(
         truncated: false,
         exhausted: false,
     };
-    search_directory(root, path, query, &mut state)?;
+    let mut ignores = Vec::new();
+    // Only workspace-local ancestors participate. Never consult ambient Git configuration.
+    for depth in 0..path.components().len() {
+        let ancestor = RelativePath::from_components(path.components()[..depth].to_vec());
+        ignores.push(load_search_ignores(root, &ancestor, &mut state)?);
+    }
+    search_directory(root, path, query, &mut state, &mut ignores)?;
     state.matches.sort_by(|left, right| {
         let left = search_match_key(left);
         let right = search_match_key(right);
@@ -836,11 +843,87 @@ struct SearchState {
     exhausted: bool,
 }
 
+struct SearchIgnores {
+    git: Gitignore,
+    custom: Gitignore,
+}
+
+fn load_search_ignores(
+    root: &Dir,
+    directory: &RelativePath,
+    state: &mut SearchState,
+) -> Result<SearchIgnores, QueryFailure> {
+    Ok(SearchIgnores {
+        git: load_search_ignore(root, directory, ".gitignore", state)?,
+        custom: load_search_ignore(root, directory, ".ignore", state)?,
+    })
+}
+
+fn load_search_ignore(
+    root: &Dir,
+    directory: &RelativePath,
+    name: &str,
+    state: &mut SearchState,
+) -> Result<Gitignore, QueryFailure> {
+    let path = directory.join(name).map_err(|_| QueryFailure::Limit)?;
+    let mut file = match open_regular_file(root, &path) {
+        Ok(file) => file,
+        Err(QueryFailure::NotFound) => return Ok(Gitignore::empty()),
+        Err(failure) => return Err(failure),
+    };
+    let size = file.metadata().map_err(|_| QueryFailure::Open)?.len();
+    if size > u64::try_from(MAX_SEARCH_FILE_BYTES).expect("limit fits u64") {
+        return Err(QueryFailure::TooLarge);
+    }
+    let remaining = MAX_SEARCH_TOTAL_BYTES.saturating_sub(state.scanned_bytes);
+    if remaining == 0 || size > u64::try_from(remaining).expect("limit fits u64") {
+        return Err(QueryFailure::Limit);
+    }
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(u64::try_from(remaining.min(MAX_SEARCH_FILE_BYTES + 1)).expect("limit fits u64"))
+        .read_to_end(&mut bytes)
+        .map_err(|_| QueryFailure::Read)?;
+    state.scanned_bytes += bytes.len();
+    if bytes.len() > MAX_SEARCH_FILE_BYTES {
+        return Err(QueryFailure::TooLarge);
+    }
+    if state.scanned_bytes == MAX_SEARCH_TOTAL_BYTES {
+        // Unlike a partial content observation, partially read rules cannot define the domain.
+        return Err(QueryFailure::Limit);
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_| QueryFailure::Decode)?;
+    let mut builder = GitignoreBuilder::new(directory.display());
+    for line in text.strip_prefix('\u{feff}').unwrap_or(text).lines() {
+        // An unusable rule file must not silently broaden the search domain.
+        builder
+            .add_line(None, line)
+            .map_err(|_| QueryFailure::Read)?;
+    }
+    builder.build().map_err(|_| QueryFailure::Limit)
+}
+
+fn search_ignored(ignores: &[SearchIgnores], path: &RelativePath, is_directory: bool) -> bool {
+    let path = path.display();
+    // Like ripgrep, .ignore takes precedence over .gitignore, even across directory levels.
+    for custom in [true, false] {
+        for level in ignores.iter().rev() {
+            let matcher = if custom { &level.custom } else { &level.git };
+            let decision = matcher.matched(&path, is_directory);
+            if !decision.is_none() {
+                return decision.is_ignore();
+            }
+        }
+    }
+    false
+}
+
 fn search_directory(
     root: &Dir,
     path: &RelativePath,
     query: &str,
     state: &mut SearchState,
+    ignores: &mut Vec<SearchIgnores>,
 ) -> Result<(), QueryFailure> {
     if state.exhausted
         || state.matches.len() == MAX_SEARCH_MATCHES
@@ -849,6 +932,19 @@ fn search_directory(
         state.truncated = true;
         return Ok(());
     }
+    ignores.push(load_search_ignores(root, path, state)?);
+    let result = search_directory_entries(root, path, query, state, ignores);
+    ignores.pop();
+    result
+}
+
+fn search_directory_entries(
+    root: &Dir,
+    path: &RelativePath,
+    query: &str,
+    state: &mut SearchState,
+    ignores: &mut Vec<SearchIgnores>,
+) -> Result<(), QueryFailure> {
     let directory = open_directory(root, path)?;
     let mut names = Vec::new();
     let mut scanned = 0_usize;
@@ -885,8 +981,12 @@ fn search_directory(
             state.truncated = true;
             continue;
         }
-        if open_directory(root, &child).is_ok() {
-            search_directory(root, &child, query, state)?;
+        let is_directory = open_directory(root, &child).is_ok();
+        if search_ignored(ignores, &child, is_directory) {
+            continue;
+        }
+        if is_directory {
+            search_directory(root, &child, query, state, ignores)?;
             continue;
         }
         search_regular_file(root, &child, query, state)?;
@@ -1407,6 +1507,239 @@ mod tests {
     }
 
     #[test]
+    fn ignored_dependencies_do_not_hide_python_or_javascript_sources() {
+        // Two independent layouts reproduce the result-limit failure without a model call.
+        let mut observations = Vec::new();
+        for (ignore_file, pattern, dependency, source) in [
+            (
+                ".gitignore",
+                ".venv/\n",
+                ".venv/site-packages/lib.py",
+                "src/app.py",
+            ),
+            (
+                ".ignore",
+                "node_modules/\n",
+                "node_modules/pkg/index.js",
+                "src/app.js",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            fs::write(fixture.directory.path().join(ignore_file), pattern).unwrap();
+            for (path, content) in [
+                (dependency, "needle\n".repeat(MAX_SEARCH_MATCHES + 1)),
+                (source, "needle\n".to_owned()),
+            ] {
+                let target = fixture.directory.path().join(path);
+                fs::create_dir_all(target.parent().unwrap()).unwrap();
+                fs::write(target, content).unwrap();
+            }
+            let output = search_text(&fixture.root.directory, &fixture.relative("."), "needle")
+                .unwrap()
+                .finish()
+                .unwrap()
+                .output;
+            let matches = output["matches"].as_array().unwrap();
+            observations.push((
+                matches.len(),
+                matches.iter().any(|entry| entry["path"] == source),
+                output["truncated"].as_bool().unwrap(),
+            ));
+        }
+        assert_eq!(observations, vec![(1, true, false), (1, true, false)]);
+    }
+
+    #[test]
+    fn search_inherits_anchored_rules_and_restores_sibling_scope() {
+        let fixture = Fixture::new();
+        for (path, text) in [
+            (
+                ".gitignore",
+                "\u{feff}/root-only.txt\r\n*.tmp\r\n!keep.tmp\r\n",
+            ),
+            ("a/.gitignore", "/local.txt\n!nested.tmp\n"),
+            ("a/sub/.gitignore", "/own.txt\n"),
+            ("a/local.txt", "needle"),
+            ("a/nested.tmp", "needle"),
+            ("a/root-only.txt", "needle"),
+            ("a/sub/local.txt", "needle"),
+            ("a/sub/own.txt", "needle"),
+            ("a/sub/deep/own.txt", "needle"),
+            ("b/local.txt", "needle"),
+            ("b/gone.tmp", "needle"),
+            ("b/keep.tmp", "needle"),
+            ("root-only.txt", "needle"),
+        ] {
+            let target = fixture.directory.path().join(path);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, text).unwrap();
+        }
+        for (start, expected) in [
+            (
+                ".",
+                vec![
+                    "a/nested.tmp",
+                    "a/root-only.txt",
+                    "a/sub/deep/own.txt",
+                    "a/sub/local.txt",
+                    "b/keep.tmp",
+                    "b/local.txt",
+                ],
+            ),
+            (
+                "a",
+                vec![
+                    "a/nested.tmp",
+                    "a/root-only.txt",
+                    "a/sub/deep/own.txt",
+                    "a/sub/local.txt",
+                ],
+            ),
+            ("a/sub", vec!["a/sub/deep/own.txt", "a/sub/local.txt"]),
+            ("b", vec!["b/keep.tmp", "b/local.txt"]),
+        ] {
+            let output = search_text(&fixture.root.directory, &fixture.relative(start), "needle")
+                .unwrap()
+                .finish()
+                .unwrap()
+                .output;
+            let paths: Vec<_> = output["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| entry["path"].as_str().unwrap())
+                .collect();
+            assert_eq!(paths, expected, "search root {start}");
+            assert_eq!(output["truncated"], false);
+        }
+    }
+
+    #[test]
+    fn custom_ignore_precedes_nested_git_rules_and_prunes_excluded_directories() {
+        let fixture = Fixture::new();
+        for (path, text) in [
+            (".gitignore", "*.tmp\ncache/\n!cache/keep.txt\n"),
+            (".ignore", "!keep.tmp\n*.log\n"),
+            ("src/.gitignore", "keep.tmp\n!debug.log\n"),
+            ("src/keep.tmp", "needle"),
+            ("src/debug.log", "needle"),
+            ("cache/.ignore", "!keep.txt\n"),
+            ("cache/keep.txt", "needle"),
+        ] {
+            let target = fixture.directory.path().join(path);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, text).unwrap();
+        }
+        let output = search_text(&fixture.root.directory, &fixture.relative("."), "needle")
+            .unwrap()
+            .finish()
+            .unwrap()
+            .output;
+        assert_eq!(
+            output["matches"],
+            json!([{
+                "path": "src/keep.tmp", "line": 1, "column": 1, "preview": "needle",
+            }])
+        );
+        assert_eq!(output["truncated"], false);
+    }
+
+    #[test]
+    fn search_does_not_read_ignore_rules_outside_the_workspace() {
+        let fixture = Fixture::new();
+        fs::write(fixture.directory.path().join(".gitignore"), "*.txt\n").unwrap();
+        fs::create_dir(fixture.directory.path().join("workspace")).unwrap();
+        fs::write(
+            fixture.directory.path().join("workspace/source.txt"),
+            "needle",
+        )
+        .unwrap();
+        let workspace = WorkspaceRoot::open_ambient(
+            fixture.directory.path().join("workspace"),
+            WorkspaceId::new("inner").unwrap(),
+        )
+        .unwrap();
+        let output = search_text(&workspace.directory, &fixture.relative("."), "needle")
+            .unwrap()
+            .finish()
+            .unwrap()
+            .output;
+        assert_eq!(output["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(output["matches"][0]["path"], "source.txt");
+    }
+
+    #[test]
+    fn ignore_rule_reads_are_bounded_and_charged_to_the_shared_byte_budget() {
+        let fixture = Fixture::new();
+        fs::write(fixture.directory.path().join(".gitignore"), "*.tmp\n").unwrap();
+        let mut state = SearchState {
+            matches: Vec::new(),
+            visited_entries: 0,
+            scanned_bytes: 0,
+            truncated: false,
+            exhausted: false,
+        };
+        load_search_ignores(&fixture.root.directory, &fixture.relative("."), &mut state).unwrap();
+        assert_eq!(state.scanned_bytes, "*.tmp\n".len());
+        state.scanned_bytes = MAX_SEARCH_TOTAL_BYTES - 1;
+        assert!(matches!(
+            load_search_ignores(&fixture.root.directory, &fixture.relative("."), &mut state),
+            Err(QueryFailure::Limit)
+        ));
+        assert_eq!(state.scanned_bytes, MAX_SEARCH_TOTAL_BYTES - 1);
+        state.scanned_bytes = MAX_SEARCH_TOTAL_BYTES - "*.tmp\n".len();
+        assert!(matches!(
+            load_search_ignores(&fixture.root.directory, &fixture.relative("."), &mut state),
+            Err(QueryFailure::Limit)
+        ));
+        assert_eq!(state.scanned_bytes, MAX_SEARCH_TOTAL_BYTES);
+
+        for (bytes, expected) in [
+            (vec![b'x'; MAX_SEARCH_FILE_BYTES + 1], "too-large"),
+            (vec![0xff], "decode"),
+            (b"[z-a]\n".to_vec(), "read"),
+        ] {
+            fs::write(fixture.directory.path().join(".gitignore"), bytes).unwrap();
+            let failure = search_text(&fixture.root.directory, &fixture.relative("."), "needle")
+                .err()
+                .expect("unusable ignore rules must fail the search");
+            assert_eq!(
+                failure.evidence_digest(QueryOperation::SearchText),
+                sha256_digest(format!("xgeny.fs/search-text/failure/v1/{expected}").as_bytes())
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ignore_files_never_follow_leaf_or_ancestor_symlinks() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("rules"), "*.txt\n").unwrap();
+        symlink(
+            outside.path().join("rules"),
+            fixture.directory.path().join(".gitignore"),
+        )
+        .unwrap();
+        assert!(matches!(
+            search_text(&fixture.root.directory, &fixture.relative("."), "needle"),
+            Err(QueryFailure::Open)
+        ));
+
+        let fixture = Fixture::new();
+        symlink(outside.path(), fixture.directory.path().join("linked")).unwrap();
+        assert!(
+            search_text(
+                &fixture.root.directory,
+                &fixture.relative("linked"),
+                "needle"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn search_order_is_globally_lexical_across_path_prefixes() {
         let fixture = Fixture::new();
         fs::create_dir_all(fixture.directory.path().join("a")).unwrap();
@@ -1484,6 +1817,7 @@ mod tests {
             &fixture.relative("."),
             "not-present",
             &mut state,
+            &mut Vec::new(),
         )
         .unwrap();
 
@@ -1510,6 +1844,7 @@ mod tests {
             &fixture.relative("."),
             "absent",
             &mut state,
+            &mut Vec::new(),
         )
         .unwrap();
 

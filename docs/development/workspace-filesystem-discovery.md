@@ -40,7 +40,7 @@ directory/file 목록을 받는다. Constrained provider prompt는 이를 후보
 | --- | --- |
 | `xgeny.fs/list-directory@1.0.0` | 한 directory의 직계 entry 목록 |
 | `xgeny.fs/stat@1.0.0` | regular file size 또는 directory kind |
-| `xgeny.fs/search-text@1.0.0` | directory 아래 case-sensitive literal UTF-8 검색 |
+| `xgeny.fs/search-text@2.0.0` | workspace 내부 `.gitignore`·`.ignore`를 따르는 case-sensitive literal UTF-8 검색 |
 | `xgeny.fs/read-text@1.0.0` | bounded UTF-8 file content 읽기 |
 | `xgeny.fs/read-text-lines@2.0.0` | 8 MiB 이하 UTF-8 file의 줄 범위 읽기와 file 전체 digest ([ADR-0053](../adr/0053-bounded-line-range-text-read.md), [ADR-0056](../adr/0056-large-file-patch.md)) |
 | `xgeny.fs/write-atomic@1.0.0` | 별도 승인 아래 UTF-8 file create/atomic replace |
@@ -100,15 +100,36 @@ material DB에는 path/query/content가, Run DB에는 goal과 successful output�
 - list: directory scan 4,096, 반환 512
 - list/stat/search output: digest 포함 canonical JCS 최대 128 KiB
 - search: query 최대 64 Unicode scalar이면서 256 UTF-8 bytes, raw visited entry
-  4,096, file 256 KiB, 실제 read aggregate 8 MiB, match 128,
+  4,096, file 256 KiB, ignore 파일 읽기를 포함한 실제 read aggregate 8 MiB, match 128,
   preview 512 bytes
 - read-text/write-atomic: file 64 KiB
 - apply-patch: source/result와 old/new 합 각각 64 KiB, edit 32개
 - discovery Run: model turn 8, provider reservation 16, planned/tool Step 8, context 512 KiB
 
-`truncated=true`는 결과가 complete하지 않다는 뜻이다. Search는 limit 도달뿐 아니라 VCS metadata,
-invalid UTF-8, oversized 또는 열 수 없는 file을 건너뛰어도 이 값을 세운다. Regex와 `.gitignore`
-해석은 아직 지원하지 않는다.
+`truncated=true`는 검색 대상 범위 안에서 결과가 complete하지 않다는 뜻이다. Search는 limit 도달뿐 아니라
+VCS metadata, invalid UTF-8, oversized 또는 열 수 없는 file을 건너뛰어도 이 값을 세운다. Ignore 규칙으로
+제외한 경로는 검색 대상이 아니므로 이것만으로 `truncated=true`가 되지는 않는다. Regex는 지원하지 않는다.
+
+### 검색의 ignore 규칙
+
+- workspace root부터 요청 directory까지의 `.gitignore`·`.ignore`와, 탐색 중 만나는 하위 directory의
+  같은 파일을 읽는다. `.git` 유무와 무관하게 적용한다.
+- Git glob 문법, `!` 예외, directory 전용 규칙, `/`로 시작하는 상대 root 규칙을 지원한다.
+  같은 종류는 더 가까운 파일과 뒤쪽 줄이 우선이고, `.ignore`가 `.gitignore`보다 우선한다.
+  제외한 directory 안에는 들어가지 않으므로 그 안의 예외 규칙은 적용되지 않는다.
+- 규칙 해석은 ripgrep의 `ignore` crate를 사용한다. 파일 탐색과 규칙 파일 읽기는 기존 opened workspace
+  handle을 사용하며 symlink를 따라가지 않는다. workspace 밖의 부모 파일, 전역 Git 설정,
+  `.git/info/exclude`, `.rgignore`는 읽지 않는다. 숨김 파일을 이름만으로 제외하지 않는다.
+- ignore 파일도 파일당 256 KiB와 검색 전체 8 MiB 읽기 예산을 따른다. 존재하는 규칙 파일이 symlink,
+  unreadable, oversized, invalid UTF-8이거나 문법을 해석할 수 없으면 검색을 실패시킨다.
+  규칙을 버리고 더 넓은 범위를 검색하지 않는다.
+- ignore는 검색 필터다. 별도 허용된 `read-text`, `read-text-lines`, `list-directory`의 접근 권한은
+  바뀌지 않는다. 제외한 파일을 읽어야 하면 정확한 경로로 읽거나 `.ignore`에 예외를 둔다.
+- `search-text@1.0.0`에서 Definition이 바뀌므로 이전 binary에서 시작한 미완료 workspace Run은
+  새 binary로 재개하면 `configuration_mismatch`로 거절된다. 새 Run을 시작해야 한다.
+  완료 Run의 offline replay는 기존 기록을 사용한다.
+
+결정과 검증 근거는 [ADR-0076](../adr/0076-ignore-aware-text-search.md)을 따른다.
 
 ## 검증
 

@@ -785,7 +785,7 @@ mod tests {
             proposal_digest: DIGEST.to_owned(),
             capability: CapabilityRef {
                 capability_id: "xgeny.fs/search-text".to_owned(),
-                contract_version: "1.0.0".to_owned(),
+                contract_version: xgen_adapter_filesystem::SEARCH_TEXT_CONTRACT_VERSION.to_owned(),
             },
             material_digest: DIGEST.to_owned(),
             arguments,

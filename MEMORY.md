@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-10-27 (KST)
+갱신: 2026-10-30 (KST)
 
 ## 사용자가 정한 방향
 
@@ -99,6 +99,8 @@
 - [실제 모델 검색어·선택 평가](docs/development/live-tool-choice-2026-10-06.md): 새 8개 조회/2개 없는 작업 intent의 영어·한국어 요청 20개×2회, 실제 DeepSeek 120회. 동결 원점수는 정답 선택 16/32→26/32, 없는 작업 거절 두 조건 8/8. branch-tip의 유효한 git ref 대체 API를 정답에서 빠뜨린 기준 결함을 발견해 원점수를 유지하고 해당 4회는 결함 판정에서 제외했다. 나머지 7개 조회 intent 28회의 사후 분석은 선택 16→26, 후보 포함 조건부 선택 16/16·26/26. 전달 차이 0건·39개 Receipt 검증 통과, 비용 상한 계산 $0.063643296·미해결 예약 0. 실제 전체 agent 업무 완료나 엔진 개선의 전후 비교가 아니다. 검색/query 실패 소유자를 분리하고 production planner 재생과 검색 ablation을 다음으로 둔다.
 
 ## 다음 과제
+
+- filesystem 검색 ignore(2026-10-30, ADR-0076, 구현·로컬 검증 완료): `search-text@2.0.0`이 workspace 내부 `.gitignore`·`.ignore`를 해석한다. 규칙 해석만 ripgrep의 `ignore` crate로 하고 기존 nofollow 탐색·workspace 경계·검색 예산은 유지한다. 규칙 읽기도 전체 byte 예산에 합산하며, 무시된 경로는 `truncated`의 원인이 아니다. Python·JavaScript 설계 layout 2개는 기존 128개 결과에서 소스를 놓쳤고 변경 후 소스 1개만 반환했다. 별도 Rust layout의 CLI E2E에서 glob·예외의 결과 2개, 무시된 파일의 명시적 읽기, 규칙 변경 뒤 완료 replay를 검증했다. 실제 LLM 완료율·token 비용은 측정하지 않았다. 전체 회귀 763개 통과(4 ignored), Clippy·fmt·protocol·문서·배포 workflow·라이선스 검사 통과. 소유자는 xgen filesystem adapter이며 graph-tool-call 변경은 없다.
 
 작업 목록과 완료 기준의 정본은 [도구·모델 통합 TODO](docs/development/tool-integration-todo.md)다. 이 메모에 체크리스트를 중복 관리하지 않는다.
 
