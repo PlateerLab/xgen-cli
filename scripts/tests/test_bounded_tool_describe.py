@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import os
+import re
+import sqlite3
 from pathlib import Path
 import unittest
 
@@ -176,6 +178,18 @@ class FullHostTests(unittest.TestCase):
             self.assertEqual(len(self.calls),0)
             arguments["contractDigest"]=view["http_read"]["contract_digest"]
             self.requests.clear();self.response=invalid_body
-            result=self.run_cli();self.assertNotEqual(result.returncode,0)
+            def report_failure(payload):
+                context = self.context(payload)
+                self.assertEqual(context["toolOutputs"], [])
+                self.assertEqual(context["steps"][0]["status"], "failed")
+                return {"formatVersion":1,"kind":"completion_candidate","steps":[],
+                        "summary":"Large-schema validation failed; no verified body available."}
+            self.proposals=[self.plan("read","xgen.http/read",arguments),report_failure]
+            result=self.run_cli();self.assertEqual(result.returncode,0,result.stderr.decode())
             self.assertEqual(len(self.calls),1)
+            self.assertEqual(len(self.requests),2)
             self.assertNotIn(b'"body"',result.stdout)
+            run_id=re.search(rb"XGEN_STARTED run_id=(run-[a-f0-9]+)",result.stderr).group(1).decode()
+            with sqlite3.connect(self.state/"runs"/run_id/"run.sqlite3") as store:
+                receipts=[json.loads(row[0]) for row in store.execute("SELECT receipt_json FROM execution_receipts")]
+            self.assertEqual([receipt["status"] for receipt in receipts],["failed"])

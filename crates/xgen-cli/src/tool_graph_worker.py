@@ -351,11 +351,11 @@ def dispatch(request):
     raise WorkerError("unknown_operation")
 
 
-def dereference(value, document, stack=(), depth=0):
+def dereference(value, document, stack=(), depth=0, *, recursive=True):
     if depth > 48:
         raise WorkerError("http_schema_depth_limit")
     if isinstance(value, list):
-        return [dereference(item, document, stack, depth+1) for item in value]
+        return [dereference(item, document, stack, depth+1) for item in value] if recursive else value
     if not isinstance(value, dict):
         return value
     if "$ref" in value:
@@ -368,11 +368,11 @@ def dereference(value, document, stack=(), depth=0):
                 target = target[part.replace("~1", "/").replace("~0", "~")]
         except (KeyError, TypeError):
             raise WorkerError("http_schema_reference_missing") from None
-        resolved = dereference(target, document, (*stack,reference), depth+1)
+        resolved = dereference(target, document, (*stack,reference), depth+1, recursive=recursive)
         if len(value) != 1:
             raise WorkerError("http_schema_ref_siblings_unsupported")
         return resolved
-    return {key:dereference(item, document, stack, depth+1) for key,item in value.items()}
+    return {key:dereference(item, document, stack, depth+1) for key,item in value.items()} if recursive else value
 
 
 def check_http_schema(value):
@@ -449,6 +449,19 @@ def describe_view(envelope, tool, http, offset):
                           "bearer_required": contract["bearer_required"],
                           "response_schema_digests": {status: digest(schema) for status, schema in list(contract["responses"].items())[:32] if len(status) <= 3},
                           "response_schema_count": len(contract["responses"]), "response_schemas_complete": False})
+    if http["supported"] and http["contract"].get("excluded_parameters"):
+        excluded = http["contract"]["excluded_parameters"]
+        excluded_rows = []
+        for parameter in excluded[:32]:
+            row = {"location": parameter["location"], "name": preview(parameter["name"], 1024),
+                   "reason": parameter["reason"]}
+            if len(canonical(excluded_rows + [row])) > 8 * 1024:
+                break
+            excluded_rows.append(row)
+        http_view.update({"excluded_parameters": excluded_rows, "excluded_parameter_count": len(excluded),
+                          "excluded_parameters_digest": digest(excluded),
+                          "excluded_parameters_complete": len(excluded_rows) == len(excluded)
+                              and all(not row["name"]["omitted"] for row in excluded_rows)})
     result = {"ok": True, **summarize(envelope), "view_version": 2,
             "contract_kind": "discovery_view", "effect_class": "unclassified",
             "full_tool_digest": digest(tool), "complete": False,
@@ -469,6 +482,31 @@ def describe_view(envelope, tool, http, offset):
     return result
 
 
+def http_read_parameter(parameter, source):
+    location, name = parameter.get("in"), parameter.get("name")
+    if location not in ("path", "query"):
+        raise WorkerError("http_parameter_location_unsupported")
+    if "content" in parameter:
+        if "schema" in parameter or not isinstance(parameter["content"], dict) or len(parameter["content"]) != 1:
+            raise WorkerError("http_original_contract_invalid")
+        raise WorkerError("http_parameter_serialization_unsupported")
+    schema = parameter.get("schema")
+    if "schema" not in parameter and source.get("swagger") == "2.0" and "type" in parameter:
+        schema = {key: value for key, value in parameter.items() if key in (
+            "type", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+            "minLength", "maxLength", "pattern", "format", "default", "multipleOf")}
+    if not isinstance(schema, (dict, bool)):
+        raise WorkerError("http_original_contract_invalid")
+    schema = dereference(schema, source)
+    if not isinstance(schema, dict) or schema.get("type") not in ("string", "integer", "number", "boolean"):
+        raise WorkerError("http_parameter_type_unsupported")
+    if parameter.get("style", "simple" if location == "path" else "form") != ("simple" if location == "path" else "form") or parameter.get("allowReserved", False):
+        raise WorkerError("http_parameter_serialization_unsupported")
+    check_http_schema(schema)
+    return {"location": location, "name": name,
+            "required": bool(parameter.get("required")) or location == "path", "schema": schema}
+
+
 def http_read_contract(artifact, tool):
     # The normalized graph is discovery data. Invoke only against retained source schemas.
     metadata = tool.get("metadata", {})
@@ -479,28 +517,51 @@ def http_read_contract(artifact, tool):
         method, path = metadata.get("method"), metadata.get("path")
         if method != "get":
             raise WorkerError("http_method_not_read_approved")
-        item = dereference(source["paths"][path], source)
+        item = dereference(source["paths"][path], source, recursive=False)
         operation = item[method]
-        if operation.get("requestBody") or any(p.get("in") == "body" for p in operation.get("parameters", [])):
+        if not isinstance(operation, dict):
+            raise WorkerError("http_original_contract_invalid")
+        parameter_groups = [item.get("parameters", []), operation.get("parameters", [])]
+        if any(not isinstance(group, list) or any(not isinstance(p, dict) for p in group)
+               for group in parameter_groups):
+            raise WorkerError("http_original_contract_invalid")
+        if operation.get("requestBody") or any(p.get("in") == "body" for p in parameter_groups[1]):
             raise WorkerError("http_get_body_unsupported")
+        # Operation overrides are allowed across groups; duplicates within one group are invalid.
         merged = {}
-        for parameter in [*item.get("parameters", []), *operation.get("parameters", [])]:
-            parameter = dereference(parameter, source)
-            location, name = parameter.get("in"), parameter.get("name")
-            if location not in ("path", "query") or not isinstance(name, str) or not name:
-                raise WorkerError("http_parameter_location_unsupported")
-            schema = parameter.get("schema")
-            if schema is None and source.get("swagger") == "2.0":
-                schema = {key:value for key,value in parameter.items() if key in ("type","enum","minimum","maximum","exclusiveMinimum","exclusiveMaximum","minLength","maxLength","pattern","format","default","multipleOf")}
-            if not isinstance(schema, dict) or schema.get("type") not in ("string","integer","number","boolean"):
-                raise WorkerError("http_parameter_type_unsupported")
-            if parameter.get("style", "simple" if location == "path" else "form") != ("simple" if location == "path" else "form") or parameter.get("allowReserved",False) or parameter.get("content"):
-                raise WorkerError("http_parameter_serialization_unsupported")
-            merged[(location,name)] = {"location":location,"name":name,"required":bool(parameter.get("required")) or location=="path","schema":dereference(schema,source)}
+        for group in parameter_groups:
+            seen = set()
+            for parameter in group:
+                parameter = dereference(parameter, source, recursive=False)
+                if not isinstance(parameter, dict):
+                    raise WorkerError("http_original_contract_invalid")
+                location, name = parameter.get("in"), parameter.get("name")
+                if location not in ("path", "query", "header", "cookie") or not isinstance(name, str) or not name:
+                    raise WorkerError("http_parameter_location_unsupported")
+                key = (location, name)
+                if key in seen or ("required" in parameter and type(parameter["required"]) is not bool):
+                    raise WorkerError("http_original_contract_invalid")
+                seen.add(key)
+                merged[key] = parameter
+        included, excluded = [], []
+        for (location, name), parameter in merged.items():
+            try:
+                included.append(http_read_parameter(parameter, source))
+            except WorkerError as error:
+                # Only known unsupported parameter shapes can be omitted. Structural,
+                # unknown parameter identity, response and security failures still close the operation.
+                if parameter.get("required") or location == "path" or str(error) not in (
+                        "http_parameter_location_unsupported", "http_parameter_type_unsupported",
+                        "http_parameter_serialization_unsupported", "http_schema_dialect_unsupported",
+                        "http_schema_reference_unsupported", "http_schema_ref_siblings_unsupported",
+                        "http_schema_depth_limit"):
+                    raise
+                excluded.append({"location": location, "name": name, "reason": str(error)})
         responses = {}
         for status,response in operation.get("responses", {}).items():
             if not str(status).isdigit() or not 200 <= int(status) <= 299:
                 continue
+            response = dereference(response, source)
             if source.get("swagger") == "2.0":
                 produces = operation.get("produces", source.get("produces", []))
                 if produces and "application/json" not in produces:
@@ -522,11 +583,11 @@ def http_read_contract(artifact, tool):
                 scheme = dereference(schemes.get(name,{}),source)
                 if scheme.get("type") != "http" or scheme.get("scheme", "").lower() != "bearer" or scopes:
                     raise WorkerError("http_security_unsupported")
-        for parameter in merged.values():
-            check_http_schema(parameter["schema"])
         for schema in responses.values():
             check_http_schema(schema)
-        contract = {"format_version":1,"method":"GET","path":path,"base_path":source.get("basePath", ""),"parameters":list(merged.values()),"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
+        contract = {"format_version":1,"method":"GET","path":path,"base_path":source.get("basePath", ""),"parameters":included,"responses":responses,"bearer_required":bool(security) and not any(not requirement for requirement in security),"source_digest":digest(source)}
+        if excluded:
+            contract["excluded_parameters"] = excluded
         if len(canonical(contract)) > 8 * 1024 * 1024:
             raise WorkerError("http_contract_size_limit")
         return {"supported":True,"contract_digest":digest(contract),"contract":contract}

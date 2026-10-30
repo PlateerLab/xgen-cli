@@ -72,7 +72,7 @@
 - [x] **xgen:** `xgen.http/read` 프록시로 exact 외부 도구·입력·계약·target을 기존 권한·실행·Receipt·완료 검증 경로에 연결. 개별 외부 Definition/Instance 자동 admission은 2번 후속이다.
 - [x] **xgen:** 원본 로컬 JSON 명세 보존과 GET scalar path/query·2xx JSON 응답·bearer/no-auth 어댑터 구현. 조회 효과는 `connect --allow-get`으로 지정하고 Run read 승인을 유지한다.
 - [ ] **graph-tool-call:** 원격 URL/Swagger UI 수집 원본·출처 보존의 공개 계약을 검토·개선. 정규화된 발견 계약과 완전한 실행 계약을 구분한다.
-- [ ] **xgen:** 원격 원본 수집 계약을 연결하고 기존 collection 실행 이행·연결 점검을 제공. header/body/배열·인증 방식의 HTTP 어댑터 지원을 확대한다. 지원하지 않는 계약을 추측해 호출하지 않는다.
+- [ ] **xgen:** 원격 원본 수집 계약을 연결하고 기존 collection 실행 이행·연결 점검을 제공. header/body/배열·인증 방식의 HTTP 어댑터 지원을 확대한다. 지원하지 않는 계약을 추측해 호출하지 않는다. 구체적인 순서와 상태는 [HTTP 조회 확장 요청](#http-조회-확장-요청-2026-10-31)을 따른다.
 - [x] **xgen:** `tools connect` 주소·숨김 bearer 입력/OS secret store·환경 참조·불변 연결 저장·재사용 구현. 인증값은 그래프·worker·모델·Receipt에 넣지 않는다.
 - [ ] **xgen:** 원격 명세·지원 operation·인증 연결 점검, 연결 수정/삭제 UX와 실제 OS secret store backend 검증. collection 삭제·재빌드 명령(backend 버전을 올리면 기존 collection을 다시 import해야 함)도 포함한다.
   - 2026-10-13 완료분: `tools rebuild --name|--all`(import 때 보존한 로컬 JSON 사본을 digest로 확인해 현재 backend로 재빌드, HTTPS는 재수집, 교체 직전에 읽은 snapshot인지 확인), `tools disconnect`(그 연결의 secret을 먼저, 그다음 연결 파일 삭제; 실패하면 그대로 남아 재시도 가능), `tools remove`(연결을 먼저, 그다음 collection 삭제), `import`는 collection 없이 남은 연결이 있으면 거절(같은 이름의 새 API가 이전 연결을 물려받지 않음). `tools list`는 collection별 `ready`·`rebuild_required`·`unreadable` 상태를 내고, 새 Run은 막는 collection 이름을 stderr에 남긴다. worker 테스트 5개 추가·1개 수정, 연결 삭제 단위 테스트 3개, discovery 테스트 1개, 컴파일 CLI 전 과정 테스트 1개를 추가했다. 별도 리뷰에서 나온 4건(손상 gzip이 목록 전체를 실패시킴, 권한 오류를 연결 없음으로 처리, 손으로 지운 collection의 연결 상속, secret 삭제 실패 시 고아 secret)을 반영했다.
@@ -130,3 +130,21 @@
 - [ ] **평가:** 검증 결과로 검색·모델 분기 기본값 결정. 작업 성공률, 잘못된 실행·완료 주장, 호출·토큰·금액, 단계·시간을 기준으로 판단.
 
 첫 구현 묶음은 **1번 계약·검증 계획 + 2번 최소 검색 연결**이다. 모델 재학습, STT 통합, 변경·등록 업무 자동화는 후속 단계다.
+
+## HTTP 조회 확장 요청 (2026-10-31)
+
+외부 통합 사례와 분리된 범용 OpenAPI 기능으로 순서대로 개발한다. 외부 operation 수·실행 가능 과업 수는
+생성된 명세를 import하고 검증하기 전에는 확정하지 않는다. 통합 측의 OpenAPI 생성기·서버·인증·모델·
+비교 실행기는 해당 저장소 담당자의 작업이다. xgen 엔진에는 시스템별 규칙을 넣지 않는다.
+
+1. **구현·로컬 검증:** 지원 밖 선택 파라미터 제외, required/path 거절, describe 제외 이유, 제외 입력 호출 전 거절.
+   [ADR-0081](../adr/0081-optional-http-parameters.md). 단독 PR로 먼저 제공한다.
+2. **다음:** OpenAPI 3 form/explode=true와 Swagger 2 multi 배열 query, scalar items 및 배열 제약 검증.
+   다른 직렬화·object items는 1번의 제외/거절 규칙을 따른다.
+3. **이후:** 연결별 반복 `--read-operation`으로 호스트가 지정한 POST 조회, JSON body 원본 schema 검증,
+   지정 목록의 연결·execution profile 고정과 drift 거절. 지정하지 않은 POST는 거절한다.
+4. **이후:** run/resume의 `--bearer-env-for CONNECTION=ENV_NAME`으로 저장된 연결을 바꾸지 않고
+   요청별 bearer를 주입한다. 값은 manifest·Receipt·모델에 남기지 않는다. 참조 binding·resume 누락 시
+   저장 token으로의 암묵적 fallback·서버 process 격리도 검증한다.
+5. **별도 설계, 대회 후:** 승인 있는 POST/PUT/PATCH/DELETE 쓰기·host Idempotency-Key·NonIdempotent
+   Unknown의 no-retry. 1~4 완료 뒤 진행하며 이번 조회 확장에 포함하지 않는다.
