@@ -152,3 +152,14 @@ printf '/status\n/exit\n' | xgen
 사용한다. 일반 자동화는 exit code와 고정 stderr 계약이 더 단순한 기존 `xgen run/resume`을 권장한다.
 
 대화 응답의 저장·검증 계약은 [ADR-0047](../adr/0047-conversation-response-and-bounded-session-context.md)을 따른다.
+
+## 상태 폴더 권한 오류
+
+Unix에서 `error: state_directory_permissions`가 나오면 함께 표시된 `state_directory`와
+`permissions`를 확인한다. 해당 폴더의 group/other 접근을 제거해야 한다.
+확인한 경로에 `chmod go-rwx -- PATH`를 직접 실행하면 소유자 권한은 유지된다.
+프로그램은 권한을 자동 변경하거나 재귀적으로 고치지 않는다. 경로는 제어 문자를 escape한 인용 표기다.
+
+headless `run`·`resume`·`usage`·`recover`는 같은 code와 진단을 stderr에 내보내고 exit 64로 끝난다.
+symlink나 일반 I/O 실패에는 이 복구 안내를 붙이지 않는다. 자세한 범위는
+[ADR-0080](../adr/0080-state-directory-permission-diagnostics.md)을 따른다.

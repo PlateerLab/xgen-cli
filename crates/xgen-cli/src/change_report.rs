@@ -58,7 +58,8 @@ pub struct TextEdit {
 /// [`PublicRunError::Integrity`] when its journal or material records do not verify.
 pub fn inspect_local_changes(run_id: &str) -> Result<Vec<CommittedChange>, PublicRunError> {
     let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let layout =
+        RunLayout::existing(&root, run_id).map_err(crate::composition::map_layout_existing)?;
     let store = SqliteRunStore::open_existing_read_only(layout.database_path())
         .map_err(|_| PublicRunError::Integrity)?;
     let state = store
@@ -170,7 +171,8 @@ pub fn inspect_step_activities(
     skip: usize,
 ) -> Result<Vec<StepActivity>, PublicRunError> {
     let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let layout =
+        RunLayout::existing(&root, run_id).map_err(crate::composition::map_layout_existing)?;
     let store = SqliteRunStore::open_existing_read_only(layout.database_path())
         .map_err(|_| PublicRunError::Integrity)?;
     let receipts = store
@@ -241,7 +243,8 @@ pub fn inspect_step_activities(
 /// [`PublicRunError::Integrity`] when its journal does not open.
 pub fn inspect_receipt_count(run_id: &str) -> Result<usize, PublicRunError> {
     let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let layout =
+        RunLayout::existing(&root, run_id).map_err(crate::composition::map_layout_existing)?;
     SqliteRunStore::open_existing_read_only(layout.database_path())
         .and_then(|store| store.load_execution_receipts())
         .map(|receipts| receipts.len())

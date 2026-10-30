@@ -132,7 +132,7 @@ impl fmt::Debug for RunLayout {
     }
 }
 
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub(crate) enum RunLayoutError {
     #[error("Run identifier is invalid")]
     InvalidRunId,
@@ -140,8 +140,38 @@ pub(crate) enum RunLayoutError {
     AlreadyExists,
     #[error("Run layout is unavailable")]
     Unavailable,
+    #[error("State directory permits group or other access")]
+    Permissions(StateDirectoryPermissions),
     #[error("Run manifest is invalid")]
     InvalidManifest,
+}
+
+/// Permission diagnostics are exposed explicitly to the local terminal, never through Debug.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StateDirectoryPermissions {
+    directory: PathBuf,
+    mode: u32,
+}
+
+impl fmt::Debug for StateDirectoryPermissions {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StateDirectoryPermissions")
+            .field("directory", &"<redacted>")
+            .field("mode", &self.mode)
+            .finish()
+    }
+}
+
+impl StateDirectoryPermissions {
+    // Debug quoting is deliberate: paths can contain terminal controls and newlines.
+    #[allow(clippy::unnecessary_debug_formatting)]
+    pub(crate) fn terminal_details(&self) -> String {
+        format!(
+            "state_directory={:?}\npermissions=0{:03o}; required=no group or other access\nrecovery=Check the quoted directory, then remove group/other access with chmod go-rwx -- PATH. Permissions were not changed automatically.",
+            self.directory, self.mode
+        )
+    }
 }
 
 pub(crate) fn discover_state_root() -> Result<PathBuf, RunLayoutError> {
@@ -349,7 +379,10 @@ fn verify_private_directory(path: &Path) -> Result<(), RunLayoutError> {
         use std::os::unix::fs::PermissionsExt as _;
         let metadata = fs::symlink_metadata(path).map_err(|_| RunLayoutError::Unavailable)?;
         if metadata.permissions().mode() & 0o077 != 0 {
-            return Err(RunLayoutError::Unavailable);
+            return Err(RunLayoutError::Permissions(StateDirectoryPermissions {
+                directory: path.to_path_buf(),
+                mode: metadata.permissions().mode() & 0o7777,
+            }));
         }
     }
     Ok(())
@@ -428,7 +461,10 @@ mod tests {
 
         assert_eq!(
             RunLayout::create(&root, run_id).unwrap_err(),
-            RunLayoutError::Unavailable
+            RunLayoutError::Permissions(StateDirectoryPermissions {
+                directory: root.clone(),
+                mode: 0o755
+            })
         );
         assert_eq!(
             fs::symlink_metadata(&root).unwrap().permissions().mode() & 0o777,
@@ -565,6 +601,51 @@ mod tests {
             RunLayout::existing(&root, run_id).unwrap_err(),
             RunLayoutError::Unavailable
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_diagnostics_keep_guards_and_redact_debug_paths() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let fixture = tempdir().unwrap();
+        let root = fixture.path().join("STATE-SENTINEL\n\x1b[31m");
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o775)).unwrap();
+        let error = RunLayout::create(&root, "run-0123456789abcdef0123456789abcdef").unwrap_err();
+        assert!(!format!("{error:?}").contains("STATE-SENTINEL"));
+        assert!(!error.to_string().contains("STATE-SENTINEL"));
+        let RunLayoutError::Permissions(details) = error else {
+            panic!("expected permissions")
+        };
+        let public = crate::PublicRunError::StateDirectoryPermissions(details);
+        assert_eq!(public.code(), "state_directory_permissions");
+        assert_eq!(public.exit_code(), 64);
+        assert!(!format!("{public:?}").contains("STATE-SENTINEL"));
+        let text = public.state_directory_details().unwrap();
+        assert!(text.contains("STATE-SENTINEL\\n\\u{1b}[31m"));
+        assert!(!text.contains('\x1b'));
+        assert!(text.contains("permissions=0775"));
+        assert_eq!(
+            fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+            0o775
+        );
+        assert!(!root.join(RUNS_DIRECTORY).exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_permission_paths_are_printable_and_control_safe() {
+        use std::os::unix::ffi::OsStringExt as _;
+        // Formatting must not depend on whether the host filesystem accepts invalid UTF-8.
+        let details = StateDirectoryPermissions {
+            directory: PathBuf::from(std::ffi::OsString::from_vec(b"state-\xff-\n-\x1b".to_vec())),
+            mode: 0o750,
+        };
+        let text = details.terminal_details();
+        assert!(text.contains("permissions=0750"));
+        assert_eq!(text.lines().count(), 3);
+        assert!(!text.contains('\x1b'));
+        assert!(!format!("{details:?}").contains("state-"));
     }
 
     #[test]

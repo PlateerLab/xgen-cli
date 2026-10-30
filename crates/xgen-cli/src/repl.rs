@@ -1878,6 +1878,13 @@ fn print_permissions(output: &mut impl Write, settings: PermissionSettings) -> i
 
 fn print_failure(output: &mut impl Write, failure: &ReplFailure) -> io::Result<()> {
     writeln!(output, "error: {}", failure.code())?;
+    if let Some(details) = failure
+        .run_error
+        .as_ref()
+        .and_then(xgen_cli::PublicRunError::state_directory_details)
+    {
+        writeln!(output, "{details}")?;
+    }
     if let Some((field, items, hint)) = failure
         .run_error
         .as_ref()

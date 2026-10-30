@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-10-30 (KST)
+갱신: 2026-10-31 (KST)
 
 ## 사용자가 정한 방향
 
@@ -154,3 +154,7 @@
 
 - 빠른 TUI resize 잔상(2026-10-30, ADR-0079, 구현·로컬 검증 완료): tmux가 screen을 먼저 바꾸고 PTY 크기 통지를 늦추는 동안 xgen의 periodic redraw가 옛 크기로 다시 그렸다. cursor report 캐시 문제가 아니었다. Unix draw·정리는 cursor 위치를 보존하고 화면 밖 CUP→CPR clipping으로 실제 화면 크기를 조회하며, Windows console size API는 유지한다. sleep·tmux 감지·전체 화면/scrollback 삭제는 넣지 않았다. draft·실행 중 queue의 rapid smoke 5회와 별도 크기 12회 burst, 결과 viewer·승인·입력·history·종료 복원을 통과했다(모델 HTTP 3/5회, 유료 LLM 없음). Rust 773 passed·4 ignored와 Clippy·fmt·문서·배포 workflow 검사를 통과했다. PTY만 73×19·화면은 100×30으로 고정한 fixture에서도 새 입력 redraw를 확인해 지연 상황을 timing과 무관하게 검증했다. 이 강제 불일치 검사는 변경 전 main `6215e93`의 별도 archive 빌드에서 실패하고 수정 빌드에서 통과했다. Unix redraw마다 CPR 왕복 하나가 추가되어 원격 터미널 latency 비용은 남는다. 소유자는 xgen TUI이며 다른 도구 변경은 없다.
 - 빠른 resize 변경 추적: [PR #136](https://github.com/PlateerLab/xgen-cli/pull/136), 코드 `f1171ba`, [전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41071470733). 강제 PTY 지연 fixture는 후속 PR 검사에 포함한다.
+
+- 상태 폴더 권한 진단(2026-10-31, ADR-0080, 구현·로컬 검증 완료): Unix mode의 group/other 비트 거절은 유지하고, root·runs·개별 Run 폴더 오류를 `state_directory_permissions`/exit64로 전달한다. CLI run/resume/usage/recover·REPL에서 문제 경로·현재 mode·`chmod go-rwx -- PATH` 안내를 표시하며 자동 chmod·재귀 수정은 없다. 명시적 로컬 진단만 경로를 escape해 표시하고 일반 Debug·오류 Display·journal·모델·progress에서는 가린다. 설계 root0775/runs0755와 별도 run0770·symlink·space·개행/ESC·비UTF8 경로를 검증했다. 사용자가 직접0700으로 고치면 권한 검사 다음 단계로 진행하며 fixture DB는 생성되지 않는다. 전체 Rust 회귀778개(4 ignored)·Clippy·fmt·protocol·공개 문서·배포 workflow 검사를 통과했다. 소유자는 xgen CLI이며 외부 도구 변경은 없다.
+- 상태 폴더 진단 변경 추적: [PR #137](https://github.com/PlateerLab/xgen-cli/pull/137), 코드 `7edf540`, [전체 CI](https://github.com/PlateerLab/xgen-cli/actions/runs/41077456833). 실제 외부 모델·다른 OS의 terminal 화면 실측은 하지 않았다.
+- 상태 폴더 진단의 [Linux PR 검사](https://github.com/PlateerLab/xgen-cli/actions/runs/41077575969)가 통과했다. 플랫폼 전체 결과는 위 전체 CI run을 참조한다.

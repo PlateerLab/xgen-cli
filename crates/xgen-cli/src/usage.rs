@@ -242,7 +242,8 @@ fn format_usd(nano_usd: u128) -> String {
 /// Returns a fixed configuration/integrity failure for missing or unreadable state.
 pub fn inspect_local_usage(run_id: &str) -> Result<UsageReport, PublicRunError> {
     let root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
-    let layout = RunLayout::existing(&root, run_id).map_err(|_| PublicRunError::Configuration)?;
+    let layout =
+        RunLayout::existing(&root, run_id).map_err(crate::composition::map_layout_existing)?;
     let store = SqliteRunStore::open_existing_read_only(layout.database_path())
         .map_err(|_| PublicRunError::Integrity)?;
     let state = store
