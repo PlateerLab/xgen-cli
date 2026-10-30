@@ -116,6 +116,29 @@ Ctrl+C는 다음 안전한 durable 경계에서 멈춘다. Model request나 proc
 `user_cancelled`보다 `model_call_unknown`/`effect_outcome_unknown`이 우선하고 자동 재실행하지 않는다.
 Network/process call이 진행 중이면 configured timeout까지 기다릴 수 있다.
 
+## 긴 결과 보기
+
+일반 TUI는 완료된 답변과 `Changes`를 결과 블록으로 보관한다. 받은 시점의 창 폭으로 12행을 넘으면
+앞 4행과 뒤 2행만 표시하고 `Ctrl+O` 안내를 넣는다. 한 줄짜리 긴 문단도 표시 폭을 기준으로 접는다.
+
+- `Ctrl+O`: 최근 결과 전체 보기. 방향키 위·아래, `PgUp`·`PgDn`·Space, Home·End로 이동한다.
+- 방향키 좌·우: 보관된 다른 답변·변경 내역으로 이동한다.
+- `Esc`, `q`, `Ctrl+O`, `Ctrl+C`, `Ctrl+D`: 전체 보기를 닫고 입력창으로 돌아간다.
+  전체 보기에서 `Ctrl+C`는 Run을 취소하지 않는다. 돌아온 뒤 `Ctrl+C`를 누르면 기존 취소 동작을 한다.
+
+전체 보기는 읽기 전용이다. Enter나 붙여넣기로 목표를 보내거나 승인하지 않는다. 열기 전의 입력과 대기열을
+유지하고, Run이 계속 진행돼 승인이나 새 결과가 도착하면 아래쪽에 안내한다. `Esc`로 돌아오면 승인 prompt와
+새 출력이 나타난다. 전체 보기에만 임시 alternate screen을 사용하고, 닫으면 기존 terminal scrollback으로 돌아온다.
+
+TUI 변경 내역은 파일당 12줄·전체 40줄로 잘린 미리보기 대신 전체 rendered 내용을 보관하므로, 전체 보기에서
+그 뒤의 edit·새 파일·교체 파일 내용과 실행 명령 인자도 읽을 수 있다. 원문은 화면 출력용 escape를 거친 내용이다.
+
+캐시는 최근 20개 결과 블록, 원문·행 배열 합계 8 MiB까지다. 오래된 항목은 전체 보기 목록에서 빠지지만
+durable Run 기록은 삭제하지 않는다. 한 블록이 한도보다 크면 접지 않고 전체를 출력한다. 전체 보기 중 보류할
+새 출력이 8 MiB를 넘으면 전체 보기를 닫고 출력해 내용을 잃지 않는다.
+
+`--debug`, pipe 입력, headless `run`·`resume`은 접지 않는다. 키와 경계는 [ADR-0078](../adr/0078-folded-results.md)을 따른다.
+
 ## Headless
 
 Pipe 입력에서는 first-run hidden prompt를 자동으로 열지 않는다. Profile이나 환경변수를 먼저 공급하면
