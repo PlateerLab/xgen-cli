@@ -635,17 +635,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn non_utf8_permission_paths_are_printable_and_control_safe() {
-        use std::os::unix::{ffi::OsStringExt as _, fs::PermissionsExt as _};
-        let fixture = tempdir().unwrap();
-        let root = fixture
-            .path()
-            .join(std::ffi::OsString::from_vec(b"state-\xff-\n-\x1b".to_vec()));
-        fs::create_dir(&root).unwrap();
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o750)).unwrap();
-        let RunLayoutError::Permissions(details) =
-            RunLayout::create(&root, "run-0123456789abcdef0123456789abcdef").unwrap_err()
-        else {
-            panic!("expected permissions")
+        use std::os::unix::ffi::OsStringExt as _;
+        // Formatting must not depend on whether the host filesystem accepts invalid UTF-8.
+        let details = StateDirectoryPermissions {
+            directory: PathBuf::from(std::ffi::OsString::from_vec(b"state-\xff-\n-\x1b".to_vec())),
+            mode: 0o750,
         };
         let text = details.terminal_details();
         assert!(text.contains("permissions=0750"));
