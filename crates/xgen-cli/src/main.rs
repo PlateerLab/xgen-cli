@@ -280,6 +280,9 @@ struct RunArgs {
     /// Explicitly allow goal/context/tool output transfer to the remote model boundary.
     #[arg(long)]
     allow_remote_model_egress: bool,
+    /// Restrict this Run to these capability IDs; repeat for more. Resume keeps the saved subset.
+    #[arg(long = "capability", value_name = "ID")]
+    capabilities: Vec<String>,
     /// Approve each one-shot read-only action selected within the declared file/directory scope.
     #[arg(long)]
     allow_read: bool,
@@ -757,6 +760,7 @@ impl repl::ReplHost for InteractiveHost {
                 // The interactive driver admits this contract regardless; said
                 // here so the request describes the Run it actually starts.
                 conversation_responses: true,
+                capabilities: Vec::new(),
             },
             &process_session,
             |run_id| {
@@ -1282,6 +1286,7 @@ fn run_command(args: RunArgs, debug: bool) -> ExitCode {
         final_response_schema,
         completion_checks,
         conversation_responses: args.conversation_responses,
+        capabilities: args.capabilities,
     };
     let started = |run_id: &str| eprintln!("XGEN_STARTED run_id={run_id}");
     present(run_local_with_progress(

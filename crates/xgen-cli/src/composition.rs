@@ -154,6 +154,8 @@ pub struct LocalRunRequest {
     /// one. The REPL has always turned this on; `run` could not, so the same
     /// question answered interactively failed as a single invocation.
     pub conversation_responses: bool,
+    /// Optional capability IDs; empty retains the full catalog. Saved for resume.
+    pub capabilities: Vec<String>,
 }
 
 impl LocalRunRequest {
@@ -189,6 +191,7 @@ impl LocalRunRequest {
             final_response_schema: None,
             completion_checks: None,
             conversation_responses: false,
+            capabilities: Vec::new(),
         }
     }
 }
@@ -1061,6 +1064,8 @@ where
         });
     }
     validate_goal(&request.goal)?;
+    let capability_scope = crate::capability_scope::normalize(request.capabilities.clone())
+        .map_err(|()| PublicRunError::Configuration)?;
 
     let workspace_id = WorkspaceId::new(WORKSPACE_ID).map_err(|_| PublicRunError::Internal)?;
     let workspace = WorkspaceRoot::open_ambient(&request.workspace, workspace_id.clone())
@@ -1118,6 +1123,7 @@ where
         &discovery_snapshots,
         &http_connections,
         &request.bearer_env_for,
+        capability_scope.as_deref(),
     )?;
     let run_id = generate_run_id().map_err(|_| PublicRunError::Internal)?;
     let manifest = RunManifest::new(
@@ -1135,6 +1141,8 @@ where
     )
     .map_err(|_| PublicRunError::Configuration)?;
     let manifest = manifest
+        .with_capability_scope(capability_scope)
+        .map_err(|_| PublicRunError::Configuration)?
         .with_tool_discovery_snapshots(discovery_snapshots)
         .map_err(|_| PublicRunError::Configuration)?
         .with_http_read_connections(http_connections)
@@ -1381,6 +1389,7 @@ where
             manifest.tool_discovery_snapshots(),
             manifest.http_read_connections(),
             manifest.http_bearer_overrides(),
+            manifest.capability_scope(),
         )?
     {
         let current = process
@@ -1683,6 +1692,8 @@ fn continue_incomplete(
         &mut verifiers,
         &mut route,
     )?;
+    capabilities = crate::capability_scope::apply(capabilities, manifest.capability_scope())
+        .map_err(|()| PublicRunError::Configuration)?;
     let mut planning_constraints = catalog
         .workspace_authorization()
         .map(|authorization| {
@@ -1698,8 +1709,23 @@ fn continue_incomplete(
                 .map_err(|_| PublicRunError::Internal)?,
         );
     }
-    if discovery.has_connections() {
-        planning_constraints.push(PlanningConstraint::new("http.read-connections", "Host-approved read connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. For explicitly host-approved POST reads, also pass body according to http_read.request_body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host.").map_err(|_| PublicRunError::Internal)?);
+    if discovery.has_connections()
+        && manifest
+            .capability_scope()
+            .is_none_or(|ids| ids.iter().any(|id| id == crate::http_read::READ))
+    {
+        let hint = if manifest
+            .capability_scope()
+            .is_some_and(|ids| !ids.iter().any(|id| id == graph_discovery::DESCRIBE))
+        {
+            "Host-approved read connections are available through xgen.http/read. This Run does not offer describe: use an exact host-supplied tool contract and contractDigest, or report the missing prerequisite; never guess. Pass parameters.path and parameters.query and, for host-approved POST reads, the specified body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host."
+        } else {
+            "Host-approved read connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. For explicitly host-approved POST reads, also pass body according to http_read.request_body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host."
+        };
+        planning_constraints.push(
+            PlanningConstraint::new("http.read-connections", hint)
+                .map_err(|_| PublicRunError::Internal)?,
+        );
     }
     if let Some(process) = process {
         planning_constraints.push(
@@ -3152,15 +3178,30 @@ fn execution_profile_with_discovery(
     snapshots: &graph_discovery::Snapshots,
     connections: &crate::http_read::Connections,
     overrides: &crate::http_read::BearerOverrides,
+    scope: Option<&[String]>,
 ) -> Result<String, PublicRunError> {
     let local_digest = local_execution_profile_digest(workspace, catalog, process)?;
-    if snapshots.is_empty() {
-        return Ok(local_digest);
-    }
+
     let discovery = DiscoveryCatalog::saved(snapshots.clone())
         .and_then(|catalog| catalog.with_connections(connections.clone()))
         .and_then(|catalog| catalog.with_bearer_overrides(overrides.clone()))
         .map_err(|()| PublicRunError::Configuration)?;
+    if scope.is_some() {
+        let product = local_tool_product(workspace, catalog, process)?;
+        let specs = discovery_specs(&discovery)?;
+        crate::capability_scope::validate_available(
+            scope,
+            product
+                .capabilities
+                .definitions()
+                .map(|d| d.metadata.id.as_str())
+                .chain(specs.iter().map(|(d, _)| d.metadata.id.as_str())),
+        )
+        .map_err(|()| PublicRunError::Configuration)?;
+    }
+    if snapshots.is_empty() {
+        return bind_capability_scope_digest(local_digest, scope);
+    }
     let mut profile = serde_json::json!({
         "domain":"xgen.cli.local-and-tool-discovery-execution-profile/v1",
         "local_profile_digest":local_digest,
@@ -3178,6 +3219,18 @@ fn execution_profile_with_discovery(
             .ok_or(PublicRunError::Internal)?
             .remove("http_read_profile");
     }
+    bind_capability_scope_digest(
+        sha256_digest(&serde_jcs::to_vec(&profile).map_err(|_| PublicRunError::Internal)?),
+        scope,
+    )
+}
+
+fn bind_capability_scope_digest(
+    base: String,
+    scope: Option<&[String]>,
+) -> Result<String, PublicRunError> {
+    let Some(scope) = scope else { return Ok(base) };
+    let profile = serde_json::json!({"domain":"xgen.cli.capability-scope/v1","base":base,"capabilities":scope});
     Ok(sha256_digest(
         &serde_jcs::to_vec(&profile).map_err(|_| PublicRunError::Internal)?,
     ))
@@ -3670,7 +3723,8 @@ mod tests {
                 None,
                 &graph_discovery::Snapshots::new(),
                 &crate::http_read::Connections::new(),
-                &crate::http_read::BearerOverrides::new()
+                &crate::http_read::BearerOverrides::new(),
+                None,
             )
             .unwrap(),
             local_execution_profile_digest(&workspace, &catalog, None).unwrap()
@@ -3684,7 +3738,8 @@ mod tests {
                 None,
                 &first,
                 &crate::http_read::Connections::new(),
-                &crate::http_read::BearerOverrides::new()
+                &crate::http_read::BearerOverrides::new(),
+                None,
             )
             .unwrap(),
             execution_profile_with_discovery(
@@ -3693,7 +3748,8 @@ mod tests {
                 None,
                 &second,
                 &crate::http_read::Connections::new(),
-                &crate::http_read::BearerOverrides::new()
+                &crate::http_read::BearerOverrides::new(),
+                None,
             )
             .unwrap()
         );
@@ -3721,6 +3777,7 @@ mod tests {
                 &snapshots,
                 &connections,
                 overrides,
+                None,
             )
             .unwrap()
         };
@@ -4124,6 +4181,7 @@ mod tests {
             final_response_schema: None,
             completion_checks: None,
             conversation_responses: false,
+            capabilities: Vec::new(),
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -4184,6 +4242,7 @@ mod tests {
             final_response_schema: None,
             completion_checks: None,
             conversation_responses: false,
+            capabilities: Vec::new(),
         };
         assert!(matches!(
             run_local_with_process_session_progress(
