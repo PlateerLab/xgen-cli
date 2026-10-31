@@ -39,6 +39,8 @@ struct RunManifestRecord {
     http_read_connections: crate::http_read::Connections,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     http_bearer_overrides: crate::http_read::BearerOverrides,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    capability_scope: Option<Vec<String>>,
     budget: ManifestBudget,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     conversation_responses: bool,
@@ -167,6 +169,7 @@ impl RunManifest {
             tool_discovery_snapshots: crate::graph_discovery::Snapshots::new(),
             http_read_connections: crate::http_read::Connections::new(),
             http_bearer_overrides: crate::http_read::BearerOverrides::new(),
+            capability_scope: None,
             budget,
             conversation_responses: false,
             final_response_schema: None,
@@ -178,6 +181,20 @@ impl RunManifest {
             record,
             record_digest,
         })
+    }
+
+    pub(crate) fn with_capability_scope(
+        mut self,
+        scope: Option<Vec<String>>,
+    ) -> Result<Self, ManifestError> {
+        self.record.capability_scope = scope;
+        validate_record(&self.record)?;
+        self.record_digest = digest_record(&self.record)?;
+        Ok(self)
+    }
+
+    pub(crate) fn capability_scope(&self) -> Option<&[String]> {
+        self.record.capability_scope.as_deref()
     }
 
     pub(crate) fn with_http_bearer_overrides(
@@ -396,6 +413,13 @@ fn validate_record(record: &RunManifestRecord) -> Result<(), ManifestError> {
     }) {
         return Err(ManifestError::Invalid);
     }
+    if record
+        .capability_scope
+        .as_ref()
+        .is_some_and(|ids| !crate::capability_scope::valid(ids))
+    {
+        return Err(ManifestError::Invalid);
+    }
     if !crate::http_read::valid_bearer_overrides(
         &record.http_bearer_overrides,
         &record.http_read_connections,
@@ -542,6 +566,38 @@ mod tests {
             tampered["record"]["toolDiscoverySnapshots"][collection] =
                 Value::String("c".repeat(64));
             assert!(RunManifest::from_bytes(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        }
+    }
+
+    #[test]
+    fn capability_scope_is_optional_bound_and_validated() {
+        let legacy = fixture();
+        assert!(legacy.capability_scope().is_none());
+        assert!(
+            !String::from_utf8(legacy.to_bytes().unwrap())
+                .unwrap()
+                .contains("capabilityScope")
+        );
+        for scope in [
+            vec!["generic/read".into()],
+            vec!["generic/describe".into(), "generic/search".into()],
+        ] {
+            let bound = legacy.clone().with_capability_scope(Some(scope)).unwrap();
+            assert_ne!(legacy.authority(), bound.authority());
+            assert_eq!(
+                RunManifest::from_bytes(&bound.to_bytes().unwrap()).unwrap(),
+                bound
+            );
+            let mut tampered: Value = serde_json::from_slice(&bound.to_bytes().unwrap()).unwrap();
+            tampered["record"]["capabilityScope"] = serde_json::json!(["generic/write"]);
+            assert!(RunManifest::from_bytes(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        }
+        for ids in [
+            vec![],
+            vec!["b".into(), "a".into()],
+            vec!["a".into(), "a".into()],
+        ] {
+            assert!(legacy.clone().with_capability_scope(Some(ids)).is_err());
         }
     }
 
