@@ -19,7 +19,7 @@ use xgen_cli::{
     resume_local_with_process_session_and_model_resolver_progress,
     run_interactive_with_process_session_progress, run_local_with_progress,
 };
-use xgen_provider_openai::{BearerCredential, ResponseFormat, ThinkingMode};
+use xgen_provider_openai::{BearerCredential, ParameterStyle, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
 
 mod repl;
@@ -381,6 +381,10 @@ struct RequestOptionArgs {
     /// Explicit provider thinking setting; default omits the provider-specific setting.
     #[arg(long, value_parser = ["default", "disabled", "enabled", "chat_template_disabled"])]
     thinking: Option<String>,
+    /// Output-limit and sampling parameter names; `openai` sends `max_completion_tokens` and omits
+    /// `temperature`, as `OpenAI` reasoning models require.
+    #[arg(long, value_parser = ["compatible", "openai"])]
+    parameter_style: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -918,6 +922,7 @@ struct ProviderPreset {
     base_url: &'static str,
     response_format: &'static str,
     thinking: &'static str,
+    parameter_style: &'static str,
 }
 
 /// The endpoints setup can fill in for you, instead of asking you to type one.
@@ -941,13 +946,20 @@ const PROVIDER_PRESETS: &[ProviderPreset] = &[
         base_url: "https://api.deepseek.com/v1",
         response_format: "json_object",
         thinking: "disabled",
+        parameter_style: "compatible",
     },
     ProviderPreset {
         id: "openai",
         label: "OpenAI",
         base_url: "https://api.openai.com/v1",
-        response_format: "json_schema",
+        // Not `json_schema`: OpenAI's strict structured outputs require a `type` on every schema
+        // node, and the proposal schema leaves Step `arguments` open, so every OpenAI model
+        // rejects the request before it is generated (HTTP 400, measured 2026-11-03).
+        response_format: "json_object",
         thinking: "default",
+        // Its reasoning models reject `max_tokens` and `temperature: 0`; its other chat models
+        // accept this spelling too, so one setting covers the whole catalog the picker lists.
+        parameter_style: "openai",
     },
     ProviderPreset {
         id: "openrouter",
@@ -958,6 +970,7 @@ const PROVIDER_PRESETS: &[ProviderPreset] = &[
         // `json_object` is the contract they all accept.
         response_format: "json_object",
         thinking: "default",
+        parameter_style: "compatible",
     },
     ProviderPreset {
         id: "glm",
@@ -971,6 +984,7 @@ const PROVIDER_PRESETS: &[ProviderPreset] = &[
         base_url: "https://api.z.ai/api/paas/v4",
         response_format: "json_object",
         thinking: "disabled",
+        parameter_style: "compatible",
     },
     ProviderPreset {
         id: "local",
@@ -985,6 +999,7 @@ const PROVIDER_PRESETS: &[ProviderPreset] = &[
         base_url: "http://127.0.0.1:11434/v1",
         response_format: "json_object",
         thinking: "default",
+        parameter_style: "compatible",
     },
 ];
 
@@ -1487,6 +1502,10 @@ fn model_setup(args: ModelSetupArgs) -> ExitCode {
                 thinking_label(profile.request_options().thinking)
             );
             println!(
+                "  parameters: {}",
+                parameter_style_label(profile.request_options().parameter_style)
+            );
+            println!(
                 "  inference limits: timeout={}s max_output_tokens={}",
                 profile.inference_limits().timeout().as_secs(),
                 profile.inference_limits().max_output_tokens()
@@ -1551,6 +1570,11 @@ fn try_model_setup(mut args: ModelSetupArgs) -> Result<(ModelProfile, bool), Mod
             && read_environment("XGEN_OPENAI_THINKING")?.is_none()
         {
             args.request_options.thinking = Some(preset.thinking.to_owned());
+        }
+        if args.request_options.parameter_style.is_none()
+            && read_environment("XGEN_OPENAI_PARAMETER_STYLE")?.is_none()
+        {
+            args.request_options.parameter_style = Some(preset.parameter_style.to_owned());
         }
     }
     let secret = resolve_setup_secret(&base_url, args.token_stdin, existing.as_ref(), interactive)?;
@@ -1673,7 +1697,7 @@ fn model_list() -> ExitCode {
                 " "
             };
             println!(
-                "{marker} {} model={} tokenizer={} timeout={}s max_output_tokens={} response_format={} thinking={} authentication={}",
+                "{marker} {} model={} tokenizer={} timeout={}s max_output_tokens={} response_format={} thinking={} parameter_style={} authentication={}",
                 profile.name(),
                 profile.model(),
                 profile.tokenizer(),
@@ -1681,6 +1705,7 @@ fn model_list() -> ExitCode {
                 profile.inference_limits().max_output_tokens(),
                 response_format_label(profile.request_options().response_format),
                 thinking_label(profile.request_options().thinking),
+                parameter_style_label(profile.request_options().parameter_style),
                 if profile.has_stored_credential() {
                     "secure_store"
                 } else {
@@ -1952,9 +1977,20 @@ fn resolve_request_options(
         Some("chat_template_disabled") => ThinkingMode::ChatTemplateDisabled,
         Some(_) => return Err(ModelCliError::InvalidRequestOptions),
     };
+    let parameter_style = match explicit
+        .parameter_style
+        .or(read_environment("XGEN_OPENAI_PARAMETER_STYLE")?)
+        .as_deref()
+    {
+        None => base.parameter_style,
+        Some("compatible") => ParameterStyle::Compatible,
+        Some("openai") => ParameterStyle::OpenAi,
+        Some(_) => return Err(ModelCliError::InvalidRequestOptions),
+    };
     Ok(RequestOptions {
         response_format,
         thinking,
+        parameter_style,
     })
 }
 
@@ -1963,6 +1999,13 @@ const fn response_format_label(format: ResponseFormat) -> &'static str {
         ResponseFormat::JsonSchema => "json_schema",
         ResponseFormat::JsonObject => "json_object",
         ResponseFormat::JsonSchemaAtomicJson => "json_schema_atomic_json",
+    }
+}
+
+const fn parameter_style_label(style: ParameterStyle) -> &'static str {
+    match style {
+        ParameterStyle::Compatible => "compatible",
+        ParameterStyle::OpenAi => "openai",
     }
 }
 
@@ -2381,6 +2424,7 @@ mod provider_preset_tests {
                 RequestOptionArgs {
                     response_format: Some(preset.response_format.to_owned()),
                     thinking: Some(preset.thinking.to_owned()),
+                    parameter_style: Some(preset.parameter_style.to_owned()),
                 },
                 None,
             )

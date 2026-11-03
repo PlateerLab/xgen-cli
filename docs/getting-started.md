@@ -175,7 +175,7 @@ xgen model check --compatibility
 | id | provider | base URL | 검증 |
 | --- | --- | --- | --- |
 | `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | 실제 호출로 확인 |
-| `openai` | OpenAI | `https://api.openai.com/v1` | 미확인, provider 문서 기준 |
+| `openai` | OpenAI | `https://api.openai.com/v1` | 실제 호출로 확인(gpt-6-luna, gpt-5.5-2026-04-23, gpt-4.1-2025-04-14). 별칭 model은 날짜 붙은 snapshot ID를 고른다 |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | 미확인, provider 문서 기준 |
 | `glm` | GLM / Zhipu (z.ai) | `https://api.z.ai/api/paas/v4` | 미확인, provider 문서 기준. Coding Plan 계정은 `https://api.z.ai/api/coding/paas/v4`이므로 `--base-url`로 지정한다 |
 | `local` | 로컬 model (Ollama 기본 port) | `http://127.0.0.1:11434/v1` | loopback fixture로 확인 |
@@ -186,6 +186,16 @@ preset에서 가장 중요한 값은 `response_format`이다. planner는 구조�
 preset에 없다. Claude의 OpenAI 호환 layer는 `response_format`을 무시한다고 문서에 적혀 있어서,
 preset으로 넣으면 설정은 깨끗하게 끝나고 매 턴이 깨진다. 이 설정을 지키는 gateway(예: OpenRouter)
 를 통하면 사용할 수 있다.
+
+OpenAI preset은 `json_object`와 `--parameter-style openai`를 쓴다. OpenAI 추론 model은 `max_tokens`와
+`temperature: 0`을 거절하므로 이 style은 출력 한도를 `max_completion_tokens`로 보내고 `temperature`를
+생략한다. 다른 provider는 기본값 `compatible`(기존 `max_tokens`, `temperature: 0`)을 그대로 쓴다.
+OpenAI의 별칭 model(`gpt-5.5` 등)은 응답에 날짜 붙은 snapshot ID를 돌려주므로 model 일치 검사에서
+닫힌다. catalog에 함께 나오는 `gpt-5.5-2026-04-23` 같은 snapshot ID를 고른다.
+
+```bash
+xgen model setup --provider openai --model gpt-5.5-2026-04-23
+```
 
 인증 없는 loopback vLLM을 non-interactive하게 지정할 수도 있다. Tokenizer를 생략하면 model ID를
 tokenizer/profile identity로 사용한다.

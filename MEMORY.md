@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-10-31 (KST)
+갱신: 2026-11-03 (KST)
 
 ## 사용자가 정한 방향
 
@@ -178,3 +178,7 @@
 - 다음 범용 작업(사용자 승인, 2026-10-31): 명세별 HTTP 지원 범위를 한번에 보는 `tools check-http` 진단을 진행한다. 개별 describe/execution의 classifier를 재사용하고 저장된 조회 지정 정책을 적용한다. 판정 범위는 import된 도구이며 실제 API·인증·모델 검증과 구분한다.
 - HTTP 지원 보고서(ADR-0085, 구현·로컬 검증 완료): 전체 지원/거절·제외 이유 집계, 이름순 bounded page, artifact/policy digest를 제공한다. assets/calendar 설계와 shipment/sensor 실제 CLI 대조에서 개별 describe와 일치했고, bearer 환경변수가 없어도 API·모델 호출0회였다. 외부 통합 과업 수는 계속 미확정이다.
 - HTTP 지원 보고서 검증: Rust784개(4 ignored), pinned backend+컴파일 CLI Python159개(7 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 독립 diff 검토의 policy 전달·pagination 가설은 실제 native 정책 주입·행 크기 상한·마지막 페이지 검사와 대조했다. Run 계약/profile·HTTP 지원 규칙은 바꾸지 않았다.
+
+- OpenAI 연결(사용자 요청, 2026-11-03): rc.6 설치 후 OpenAI preset으로 어떤 model도 setup을 통과하지 못했다. 원인 3가지를 실제 api.openai.com 요청으로 확정했다. (1) 추론 model은 `max_tokens`·`temperature: 0` 거절 (2) preset의 `json_schema`는 strict 모드가 모든 schema node에 `type`을 요구해 Step `arguments`에서 모든 model이 400 (3) 별칭 model은 응답 `model`이 날짜 붙은 snapshot이라 identity 검사에서 닫힘.
+- OpenAI parameter style(ADR-0086, 구현·실제 OpenAI 검증 완료): `--parameter-style compatible|openai`, `openai`는 `max_completion_tokens`·temperature 생략. OpenAI preset은 `json_object`+`openai`. compatible은 digest·profile 파일 바이트가 그대로다. 별칭 identity 검사는 완화하지 않고 snapshot ID 선택을 안내한다. setup PASS gpt-6-luna·gpt-5.5-2026-04-23·gpt-4.1-2025-04-14, run 파일 수정 3/3, 테스트 생성+README 수정 2/2(pytest 4 passed), 출력 한도 1024에서 잘림 0.
+- 다음(제안, 미구현): setup/run의 `request_rejected`·`chat_completions_incompatible`에 provider 거절 이유와 응답 model ID를 보여 준다. 지금은 code 한 줄뿐이라 사용자가 원인을 알 수 없다.
