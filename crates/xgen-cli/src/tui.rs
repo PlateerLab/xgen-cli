@@ -39,7 +39,7 @@ const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
 /// Timed repaints only animate the spinner or settle a resize; an idle pane is never repainted.
 const REDRAW_INTERVAL: Duration = Duration::from_millis(100);
 /// After a resize, keep asking the screen for its size while a lagging PTY catches up.
-const RESIZE_SETTLE: Duration = Duration::from_secs(1);
+const RESIZE_SETTLE: Duration = Duration::from_secs(2);
 const MAX_DEFERRED_BYTES: usize = 8 * 1024 * 1024;
 static ALTERNATE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -558,13 +558,7 @@ impl Frontend {
     fn draw(&mut self, finished: &[Vec<u8>], with_pane: bool) -> io::Result<()> {
         let mut stdout = io::stdout().lock();
         let size = self.size(&mut stdout)?;
-        if with_pane
-            && finished.is_empty()
-            && self.deferred.is_empty()
-            && self.viewer.is_none()
-            && !self.alternate
-            && self.drawn.shows(&self.pane(size), size)
-        {
+        if with_pane && self.unchanged(finished, size) {
             return Ok(());
         }
         // Terminals that support synchronized output show the erased and rewritten pane at once.
@@ -573,6 +567,18 @@ impl Frontend {
         queue!(stdout, terminal::EndSynchronizedUpdate)?;
         stdout.flush()?;
         painted
+    }
+
+    /// Whether the screen still shows exactly the frame that would be written now.
+    fn unchanged(&self, finished: &[Vec<u8>], size: (u16, u16)) -> bool {
+        finished.is_empty()
+            && self.deferred.is_empty()
+            && self.viewer.is_none()
+            && !self.alternate
+            // The terminal reflows and clips the screen behind the pane while it resizes,
+            // so a matching last frame does not prove the screen still shows it.
+            && !self.settling_resize()
+            && self.drawn.shows(&self.pane(size), size)
     }
 
     /// The screen size, probed only when the PTY size moved or a resize may still be settling.
@@ -1450,6 +1456,22 @@ mod tests {
             !drawn.shows(&pane, (80, 24)),
             "a moved caret is always repainted"
         );
+        drawn.caret_column -= 1;
+
+        // Spinner frames change every 250ms; restart the clock so both panes are the same frame.
+        frontend.started = Instant::now();
+        frontend.drawn = DrawnPane {
+            rows: frontend.pane((80, 24)).rows,
+            ..drawn
+        };
+        frontend.last_resize = Some(Instant::now());
+        assert!(
+            !frontend.unchanged(&[], (80, 24)),
+            "a resize reflows the screen, so a matching last frame is repainted"
+        );
+        frontend.last_resize = None;
+        assert!(frontend.unchanged(&[], (80, 24)));
+        assert!(!frontend.unchanged(&[b"output".to_vec()], (80, 24)));
     }
 
     #[test]
