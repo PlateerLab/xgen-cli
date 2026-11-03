@@ -472,6 +472,7 @@ fn compatibility_probe_config(
         .and_then(|config| config.with_timeout(limits.timeout()))
         .and_then(|config| config.with_response_format(options.response_format))
         .and_then(|config| config.with_thinking(options.thinking))
+        .and_then(|config| config.with_parameter_style(options.parameter_style))
         .and_then(artifact_schema_from_environment)
         .map_err(map_model_check_config)
 }
@@ -2233,6 +2234,7 @@ fn planner_config(
         .and_then(|config| config.with_timeout(limits.timeout()))
         .and_then(|config| config.with_response_format(options.response_format))
         .and_then(|config| config.with_thinking(options.thinking))
+        .and_then(|config| config.with_parameter_style(options.parameter_style))
         .and_then(artifact_schema_from_environment)
         .map_err(map_provider_config)?;
     if planning_constraints_required {
@@ -3919,21 +3921,27 @@ mod tests {
 
     #[test]
     fn explicit_wire_options_have_identical_probe_and_planner_digests() {
-        use xgen_provider_openai::{ResponseFormat, ThinkingMode};
+        use xgen_provider_openai::{ParameterStyle, ResponseFormat, ThinkingMode};
         for response_format in [
             ResponseFormat::JsonSchema,
             ResponseFormat::JsonObject,
             ResponseFormat::JsonSchemaAtomicJson,
         ] {
-            for thinking in [
+            for (thinking, parameter_style) in [
                 ThinkingMode::Default,
                 ThinkingMode::Disabled,
                 ThinkingMode::Enabled,
                 ThinkingMode::ChatTemplateDisabled,
-            ] {
+            ]
+            .into_iter()
+            .flat_map(|thinking| {
+                [ParameterStyle::Compatible, ParameterStyle::OpenAi]
+                    .map(|parameter_style| (thinking, parameter_style))
+            }) {
                 let options = RequestOptions {
                     response_format,
                     thinking,
+                    parameter_style,
                 };
                 let probe = compatibility_probe_config(
                     "https://provider.example/v1",

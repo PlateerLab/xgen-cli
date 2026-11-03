@@ -136,6 +136,21 @@ pub enum ThinkingMode {
     ChatTemplateDisabled,
 }
 
+/// Explicit sampling and output-limit parameter names, never inferred from a model ID.
+///
+/// `OpenAI` reasoning models reject `max_tokens` and any non-default `temperature`, while its
+/// other chat models accept the replacement spelling too; compatible servers keep the original.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParameterStyle {
+    /// Send `max_tokens` and the deterministic `temperature` (existing request semantics).
+    #[default]
+    #[serde(rename = "compatible")]
+    Compatible,
+    /// Send `max_completion_tokens` and omit `temperature` (current `OpenAI` Chat Completions).
+    #[serde(rename = "openai")]
+    OpenAi,
+}
+
 /// A bearer credential retained only as a sensitive HTTP header value.
 #[derive(Clone)]
 pub struct BearerCredential(HeaderValue);
@@ -184,6 +199,7 @@ pub struct OpenAiPlannerConfig {
     completion_validator: Option<jsonschema::Validator>,
     response_format: ResponseFormat,
     thinking: ThinkingMode,
+    parameter_style: ParameterStyle,
     planning_constraints_required: bool,
     conversation_responses: bool,
     evaluation_step_limit: Option<EvaluationProposalStepLimit>,
@@ -234,6 +250,7 @@ impl OpenAiPlannerConfig {
             completion_validator: None,
             response_format: ResponseFormat::default(),
             thinking: ThinkingMode::default(),
+            parameter_style: ParameterStyle::default(),
             planning_constraints_required: false,
             conversation_responses: false,
             evaluation_step_limit: None,
@@ -410,6 +427,25 @@ impl OpenAiPlannerConfig {
         self.thinking
     }
 
+    /// Return a copy with explicit sampling/output-limit parameter names; no model inference.
+    ///
+    /// # Errors
+    /// Returns an error if the updated request-profile digest cannot be constructed.
+    pub fn with_parameter_style(
+        mut self,
+        parameter_style: ParameterStyle,
+    ) -> Result<Self, OpenAiPlannerConfigError> {
+        self.parameter_style = parameter_style;
+        self.refresh_profile_digest()?;
+        Ok(self)
+    }
+
+    /// The committed sampling/output-limit parameter names.
+    #[must_use]
+    pub const fn parameter_style(&self) -> ParameterStyle {
+        self.parameter_style
+    }
+
     /// Return a copy with a different bounded completion-token limit.
     ///
     /// # Errors
@@ -509,6 +545,8 @@ impl OpenAiPlannerConfig {
             thinking: self.thinking_request(),
             chat_template_kwargs: self.chat_template_request(),
             reasoning_effort: self.reasoning_effort(),
+            // Absent for the compatible style so existing profiles keep their digest.
+            parameter_style: (self.parameter_style == ParameterStyle::OpenAi).then_some("openai"),
             max_output_tokens: self.max_output_tokens,
             timeout_seconds: self.timeout.as_secs(),
             timeout_subsec_nanos: self.timeout.subsec_nanos(),
@@ -592,7 +630,16 @@ impl OpenAiPlannerConfig {
     }
 
     fn temperature(&self) -> Option<u8> {
-        (self.thinking != ThinkingMode::Enabled).then_some(0)
+        (self.thinking != ThinkingMode::Enabled
+            && self.parameter_style == ParameterStyle::Compatible)
+            .then_some(0)
+    }
+
+    const fn output_token_limits(&self) -> (Option<u32>, Option<u32>) {
+        match self.parameter_style {
+            ParameterStyle::Compatible => (Some(self.max_output_tokens), None),
+            ParameterStyle::OpenAi => (None, Some(self.max_output_tokens)),
+        }
     }
 
     fn thinking_request(&self) -> Option<ThinkingRequest> {
@@ -618,6 +665,7 @@ impl OpenAiPlannerConfig {
     }
 
     fn chat_request<'a>(&'a self, system: &'a str, user: &'a str) -> ChatCompletionRequest<'a> {
+        let (max_tokens, max_completion_tokens) = self.output_token_limits();
         ChatCompletionRequest {
             model: &self.model,
             messages: [
@@ -632,7 +680,8 @@ impl OpenAiPlannerConfig {
             ],
             temperature: self.temperature(),
             seed: self.seed(),
-            max_tokens: self.max_output_tokens,
+            max_tokens,
+            max_completion_tokens,
             stream: false,
             n: 1,
             response_format: match self.response_format {
@@ -706,6 +755,7 @@ impl fmt::Debug for OpenAiPlannerConfig {
             .field("completion_validator", &self.completion_validator.is_some())
             .field("response_format", &self.response_format)
             .field("thinking", &self.thinking)
+            .field("parameter_style", &self.parameter_style)
             .field(
                 "planning_constraints_required",
                 &self.planning_constraints_required,
@@ -1167,6 +1217,8 @@ struct RequestProfileDescriptor<'a> {
     chat_template_kwargs: Option<ChatTemplateRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parameter_style: Option<&'static str>,
     max_output_tokens: u32,
     timeout_seconds: u64,
     timeout_subsec_nanos: u32,
@@ -1198,7 +1250,10 @@ struct ChatCompletionRequest<'a> {
     temperature: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u64>,
-    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_completion_tokens: Option<u32>,
     stream: bool,
     n: u8,
     response_format: ResponseFormatRequest<'a>,
@@ -2497,6 +2552,78 @@ mod tests {
             reset.request_profile_digest(),
             config("https://provider.example/v1").request_profile_digest()
         );
+    }
+
+    #[test]
+    fn openai_parameter_style_renames_the_limit_and_omits_temperature() {
+        let compatible = config("https://provider.example/v1");
+        let openai = config("https://provider.example/v1")
+            .with_parameter_style(ParameterStyle::OpenAi)
+            .unwrap();
+        let body = request_body(&openai);
+        assert_eq!(body["max_completion_tokens"], DEFAULT_MAX_OUTPUT_TOKENS);
+        assert!(body.get("max_tokens").is_none());
+        assert!(body.get("temperature").is_none());
+        // Seed and the strict schema are accepted by OpenAI reasoning models; keep them.
+        assert_eq!(body["seed"], 0);
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        assert!(body.get("reasoning_effort").is_none());
+        assert!(body.get("thinking").is_none());
+
+        let legacy = request_body(&compatible);
+        assert_eq!(legacy["max_tokens"], DEFAULT_MAX_OUTPUT_TOKENS);
+        assert!(legacy.get("max_completion_tokens").is_none());
+        assert_eq!(legacy["temperature"], 0);
+
+        assert_ne!(
+            openai.request_profile_digest(),
+            compatible.request_profile_digest()
+        );
+        let reset = openai
+            .with_parameter_style(ParameterStyle::Compatible)
+            .unwrap();
+        assert_eq!(
+            reset.request_profile_digest(),
+            compatible.request_profile_digest()
+        );
+
+        let limited = config("https://provider.example/v1")
+            .with_max_output_tokens(2_048)
+            .unwrap()
+            .with_parameter_style(ParameterStyle::OpenAi)
+            .unwrap();
+        assert_eq!(request_body(&limited)["max_completion_tokens"], 2_048);
+
+        // The style composes with the other explicit dialects instead of replacing them.
+        let object = config("https://provider.example/v1")
+            .with_response_format(ResponseFormat::JsonObject)
+            .unwrap()
+            .with_parameter_style(ParameterStyle::OpenAi)
+            .unwrap();
+        let object_body = request_body(&object);
+        assert_eq!(
+            object_body["response_format"],
+            json!({"type":"json_object"})
+        );
+        assert!(object_body.get("seed").is_none());
+        assert!(object_body.get("temperature").is_none());
+        assert_eq!(
+            object_body["max_completion_tokens"],
+            DEFAULT_MAX_OUTPUT_TOKENS
+        );
+    }
+
+    #[test]
+    fn parameter_style_has_stable_wire_names() {
+        assert_eq!(
+            serde_json::to_value(ParameterStyle::Compatible).unwrap(),
+            "compatible"
+        );
+        assert_eq!(
+            serde_json::to_value(ParameterStyle::OpenAi).unwrap(),
+            "openai"
+        );
+        assert!(serde_json::from_value::<ParameterStyle>(json!("open_ai")).is_err());
     }
 
     #[test]

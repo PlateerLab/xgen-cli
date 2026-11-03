@@ -12,7 +12,7 @@ use keyring::{Entry, Error as KeyringError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use xgen_provider_openai::{OpenAiPlannerConfig, ResponseFormat, ThinkingMode};
+use xgen_provider_openai::{OpenAiPlannerConfig, ParameterStyle, ResponseFormat, ThinkingMode};
 use zeroize::Zeroizing;
 
 const PROFILE_FILE: &str = "model-profiles.json";
@@ -88,6 +88,7 @@ impl Default for InferenceLimits {
 pub struct RequestOptions {
     pub response_format: ResponseFormat,
     pub thinking: ThinkingMode,
+    pub parameter_style: ParameterStyle,
 }
 
 /// One non-secret OpenAI-compatible model profile.
@@ -234,6 +235,7 @@ impl ModelProfile {
         .and_then(|config| config.with_max_output_tokens(self.inference_limits.max_output_tokens))
         .and_then(|config| config.with_response_format(self.request_options.response_format))
         .and_then(|config| config.with_thinking(self.request_options.thinking))
+        .and_then(|config| config.with_parameter_style(self.request_options.parameter_style))
         .map(|_| ())
         .map_err(|_| ModelProfileError::InvalidProfile)
     }
@@ -752,6 +754,15 @@ struct StoredProfile {
     response_format: ResponseFormat,
     #[serde(default)]
     thinking: ThinkingMode,
+    // Written only when not the default, so files that never chose a style stay byte-identical
+    // and remain readable by earlier binaries, which reject unknown fields.
+    #[serde(default, skip_serializing_if = "is_compatible_parameter_style")]
+    parameter_style: ParameterStyle,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // Serde skip predicates require a reference.
+fn is_compatible_parameter_style(style: &ParameterStyle) -> bool {
+    *style == ParameterStyle::Compatible
 }
 
 fn default_inference_timeout_seconds() -> u64 {
@@ -774,6 +785,7 @@ impl StoredProfile {
             max_output_tokens: profile.inference_limits.max_output_tokens,
             response_format: profile.request_options.response_format,
             thinking: profile.request_options.thinking,
+            parameter_style: profile.request_options.parameter_style,
         }
     }
 
@@ -793,6 +805,7 @@ impl StoredProfile {
             request_options: RequestOptions {
                 response_format: self.response_format,
                 thinking: self.thinking,
+                parameter_style: self.parameter_style,
             },
         };
         profile
@@ -1176,22 +1189,51 @@ mod tests {
                 ThinkingMode::Enabled,
                 ThinkingMode::ChatTemplateDisabled,
             ] {
-                let mut original = profile("wire");
-                let options = RequestOptions {
-                    response_format,
-                    thinking,
-                };
-                original.set_request_options(options).unwrap();
-                let encoded = serde_json::to_value(StoredProfile::from_profile(&original)).unwrap();
-                let decoded: StoredProfile = serde_json::from_value(encoded.clone()).unwrap();
-                assert_eq!(decoded.into_profile().unwrap().request_options(), options);
-                for field in ["responseFormat", "thinking"] {
-                    let mut malformed = encoded.clone();
-                    malformed[field] = serde_json::json!("auto-detect");
-                    assert!(serde_json::from_value::<StoredProfile>(malformed).is_err());
+                for parameter_style in [ParameterStyle::Compatible, ParameterStyle::OpenAi] {
+                    let mut original = profile("wire");
+                    let options = RequestOptions {
+                        response_format,
+                        thinking,
+                        parameter_style,
+                    };
+                    original.set_request_options(options).unwrap();
+                    let encoded =
+                        serde_json::to_value(StoredProfile::from_profile(&original)).unwrap();
+                    let decoded: StoredProfile = serde_json::from_value(encoded.clone()).unwrap();
+                    assert_eq!(decoded.into_profile().unwrap().request_options(), options);
+                    for field in ["responseFormat", "thinking", "parameterStyle"] {
+                        let mut malformed = encoded.clone();
+                        malformed[field] = serde_json::json!("auto-detect");
+                        assert!(serde_json::from_value::<StoredProfile>(malformed).is_err());
+                    }
                 }
             }
         }
+    }
+
+    #[test]
+    fn parameter_style_is_written_only_when_chosen() {
+        let plain = serde_json::to_value(StoredProfile::from_profile(&profile("plain"))).unwrap();
+        assert!(plain.get("parameterStyle").is_none());
+        let decoded: StoredProfile = serde_json::from_value(plain).unwrap();
+        assert_eq!(
+            decoded
+                .into_profile()
+                .unwrap()
+                .request_options()
+                .parameter_style,
+            ParameterStyle::Compatible
+        );
+
+        let mut chosen = profile("openai");
+        chosen
+            .set_request_options(RequestOptions {
+                parameter_style: ParameterStyle::OpenAi,
+                ..RequestOptions::default()
+            })
+            .unwrap();
+        let encoded = serde_json::to_value(StoredProfile::from_profile(&chosen)).unwrap();
+        assert_eq!(encoded["parameterStyle"], "openai");
     }
 
     #[test]
