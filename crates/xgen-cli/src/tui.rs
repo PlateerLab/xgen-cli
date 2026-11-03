@@ -36,7 +36,10 @@ const MAX_EVENTS_PER_TICK: usize = 256;
 /// Input rows the box shows before it scrolls with the caret.
 const MAX_INPUT_ROWS: usize = 8;
 const SPINNER: [char; 4] = ['|', '/', '-', '\\'];
+/// Timed repaints only animate the spinner or settle a resize; an idle pane is never repainted.
 const REDRAW_INTERVAL: Duration = Duration::from_millis(100);
+/// After a resize, keep asking the screen for its size while a lagging PTY catches up.
+const RESIZE_SETTLE: Duration = Duration::from_secs(2);
 const MAX_DEFERRED_BYTES: usize = 8 * 1024 * 1024;
 static ALTERNATE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -178,10 +181,15 @@ struct Frontend {
     deferred: Vec<Vec<u8>>,
     deferred_bytes: usize,
     viewer_frame: Option<((u16, u16), Vec<String>)>,
+    /// The PTY-reported size at the last screen probe, and the screen size that probe found.
+    probed: Option<((u16, u16), (u16, u16))>,
+    last_resize: Option<Instant>,
 }
 
 #[derive(Default)]
 struct DrawnPane {
+    /// The rows as last written, so an unchanged frame is not erased and written again.
+    rows: Vec<String>,
     /// Row of the cursor inside the pane, counted from the pane's first row.
     caret_row: u16,
     caret_column: u16,
@@ -204,6 +212,13 @@ impl DrawnPane {
             .map(|columns| (*columns).max(1).div_ceil(width))
             .sum();
         u16::try_from(above + usize::from(self.caret_column) / width).unwrap_or(u16::MAX)
+    }
+
+    fn shows(&self, pane: &Pane, size: (u16, u16)) -> bool {
+        self.size == Some(size)
+            && self.rows == pane.rows
+            && usize::from(self.caret_row) == pane.caret_row
+            && usize::from(self.caret_column) == pane.caret_column
     }
 
     fn physical_rows(&self, width: u16) -> usize {
@@ -246,6 +261,8 @@ impl Frontend {
             deferred: Vec::new(),
             deferred_bytes: 0,
             viewer_frame: None,
+            probed: None,
+            last_resize: None,
         }
     }
 
@@ -253,9 +270,13 @@ impl Frontend {
         let mut finished = Vec::new();
         let mut last_draw = Instant::now();
         loop {
+            // Any message can change the pane (the prompt, the progress line, the Run state).
+            let mut dirty = false;
             // Drain everything the REPL produced before looking at the keyboard.
             loop {
-                match receiver.try_recv() {
+                let message = receiver.try_recv();
+                dirty |= message.is_ok();
+                match message {
                     Ok(Message::Output(bytes)) => finished.extend(self.screen.push(&bytes)),
                     Ok(Message::Section(kind, bytes)) => {
                         let lines = self.screen.push(&bytes);
@@ -278,7 +299,7 @@ impl Frontend {
                     Err(mpsc::TryRecvError::Empty) => break,
                 }
             }
-            let mut dirty = !finished.is_empty();
+            dirty |= !finished.is_empty();
             let event = event::poll(Duration::from_millis(25))
                 .and_then(|ready| ready.then(event::read).transpose());
             let Ok(event) = event else {
@@ -296,7 +317,16 @@ impl Frontend {
                     dirty |= self.on_event(event, &mut finished);
                 }
             }
-            if dirty || last_draw.elapsed() >= REDRAW_INTERVAL {
+            // A cancelled Run is over once the REPL asks for input again.
+            if self.requested && self.cancelling {
+                self.cancelling = false;
+                dirty = true;
+            }
+            // Repainting an idle pane erases and rewrites it, which terminals show as flicker
+            // and which moves the caret under an IME composition.
+            let timed = (self.animating() || self.settling_resize())
+                && last_draw.elapsed() >= REDRAW_INTERVAL;
+            if dirty || timed {
                 if self.draw(&finished, true).is_err() {
                     let _ = self.lines.send(InputMessage::Unavailable);
                     return;
@@ -304,11 +334,17 @@ impl Frontend {
                 finished.clear();
                 last_draw = Instant::now();
             }
-            // A cancelled Run is over once the REPL asks for input again.
-            if self.requested {
-                self.cancelling = false;
-            }
         }
+    }
+
+    /// The pane shows a spinner only while a Run is in flight or being cancelled.
+    fn animating(&self) -> bool {
+        self.viewer.is_none() && (self.cancelling || (!self.requested && !self.prompt().is_empty()))
+    }
+
+    fn settling_resize(&self) -> bool {
+        self.last_resize
+            .is_some_and(|resized| resized.elapsed() < RESIZE_SETTLE)
     }
 
     fn prompt(&self) -> String {
@@ -345,7 +381,10 @@ impl Frontend {
                     .insert_str(&text.replace("\r\n", "\n").replace('\r', "\n"));
                 true
             }
-            Event::Resize(..) => true,
+            Event::Resize(..) => {
+                self.last_resize = Some(Instant::now());
+                true
+            }
             _ => false,
         }
     }
@@ -518,31 +557,46 @@ impl Frontend {
 
     fn draw(&mut self, finished: &[Vec<u8>], with_pane: bool) -> io::Result<()> {
         let mut stdout = io::stdout().lock();
-        let (width, height) = screen_size(&mut stdout, !self.alternate)?;
-        if with_pane && self.draw_result_viewer(&mut stdout, finished, (width, height))? {
-            return stdout.flush();
+        let size = self.size(&mut stdout)?;
+        if with_pane && self.unchanged(finished, size) {
+            return Ok(());
         }
-        self.viewer = None;
-        if self.alternate {
-            queue!(stdout, terminal::LeaveAlternateScreen, cursor::Show)?;
-            self.alternate = false;
-            self.viewer_frame = None;
-            stdout.flush()?;
-            ALTERNATE_ACTIVE.store(false, Ordering::SeqCst);
+        // Terminals that support synchronized output show the erased and rewritten pane at once.
+        queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+        let painted = self.paint(&mut stdout, finished, with_pane, size);
+        queue!(stdout, terminal::EndSynchronizedUpdate)?;
+        stdout.flush()?;
+        painted
+    }
+
+    /// Whether the screen still shows exactly the frame that would be written now.
+    fn unchanged(&self, finished: &[Vec<u8>], size: (u16, u16)) -> bool {
+        finished.is_empty()
+            && self.deferred.is_empty()
+            && self.viewer.is_none()
+            && !self.alternate
+            // The terminal reflows and clips the screen behind the pane while it resizes,
+            // so a matching last frame does not prove the screen still shows it.
+            && !self.settling_resize()
+            && self.drawn.shows(&self.pane(size), size)
+    }
+
+    /// The screen size, probed only when the PTY size moved or a resize may still be settling.
+    /// Probing parks the caret in the corner for a round trip, which an IME composition shows.
+    fn size(&mut self, output: &mut impl Write) -> io::Result<(u16, u16)> {
+        let reported = terminal::size().ok();
+        if !self.settling_resize()
+            && let Some((probed_report, screen)) = self.probed
+            && reported == Some(probed_report)
+        {
+            return Ok(screen);
         }
-        let mut lines = std::mem::take(&mut self.deferred);
-        self.deferred_bytes = 0;
-        lines.extend_from_slice(finished);
-        let finished = &lines;
-        let origin = erase_pane(&mut stdout, &self.drawn, (width, height))?;
-        for line in finished {
-            stdout.write_all(line)?;
-            stdout.write_all(b"\x1b[0m\r\n")?;
-        }
-        if !with_pane {
-            self.drawn = DrawnPane::default();
-            return stdout.flush();
-        }
+        let screen = screen_size(output, !self.alternate)?;
+        self.probed = reported.map(|reported| (reported, screen));
+        Ok(screen)
+    }
+
+    fn pane(&self, (width, height): (u16, u16)) -> Pane {
         let view = PaneView {
             width: usize::from(width),
             height: usize::from(height),
@@ -556,7 +610,41 @@ impl Frontend {
                 .unwrap_or(0)
                 % SPINNER.len()],
         };
-        let pane = layout(&view, &self.editor);
+        layout(&view, &self.editor)
+    }
+
+    fn paint(
+        &mut self,
+        stdout: &mut impl Write,
+        finished: &[Vec<u8>],
+        with_pane: bool,
+        (width, height): (u16, u16),
+    ) -> io::Result<()> {
+        if with_pane && self.draw_result_viewer(stdout, finished, (width, height))? {
+            return Ok(());
+        }
+        self.viewer = None;
+        if self.alternate {
+            queue!(stdout, terminal::LeaveAlternateScreen, cursor::Show)?;
+            self.alternate = false;
+            self.viewer_frame = None;
+            stdout.flush()?;
+            ALTERNATE_ACTIVE.store(false, Ordering::SeqCst);
+        }
+        let mut lines = std::mem::take(&mut self.deferred);
+        self.deferred_bytes = 0;
+        lines.extend_from_slice(finished);
+        let finished = &lines;
+        let origin = erase_pane(stdout, &self.drawn, (width, height))?;
+        for line in finished {
+            stdout.write_all(line)?;
+            stdout.write_all(b"\x1b[0m\r\n")?;
+        }
+        if !with_pane {
+            self.drawn = DrawnPane::default();
+            return Ok(());
+        }
+        let pane = self.pane((width, height));
         let row = if finished.is_empty()
             && let Some(origin) = origin
         {
@@ -589,7 +677,8 @@ impl Frontend {
             .iter()
             .map(|row| display_width(&strip_controls(row.as_bytes())))
             .collect();
-        stdout.flush()
+        self.drawn.rows = pane.rows;
+        Ok(())
     }
 }
 
@@ -1306,6 +1395,7 @@ mod tests {
             caret_row: 1,
             caret_column: 9,
             line_widths: vec![80, 80, 80, 79],
+            ..DrawnPane::default()
         };
         let mut output = Vec::new();
         assert_eq!(erase_pane(&mut output, &drawn, (80, 24)).unwrap(), Some(20));
@@ -1315,6 +1405,73 @@ mod tests {
         assert!(commands.ends_with("\x1b8"));
         assert_eq!(drawn.rows_above_caret(40), 2);
         assert_eq!(drawn.physical_rows(40), 8);
+    }
+
+    #[test]
+    fn only_a_running_or_resizing_pane_is_repainted_on_a_timer() {
+        let (lines, _received) = mpsc::sync_channel(1);
+        let mut frontend =
+            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        let mut finished = Vec::new();
+        frontend.screen.push(GOAL_PROMPT.as_bytes());
+        frontend.on_request(&mut finished);
+        assert!(
+            !frontend.animating(),
+            "an idle goal prompt must not repaint"
+        );
+        assert!(!frontend.settling_resize());
+
+        frontend.on_event(Event::Resize(80, 24), &mut finished);
+        assert!(
+            frontend.settling_resize(),
+            "a resize keeps probing while the PTY settles"
+        );
+
+        frontend.editor.insert_str("goal");
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &mut finished,
+        );
+        frontend.screen.push(b"Reading... 1s");
+        assert!(
+            frontend.animating(),
+            "the spinner turns while a Run is in flight"
+        );
+
+        let pane = frontend.pane((80, 24));
+        let mut drawn = DrawnPane {
+            size: Some((80, 24)),
+            rows: pane.rows.clone(),
+            caret_row: u16::try_from(pane.caret_row).unwrap(),
+            caret_column: u16::try_from(pane.caret_column).unwrap(),
+            ..DrawnPane::default()
+        };
+        assert!(drawn.shows(&pane, (80, 24)));
+        assert!(
+            !drawn.shows(&pane, (100, 24)),
+            "a new size is always repainted"
+        );
+        drawn.caret_column += 1;
+        assert!(
+            !drawn.shows(&pane, (80, 24)),
+            "a moved caret is always repainted"
+        );
+        drawn.caret_column -= 1;
+
+        // Spinner frames change every 250ms; restart the clock so both panes are the same frame.
+        frontend.started = Instant::now();
+        frontend.drawn = DrawnPane {
+            rows: frontend.pane((80, 24)).rows,
+            ..drawn
+        };
+        frontend.last_resize = Some(Instant::now());
+        assert!(
+            !frontend.unchanged(&[], (80, 24)),
+            "a resize reflows the screen, so a matching last frame is repainted"
+        );
+        frontend.last_resize = None;
+        assert!(frontend.unchanged(&[], (80, 24)));
+        assert!(!frontend.unchanged(&[b"output".to_vec()], (80, 24)));
     }
 
     #[test]
