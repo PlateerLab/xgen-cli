@@ -14,6 +14,12 @@
 
 ## 책임과 개발 범위
 
+2026-10-31 구현: [Run별 capability 범위](docs/development/capability-scope.md).
+`run --capability ID`는 선택한 정의와 instance만 planner/admission에 등록하고 manifest와
+실행 profile에 결속해. 기본 전체 catalog·기존 승인·Receipt는 유지하며 resume은 저장한
+범위를 복원해. library109+workspace22검사 및 clippy 통과. 별도 호스트의 도구 설명 크기
+문제에서 시작했지만 업무 규칙은 엔진에 넣지 않았어. 실제 모델 품질·운영 채택은 미검증이야.
+
 | 구성 요소 | 책임 | 별도로 추적할 개선 |
 | --- | --- | --- |
 | xgen CLI | 연결·인증 관리, 도구 호출 계약, 권한·승인, 실행, Receipt, 최종 응답, 사용자 경험 | 연결 흐름, 어댑터, 결과 검증, 배포·자동 실행 |

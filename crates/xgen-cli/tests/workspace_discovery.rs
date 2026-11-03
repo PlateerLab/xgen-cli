@@ -21,6 +21,139 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[test]
+fn capability_scope_persists_across_approval_and_resume_without_changing_receipts() {
+    for capability in ["xgeny.fs/read-text", "xgeny.fs/stat"] {
+        let fixture = tempdir().unwrap();
+        let state = fixture.path().join("state");
+        let workspace = fixture.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("sample.txt"), "scope validation content").unwrap();
+        let server = SequentialServer::spawn_responses(vec![
+            plan_response(
+                "inspect",
+                "Inspect a file",
+                capability,
+                &json!({"path":"sample.txt"}),
+            ),
+            completion_response(),
+        ]);
+        let first = bounded_output(xgen(&state).args([
+            "run",
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &server.base_url,
+            "--model",
+            MODEL,
+            "--tokenizer",
+            TOKENIZER,
+            "--allow-dir",
+            ".",
+            "--capability",
+            capability,
+            "--allow-remote-model-egress",
+            "Inspect the specified file.",
+        ]))
+        .unwrap();
+        assert_eq!(first.status.code(), Some(10), "{}", stderr(&first));
+        let run_id = extract_run_id(&stderr(&first));
+        let initial = planning_context(&server.requests.recv_timeout(TEST_TIMEOUT).unwrap());
+        assert_eq!(capability_ids(&initial), vec![capability]);
+        let resumed = bounded_output(xgen(&state).args([
+            "resume",
+            &run_id,
+            "--workspace",
+            path_text(&workspace),
+            "--base-url",
+            &server.base_url,
+            "--allow-dir",
+            ".",
+            "--allow-read",
+            "--allow-remote-model-egress",
+        ]))
+        .unwrap();
+        assert!(resumed.status.success(), "{}", stderr(&resumed));
+        let completed = planning_context(&server.requests.recv_timeout(TEST_TIMEOUT).unwrap());
+        assert_eq!(capability_ids(&completed), vec![capability]);
+        assert_eq!(completed["catalogDigest"], initial["catalogDigest"]);
+        assert_eq!(completed["toolOutputs"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            completed["toolOutputs"][0]["capability"]["capabilityId"],
+            capability
+        );
+        let replay = bounded_output(xgen(&state).args(["resume", &run_id])).unwrap();
+        assert!(replay.status.success());
+        server.handle.join().unwrap();
+    }
+}
+
+#[test]
+fn capability_scope_rejects_unoffered_action_even_with_write_permission() {
+    let fixture = tempdir().unwrap();
+    let state = fixture.path().join("state");
+    let workspace = fixture.path().join("workspace");
+    fs::create_dir(&workspace).unwrap();
+    let server = SequentialServer::spawn_responses((0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES)
+        .map(|_| plan_response("write", "Unselected action", "xgeny.fs/write-atomic",
+            &json!({"path":"unwanted.txt","content":"must not execute","expectedDigest":null}))).collect());
+    let output = bounded_output(xgen(&state).args([
+        "run",
+        "--workspace",
+        path_text(&workspace),
+        "--base-url",
+        &server.base_url,
+        "--model",
+        MODEL,
+        "--tokenizer",
+        TOKENIZER,
+        "--allow-dir",
+        ".",
+        "--allow-write",
+        "--capability",
+        "xgeny.fs/read-text",
+        "--allow-remote-model-egress",
+        "Inspect only.",
+    ]))
+    .unwrap();
+    assert_eq!(output.status.code(), Some(20), "{}", stderr(&output));
+    assert!(!workspace.join("unwanted.txt").exists());
+    for _ in 0..=xgen_cli::MAX_REJECTED_RESPONSE_RETRIES {
+        let request = server.requests.recv_timeout(TEST_TIMEOUT).unwrap();
+        assert_eq!(
+            capability_ids(&planning_context(&request)),
+            vec!["xgeny.fs/read-text"]
+        );
+    }
+    server.handle.join().unwrap();
+}
+
+#[test]
+fn capability_scope_unknown_or_duplicate_ids_fail_before_provider_access() {
+    for scope in [vec!["absent/read"], vec!["xgeny.fs/stat", "xgeny.fs/stat"]] {
+        let fixture = tempdir().unwrap();
+        let mut command = xgen(&fixture.path().join("state"));
+        command.args([
+            "run",
+            "--workspace",
+            path_text(fixture.path()),
+            "--base-url",
+            "http://127.0.0.1:1/v1",
+            "--model",
+            MODEL,
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+        ]);
+        for id in scope {
+            command.args(["--capability", id]);
+        }
+        let output = bounded_output(command.arg("No provider access")).unwrap();
+        assert_eq!(output.status.code(), Some(64), "{}", stderr(&output));
+        assert!(!stderr(&output).contains("XGEN_STARTED"));
+    }
+}
+
+#[test]
 fn invocation_diagnostics_distinguish_schema_and_resource_failures_without_values() {
     let cases = [
         (
