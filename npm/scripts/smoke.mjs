@@ -182,7 +182,7 @@ async function main() {
       npm_config_fund: 'false',
       npm_config_update_notifier: 'false',
     };
-    const install = npmInvocation([
+    const installOptions = [
       'install',
       '--global',
       '--prefix',
@@ -191,9 +191,10 @@ async function main() {
       '--no-audit',
       '--no-fund',
       '--loglevel=error',
-      `${launcher.name}@${version}`,
-    ]);
-    await run(install.command, install.args, { env: npmEnvironment });
+    ];
+    const install = npmInvocation([...installOptions, `${launcher.name}@${version}`]);
+    const defaultInstall = npmInvocation([...installOptions, launcher.name]);
+    await run(defaultInstall.command, defaultInstall.args, { env: npmEnvironment });
 
     assert.deepEqual(new Set(requestedTarballs), new Set([launcher.name, specification.packageName]));
     const root = npmInvocation(['root', '--global', '--prefix', installRoot]);

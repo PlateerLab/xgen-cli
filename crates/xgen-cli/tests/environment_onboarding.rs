@@ -345,6 +345,7 @@ fn model_check_failure_is_redacted_and_does_not_create_local_state() {
     let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
     assert!(stderr.contains("XGEN model check: FAIL"));
     assert!(stderr.contains("reason=model_not_advertised"));
+    assert!(stderr.contains("recovery: Run xgen model setup and select an exact model ID"));
     assert!(!stderr.contains("RAW-PROVIDER-SENTINEL"));
     assert!(!stderr.contains(&base_url));
     assert!(
@@ -369,6 +370,7 @@ fn model_check_reports_actionable_transport_configuration_without_state() {
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
     assert!(stderr.contains("reason=plaintext_endpoint_must_be_loopback"));
+    assert!(stderr.contains("recovery: Use HTTPS for remote providers."));
     assert!(!stderr.contains("localhost:8000"));
     assert!(
         !state.exists(),

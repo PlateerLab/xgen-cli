@@ -148,8 +148,10 @@ for fragment in (
         fail(f"npm package smoke is missing lifecycle verification: {fragment}")
 
 install_invocation = "await run(install.command, install.args, { env: npmEnvironment });"
-if smoke_text.count(install_invocation) != 2:
-    fail("npm package smoke must install the exact package twice")
+if smoke_text.count(install_invocation) != 1:
+    fail("npm package smoke must install the exact package")
+if smoke_text.count("await run(defaultInstall.command, defaultInstall.args, { env: npmEnvironment });") != 1:
+    fail("npm package smoke must also install the default package")
 
 print("npm release workflow contract: PASS")
 PY

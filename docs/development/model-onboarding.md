@@ -6,8 +6,8 @@
 ## 대화형 설정
 
 터미널에서 URL이나 기존 설정이 없으면 제공자를 먼저 선택하고, 누락된 API key와 model을 묻는다.
-DeepSeek preset은 `json_object`와 `thinking disabled`, OpenAI preset은 `json_schema`와 provider 기본
-thinking을 사용한다. Custom endpoint는 URL을 직접 입력한다. API key 입력은 화면에 표시되지
+DeepSeek preset은 `json_object`와 `thinking disabled`, OpenAI preset은 `json_object`, `openai` parameter style과 provider 기본
+thinking을 사용한다. OpenAI style은 `max_completion_tokens`를 보내고 temperature를 생략한다. Custom endpoint는 URL을 직접 입력한다. API key 입력은 화면에 표시되지
 않으며 HTTPS provider에서만 허용된다.
 
 ```bash
@@ -87,9 +87,9 @@ Linux는 `$XDG_CONFIG_HOME/xgen-cli` 또는 `$HOME/.config/xgen-cli`, macOS는
 바뀐다. 저장소를 건드리지 않으려면 `XGEN_CONFIG_HOME`을 함께 설정하거나 `run`/`model check`에
 `--base-url`, `--model`, `--tokenizer`를 명시한다.
 
-Compatibility probe는 production planner와 같은 proposal JSON Schema와 프로필의 출력 token 예산·inference timeout(ADR-0035, 기본 1024 token·300초)을 사용하고 응답을 production과 같은 document 규칙으로 검증한다. Probe는 model에게 schema 밖의 top-level field를 하나 더 넣으라고 요구하므로, strict schema를 실제로 강제하는 provider만 통과한다. Schema를 받아들이지만 강제하지 못하는 provider(예: 문법 컴파일에 실패하고도 200을 반환하는 서버)는 첫 planner call 대신 `model setup`에서 실패한다. Catalog GET만 더 짧은 timeout을 유지한다. Reasoning을 많이 쓰는 model이 최종 JSON 전에 예산을 소진하면 `provider_output_truncated`로 닫으며, rate limit과 구분한다.
+Compatibility probe는 production planner와 같은 proposal JSON Schema와 프로필의 출력 token 예산·inference timeout(ADR-0035, 기본 1024 token·300초)을 사용하고 응답을 production과 같은 document 규칙으로 검증한다. `json_schema` 모드에서는 model에게 schema 밖의 top-level field를 추가하라고 요구해 provider의 strict enforcement를 검사한다. `json_object` 모드에서는 schema 위반을 유도하지 않고 production envelope를 검증한다. Schema를 받아들이지만 강제하지 못하는 provider(예: 문법 컴파일에 실패하고도 200을 반환하는 서버)는 첫 planner call 대신 `model setup`에서 실패한다. Catalog GET만 더 짧은 timeout을 유지한다. Reasoning을 많이 쓰는 model이 최종 JSON 전에 예산을 소진하면 `provider_output_truncated`로 닫으며, rate limit과 구분한다.
 
-`model check`는 기본적으로 기존 계약인 catalog GET만 보낸다. `--compatibility`는 strict JSON Schema
+`model check`는 기본적으로 기존 계약인 catalog GET만 보낸다. `--compatibility`는 profile의 response format과 parameter style을 사용하는
 Chat Completions POST를 한 번 추가한다. `model setup`은 profile commit 전에 두 요청을 항상 수행한다.
 
 ## 로컬 검증
@@ -105,3 +105,22 @@ cargo clippy --workspace --all-targets -- -D warnings
 실제 desktop keychain 저장은 사용자 credential을 CI에 넣지 않고 macOS, Windows, Linux desktop에서
 수동 release gate로 확인한다. 일반 CI는 in-memory credential fake와 platform compile/link, no-secret
 file/log regression을 담당한다. 설계와 실패 순서는 [ADR-0032](../adr/0032-model-profiles-and-secure-credential-boundary.md)를 따른다.
+
+## 연결 실패 후 복구
+
+오류의 `reason`과 exit code는 유지하고 `recovery:`에 다음 조치를 표시한다. Provider 원문·key·실제
+endpoint는 진단에 추가하지 않는다. 제공자·model 번호를 잘못 입력하면 같은 메뉴에서 다시 고를 수 있고,
+`q`나 EOF는 설정을 중단한다. Compatibility probe가 실패하면 기존 profile을 바꾸지 않는다.
+
+- `credential_not_found`: `xgen model setup`으로 key를 로컬에서 다시 입력한다. Headless는 secret manager에서 `XGEN_OPENAI_API_KEY`를 process에 주입할 수 있다.
+- `model_not_advertised`: `xgen model setup`에서 목록에 있는 정확한 model ID를 고른다.
+- `request_rejected` / `chat_completions_incompatible`: response format·parameter style과 응답의 exact model ID를 확인한다. Alias가 다른 snapshot ID를 반환하면 그 snapshot을 목록에서 선택한다.
+- `provider_output_truncated`: `xgen model setup --max-output-tokens 4096`처럼 출력 예산을 조정하고 compatibility를 다시 검사한다.
+- `timeout` / `rate_limited`: provider 상태·할당량을 확인하고 재검사한다. 느린 model은 `--inference-timeout SECONDS`로 조정할 수 있다.
+
+이전 OpenAI profile은 저장된 옵션을 자동으로 바꾸지 않으므로 다음처럼 명시적으로 갱신한다.
+
+```bash
+xgen model setup --provider openai --response-format json_object --parameter-style openai
+xgen model check --compatibility
+```

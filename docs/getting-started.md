@@ -1,8 +1,8 @@
 # XGEN 설치와 첫 실행
 
-이 문서는 Developer Preview `v0.1.0-rc.6` release artifact가 게시된 뒤 binary 하나를 설치하고
+이 문서는 Developer Preview `v0.1.0-rc.7` release artifact가 게시된 뒤 binary 하나를 설치하고
 OpenAI-compatible model에 연결해 파일 읽기부터 프로젝트 탐색·수정·test/build까지 실행하는 최소
-절차다. RC3 후보는 exact
+절차다. 현재 preview는 exact
 `--allow-file`, `--allow-dir` workspace discovery, atomic write/patch와 host-catalogued shell-free
 process 실행을 포함한다. Native installer 경로는 소스 개발 절차와 달리 Rust, C compiler, Python,
 Node.js, SQLite 실행 파일, Docker 또는 XGEN state용 별도 daemon이 필요하지 않다. npm 경로만
@@ -15,7 +15,7 @@ launcher용 Node.js 22.14 이상이 필요하다. 사용할 model endpoint 자�
 22.14 이상이 있는 지원 OS에서는 아래 순서가 가장 짧다.
 
 ```bash
-npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.6
+npm install --global --include=optional @xgen-ai/cli
 xgen --version
 xgen model setup
 xgen model check --compatibility
@@ -27,6 +27,16 @@ xgen
 확인한 뒤 `/exit`으로 종료한다. Model egress와 file read는 서로 다른 승인이다. Node.js를 설치하지
 않으려면 아래 checksum installer를 사용한 뒤 `xgen model setup`부터 같은 순서로 진행한다. API key를
 명령행 인자, shell history 또는 일반 설정 파일에 넣지 않는다.
+
+첫 수정은 작은 범위로 요청한다. 예를 들어 `README의 실행 예시 한 곳을 고치고 변경 내용을 보여줘`처럼
+대상을 지정하고, 다음 요청에서 프로젝트의 테스트 명령을 실행한다. 실행 도구는 승인 화면의
+`/allow-executable` 안내를 따라 등록한다. 끝난 뒤 diff와 테스트 결과를 직접 확인한다.
+
+모델 연결에 실패하면 `reason` 뒤의 `recovery:` 안내를 따른다. 저장된 설정은 `xgen model list`, 실제
+요청 호환성은 `xgen model check --compatibility`로 확인한다. 자세한 오류별 조치는
+[모델 온보딩](development/model-onboarding.md#연결-실패-후-복구)에 있다.
+작업 실행 도중 승인 때문에 멈춘 Run은 같은 세션의 `/resume RUN_ID`로 이어간다. 불확정 model 호출은
+자동 재시도하지 않으므로 `xgen recover RUN_ID`로 먼저 상태를 확인한다.
 
 작업 뒤 `/usage`를 입력하면 추가 API 호출 없이 입력·출력·cached input 토큰을 확인할 수 있다.
 `xgen usage RUN_ID`는 별도 터미널에서도 상세 JSON을 출력한다. 사용량 기록이 없는 이전 Run이나
@@ -51,27 +61,27 @@ Linux binary는 musl target, Windows binary는 static CRT로 빌드한다. macOS
 
 ## 설치
 
-Node.js 22.14 이상이 이미 있는 개발자는 RC3가 npm에 게시된 뒤 다음처럼 exact version을 설치한다.
+Node.js 22.14 이상이 이미 있는 개발자는 release가 npm에 게시된 뒤 다음처럼 exact version을 설치한다.
 `@xgen-ai/cli`에는 lifecycle script가 없고 현재 OS/CPU용 native optional package 하나를 registry에서 함께
 설치한다. 설치 중 GitHub download나 source compile을 하지 않는다.
 
 ```bash
-npm install --global @xgen-ai/cli@0.1.0-rc.6
+npm install --global @xgen-ai/cli@0.1.0-rc.7
 xgen --version
 xgen licenses
 ```
 
-Prerelease 최신 채널은 `@xgen-ai/cli@next`, stable은 `@xgen-ai/cli@latest`지만 재현 가능한 설치와 검증에는
-exact version을 사용한다. `npm install --omit=optional`은 실행 binary package를 제거하므로 지원하지
+Prerelease 최신 채널은 `@xgen-ai/cli@next`다. 최초 stable 게시 전에는 `latest`도 검증된 preview를
+가리킨다. Stable 게시 뒤에는 `latest`가 stable을 유지한다. 재현 가능한 설치와 검증에는 exact version을 사용한다. `npm install --omit=optional`은 실행 binary package를 제거하므로 지원하지
 않는다. npm 경로에서 platform package를 찾지 못하면 launcher는 다른 binary를 내려받지 않고 종료한다.
 
 Node.js를 설치하고 싶지 않거나 GitHub attestation까지 직접 확인하려면 아래 checksum installer 경로를
 사용한다.
 
 Installer를 먼저 파일로 받은 뒤 검토·실행한다. Installer는 shell profile이나 user PATH를 자동으로
-수정하지 않고 관리자 권한을 요청하지 않는다. RC3는 prerelease이므로 stable release만 가리키는
+수정하지 않고 관리자 권한을 요청하지 않는다. 현재 version은 prerelease이므로 stable release만 가리키는
 `releases/latest` 대신 아래 exact tag를 사용한다. 후보 version PR의 merge만으로 artifact가 생기지는
-않으므로 GitHub Release에 `v0.1.0-rc.6`가 게시된 것을 확인한 뒤 실행한다.
+않으므로 GitHub Release에 `v0.1.0-rc.7`가 게시된 것을 확인한 뒤 실행한다.
 
 Linux/macOS:
 
@@ -79,8 +89,8 @@ Linux/macOS:
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.6
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.7
 rm -f "$installer"
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -89,9 +99,9 @@ Windows PowerShell:
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.6
+& $installer -Version v0.1.0-rc.7
 Remove-Item -LiteralPath $installer
 $env:Path = "$env:LOCALAPPDATA\XGEN\bin;$env:Path"
 ```
@@ -124,16 +134,16 @@ xgen licenses
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.6
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.7
 rm -f "$installer"
 ```
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.6
+& $installer -Version v0.1.0-rc.7
 Remove-Item -LiteralPath $installer
 ```
 
@@ -434,7 +444,7 @@ npm 설치본은 새 exact version을 다시 설치해 업데이트한다. `next
 가리킬 수 있으므로 파일럿과 장애 재현에는 사용하지 않는다.
 
 ```bash
-npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.6
+npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.7
 xgen --version
 ```
 

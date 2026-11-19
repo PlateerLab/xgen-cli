@@ -8,8 +8,10 @@ repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
 import sys
+import tomllib
 
 root = Path(sys.argv[1])
+version = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"]
 getting_started = (root / "docs/getting-started.md").read_text(encoding="utf-8")
 pilot = (root / "docs/development/rc3-developer-preview-pilot.md").read_text(
     encoding="utf-8"
@@ -34,7 +36,7 @@ require(
     getting_started,
     (
         "## 5분 빠른 시작",
-        "@xgen-ai/cli@0.1.0-rc.6",
+        f"@xgen-ai/cli@{version}",
         "xgen model setup",
         "xgen model check --compatibility",
         "## 업데이트와 RC2 rollback",

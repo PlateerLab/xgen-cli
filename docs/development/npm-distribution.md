@@ -75,6 +75,13 @@ GitHub secret `NPM_TOKEN`에서 publish 단일 step의 `NODE_AUTH_TOKEN`으로�
 provenance가 있어야 하며 registry metadata에서 SLSA provenance predicate가 확인되지 않으면 job이
 실패한다.
 
+최초 stable 게시 전에는 모든 package의 SRI·provenance·`next` 검증이 끝난 뒤 launcher의 `latest`도
+해당 preview로 갱신한다. 이미 stable 또는 더 높은 version이 하나라도 있으면 갱신하지 않는다.
+판정은 pinned `node-semver`로 하며 launcher runtime에는 의존성을 추가하지 않는다.
+Platform package는 launcher가 exact version으로 참조하므로 `latest`를 갱신할 필요가 없다.
+Alias 갱신만 실패해도 동일 release job 재실행으로 끝낼 수 있고 tarball은 바꾸지 않는다.
+GitHub Release의 prerelease/latest 분류는 기존대로다. [ADR-0088](../adr/0088-first-use-preview-distribution.md)을 따른다.
+
 ## 부분 실패와 재실행
 
 Platform package를 launcher보다 먼저 게시하므로 중간 실패가 가능하다. 실패한 GitHub Actions job을

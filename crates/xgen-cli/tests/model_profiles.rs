@@ -338,6 +338,10 @@ fn token_stdin_is_rejected_for_plaintext_before_network_or_profile_mutation() {
     assert_eq!(output.status.code(), Some(64));
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("reason=api_key_requires_https"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("recovery: Use HTTPS when supplying an API key.")
+    );
     assert!(!config.exists());
     assert!(!state.exists());
 }
