@@ -1109,7 +1109,11 @@ where
     } else {
         config
     };
-    validate_completion_catalog(request.completion_checks.as_deref(), process.as_ref())?;
+    validate_completion_catalog(
+        request.completion_checks.as_deref(),
+        process.as_ref(),
+        capability_scope.as_deref(),
+    )?;
     let config = final_response_contract(
         config,
         request.final_response_schema.as_ref(),
@@ -1450,7 +1454,11 @@ where
             catalog.workspace_discovery() || process.is_some(),
         )?;
         let config = response_contract(config, manifest.conversation_responses())?;
-        validate_completion_catalog(manifest.completion_checks(), process.as_ref())?;
+        validate_completion_catalog(
+            manifest.completion_checks(),
+            process.as_ref(),
+            manifest.capability_scope(),
+        )?;
         let config = final_response_contract(
             config,
             manifest.final_response_schema(),
@@ -1676,7 +1684,10 @@ fn continue_incomplete(
         .and_then(|catalog| catalog.with_connections(manifest.http_read_connections().clone()))
         .and_then(|catalog| catalog.with_bearer_overrides(manifest.http_bearer_overrides().clone()))
         .map_err(|()| PublicRunError::Integrity)?;
-    let discovery = if discovery.is_empty() {
+    let search_offered = manifest
+        .capability_scope()
+        .is_none_or(|ids| ids.iter().any(|id| id == graph_discovery::SEARCH));
+    let discovery = if discovery.is_empty() || !search_offered {
         discovery
     } else {
         let goal = store
@@ -1695,46 +1706,77 @@ fn continue_incomplete(
     )?;
     capabilities = crate::capability_scope::apply(capabilities, manifest.capability_scope())
         .map_err(|()| PublicRunError::Configuration)?;
+    let offered = |id: &str| {
+        capabilities
+            .definitions()
+            .any(|definition| definition.metadata.id == id)
+    };
+    let offered_scope = |scopes: &[&str]| {
+        capabilities.definitions().any(|definition| {
+            definition
+                .spec
+                .effect
+                .resource_selectors
+                .iter()
+                .any(|selector| scopes.contains(&selector.scope.as_str()))
+        })
+    };
+    let filesystem_offered = offered_scope(&[FILESYSTEM_READ_SCOPE, FILESYSTEM_WRITE_SCOPE]);
     let mut planning_constraints = catalog
         .workspace_authorization()
+        .filter(|_| filesystem_offered)
         .map(|authorization| {
-            PlanningConstraint::new("workspace.fs-scope", authorization.planner_scope_hint())
+            let hint = if manifest.capability_scope().is_some() {
+                authorization.scoped_planner_scope_hint()
+            } else {
+                authorization.planner_scope_hint().to_owned()
+            };
+            PlanningConstraint::new("workspace.fs-scope", hint)
         })
         .transpose()
         .map_err(|_| PublicRunError::Internal)?
         .into_iter()
         .collect::<Vec<_>>();
-    if !discovery.is_empty() {
+    if !discovery.is_empty()
+        && let Some(hint) = discovery.hint_for_capabilities(
+            offered(graph_discovery::SEARCH),
+            offered(graph_discovery::DESCRIBE),
+        )
+    {
         planning_constraints.push(
-            PlanningConstraint::new("tools.discovery-snapshots", discovery.hint())
+            PlanningConstraint::new("tools.discovery-snapshots", hint)
                 .map_err(|_| PublicRunError::Internal)?,
         );
     }
-    if discovery.has_connections()
-        && manifest
-            .capability_scope()
-            .is_none_or(|ids| ids.iter().any(|id| id == crate::http_read::READ))
-    {
-        let hint = if manifest
-            .capability_scope()
-            .is_some_and(|ids| !ids.iter().any(|id| id == graph_discovery::DESCRIBE))
-        {
-            "Host-approved read connections are available through xgen.http/read. This Run does not offer describe: use an exact host-supplied tool contract and contractDigest, or report the missing prerequisite; never guess. Pass parameters.path and parameters.query and, for host-approved POST reads, the specified body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host."
-        } else {
+    if discovery.has_connections() && offered(crate::http_read::READ) {
+        let hint = if offered(graph_discovery::DESCRIBE) {
             "Host-approved read connections are available through xgen.http/read. First describe the tool, check http_read.supported, use its exact contract_digest as contractDigest, and pass parameters.path and parameters.query. For explicitly host-approved POST reads, also pass body according to http_read.request_body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host."
+        } else {
+            "Host-approved read connections are available through xgen.http/read. This Run does not offer describe: use an exact host-supplied tool contract and contractDigest, or report the missing prerequisite; never guess. Pass parameters.path and parameters.query and, for host-approved POST reads, the specified body. A successful HTTP Receipt and schema-valid body are required before claiming API results. Credentials are resolved only by the host."
         };
         planning_constraints.push(
             PlanningConstraint::new("http.read-connections", hint)
                 .map_err(|_| PublicRunError::Internal)?,
         );
     }
-    if let Some(process) = process {
+    if let Some(process) = process
+        && offered_scope(&[PROCESS_EXECUTE_SCOPE, WEB_SEARCH_SCOPE, TERMINAL_SCOPE])
+    {
         planning_constraints.push(
             PlanningConstraint::new(
                 "process.executable-catalog",
-                process.authorization().planner_scope_hint(),
+                process
+                    .authorization()
+                    .scoped_planner_scope_hint(offered(PROCESS_EXECUTE_CAPABILITY_ID)),
             )
             .map_err(|_| PublicRunError::Internal)?,
+        );
+    }
+    if manifest.capability_scope().is_some() && (catalog.workspace_discovery() || process.is_some())
+    {
+        planning_constraints.push(
+            PlanningConstraint::new("run.capability-scope", "Use only the capabilities offered in this Run's catalog. Report missing prerequisites; capability selection does not grant permission.")
+                .map_err(|_| PublicRunError::Internal)?,
         );
     }
     let resolver = LocalResourceResolver {
@@ -2228,8 +2270,12 @@ fn final_response_contract(
 fn validate_completion_catalog(
     checks: Option<&[xgen_provider_openai::CompletionCheck]>,
     process: Option<&ProcessTooling>,
+    scope: Option<&[String]>,
 ) -> Result<(), PublicRunError> {
     if let Some(checks) = checks {
+        if scope.is_some_and(|ids| !ids.iter().any(|id| id == PROCESS_EXECUTE_CAPABILITY_ID)) {
+            return Err(PublicRunError::Configuration);
+        }
         let process = process.ok_or(PublicRunError::Configuration)?;
         for check in checks {
             let executable = check.argv.first().ok_or(PublicRunError::Configuration)?;

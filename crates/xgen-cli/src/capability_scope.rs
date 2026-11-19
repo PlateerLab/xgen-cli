@@ -83,7 +83,7 @@ mod tests {
         );
         for ids in [
             vec!["a/read".into(), "a/read".into()],
-            vec!["".into()],
+            vec![String::new()],
             vec!["a read".into()],
         ] {
             assert!(normalize(ids).is_err());
