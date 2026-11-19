@@ -2941,7 +2941,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xgen-adapter-filesystem"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -2960,7 +2960,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-adapter-process"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-adapter-reference"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "jsonschema",
  "serde",
@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-cli"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-domain"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -3046,7 +3046,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-local-store"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "libc",
  "rusqlite",
@@ -3064,7 +3064,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-policy"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "serde_json",
  "thiserror 2.0.20",
@@ -3073,7 +3073,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-protocol"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "jsonschema",
  "serde",
@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-provider-openai"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "jsonschema",
  "serde",
@@ -3105,7 +3105,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-runtime"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "jsonschema",
  "serde",
@@ -3124,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "xgen-workgraph"
-version = "0.1.0-rc.5"
+version = "0.1.0-rc.6"
 dependencies = [
  "proptest",
  "serde",

@@ -1,6 +1,6 @@
 # XGEN 설치와 첫 실행
 
-이 문서는 Developer Preview `v0.1.0-rc.5` release artifact가 게시된 뒤 binary 하나를 설치하고
+이 문서는 Developer Preview `v0.1.0-rc.6` release artifact가 게시된 뒤 binary 하나를 설치하고
 OpenAI-compatible model에 연결해 파일 읽기부터 프로젝트 탐색·수정·test/build까지 실행하는 최소
 절차다. RC3 후보는 exact
 `--allow-file`, `--allow-dir` workspace discovery, atomic write/patch와 host-catalogued shell-free
@@ -15,7 +15,7 @@ launcher용 Node.js 22.14 이상이 필요하다. 사용할 model endpoint 자�
 22.14 이상이 있는 지원 OS에서는 아래 순서가 가장 짧다.
 
 ```bash
-npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.5
+npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.6
 xgen --version
 xgen model setup
 xgen model check --compatibility
@@ -56,7 +56,7 @@ Node.js 22.14 이상이 이미 있는 개발자는 RC3가 npm에 게시된 뒤 �
 설치한다. 설치 중 GitHub download나 source compile을 하지 않는다.
 
 ```bash
-npm install --global @xgen-ai/cli@0.1.0-rc.5
+npm install --global @xgen-ai/cli@0.1.0-rc.6
 xgen --version
 xgen licenses
 ```
@@ -71,7 +71,7 @@ Node.js를 설치하고 싶지 않거나 GitHub attestation까지 직접 확인�
 Installer를 먼저 파일로 받은 뒤 검토·실행한다. Installer는 shell profile이나 user PATH를 자동으로
 수정하지 않고 관리자 권한을 요청하지 않는다. RC3는 prerelease이므로 stable release만 가리키는
 `releases/latest` 대신 아래 exact tag를 사용한다. 후보 version PR의 merge만으로 artifact가 생기지는
-않으므로 GitHub Release에 `v0.1.0-rc.5`가 게시된 것을 확인한 뒤 실행한다.
+않으므로 GitHub Release에 `v0.1.0-rc.6`가 게시된 것을 확인한 뒤 실행한다.
 
 Linux/macOS:
 
@@ -79,8 +79,8 @@ Linux/macOS:
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.5/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.5
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.6
 rm -f "$installer"
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -89,9 +89,9 @@ Windows PowerShell:
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.5/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.5
+& $installer -Version v0.1.0-rc.6
 Remove-Item -LiteralPath $installer
 $env:Path = "$env:LOCALAPPDATA\XGEN\bin;$env:Path"
 ```
@@ -124,16 +124,16 @@ xgen licenses
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.5/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.5
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.6
 rm -f "$installer"
 ```
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.5/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.5
+& $installer -Version v0.1.0-rc.6
 Remove-Item -LiteralPath $installer
 ```
 
@@ -175,7 +175,7 @@ xgen model check --compatibility
 | id | provider | base URL | 검증 |
 | --- | --- | --- | --- |
 | `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | 실제 호출로 확인 |
-| `openai` | OpenAI | `https://api.openai.com/v1` | 미확인, provider 문서 기준 |
+| `openai` | OpenAI | `https://api.openai.com/v1` | 실제 호출로 확인(gpt-6-luna, gpt-5.5-2026-04-23, gpt-4.1-2025-04-14). 별칭 model은 날짜 붙은 snapshot ID를 고른다 |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | 미확인, provider 문서 기준 |
 | `glm` | GLM / Zhipu (z.ai) | `https://api.z.ai/api/paas/v4` | 미확인, provider 문서 기준. Coding Plan 계정은 `https://api.z.ai/api/coding/paas/v4`이므로 `--base-url`로 지정한다 |
 | `local` | 로컬 model (Ollama 기본 port) | `http://127.0.0.1:11434/v1` | loopback fixture로 확인 |
@@ -186,6 +186,16 @@ preset에서 가장 중요한 값은 `response_format`이다. planner는 구조�
 preset에 없다. Claude의 OpenAI 호환 layer는 `response_format`을 무시한다고 문서에 적혀 있어서,
 preset으로 넣으면 설정은 깨끗하게 끝나고 매 턴이 깨진다. 이 설정을 지키는 gateway(예: OpenRouter)
 를 통하면 사용할 수 있다.
+
+OpenAI preset은 `json_object`와 `--parameter-style openai`를 쓴다. OpenAI 추론 model은 `max_tokens`와
+`temperature: 0`을 거절하므로 이 style은 출력 한도를 `max_completion_tokens`로 보내고 `temperature`를
+생략한다. 다른 provider는 기본값 `compatible`(기존 `max_tokens`, `temperature: 0`)을 그대로 쓴다.
+OpenAI의 별칭 model(`gpt-5.5` 등)은 응답에 날짜 붙은 snapshot ID를 돌려주므로 model 일치 검사에서
+닫힌다. catalog에 함께 나오는 `gpt-5.5-2026-04-23` 같은 snapshot ID를 고른다.
+
+```bash
+xgen model setup --provider openai --model gpt-5.5-2026-04-23
+```
 
 인증 없는 loopback vLLM을 non-interactive하게 지정할 수도 있다. Tokenizer를 생략하면 model ID를
 tokenizer/profile identity로 사용한다.
@@ -424,7 +434,7 @@ npm 설치본은 새 exact version을 다시 설치해 업데이트한다. `next
 가리킬 수 있으므로 파일럿과 장애 재현에는 사용하지 않는다.
 
 ```bash
-npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.5
+npm install --global --include=optional @xgen-ai/cli@0.1.0-rc.6
 xgen --version
 ```
 

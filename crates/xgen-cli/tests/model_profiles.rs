@@ -109,11 +109,25 @@ impl ModelServer {
 #[test]
 fn provider_presets_are_saved_and_explicit_options_still_win() {
     // Two presets plus a held-out environment override; no live provider credentials needed.
-    for (provider, explicit, env_override, format, thinking) in [
-        ("deepseek", false, false, "json_object", "disabled"),
-        ("openai", false, false, "json_schema", "default"),
-        ("deepseek", true, false, "json_schema", "enabled"),
-        ("openai", false, true, "json_object", "disabled"),
+    for (provider, explicit, env_override, format, thinking, style) in [
+        (
+            "deepseek",
+            false,
+            false,
+            "json_object",
+            "disabled",
+            "compatible",
+        ),
+        ("openai", false, false, "json_object", "default", "openai"),
+        ("deepseek", true, false, "json_schema", "enabled", "openai"),
+        (
+            "openai",
+            false,
+            true,
+            "json_schema",
+            "disabled",
+            "compatible",
+        ),
     ] {
         let fixture = tempdir().unwrap();
         let config = fixture.path().join("config");
@@ -131,12 +145,20 @@ fn provider_presets_are_saved_and_explicit_options_still_win() {
             MODEL,
         ]);
         if explicit {
-            command.args(["--response-format", format, "--thinking", thinking]);
+            command.args([
+                "--response-format",
+                format,
+                "--thinking",
+                thinking,
+                "--parameter-style",
+                style,
+            ]);
         }
         if env_override {
             command
                 .env("XGEN_OPENAI_RESPONSE_FORMAT", format)
-                .env("XGEN_OPENAI_THINKING", thinking);
+                .env("XGEN_OPENAI_THINKING", thinking)
+                .env("XGEN_OPENAI_PARAMETER_STYLE", style);
         }
         let output = command.output().unwrap();
         assert_success(&output);
@@ -144,6 +166,12 @@ fn provider_presets_are_saved_and_explicit_options_still_win() {
             serde_json::from_slice(&fs::read(config.join("model-profiles.json")).unwrap()).unwrap();
         assert_eq!(profiles["profiles"][0]["responseFormat"], format);
         assert_eq!(profiles["profiles"][0]["thinking"], thinking);
+        if style == "compatible" {
+            // The default is never written, so files stay readable by earlier binaries.
+            assert!(profiles["profiles"][0].get("parameterStyle").is_none());
+        } else {
+            assert_eq!(profiles["profiles"][0]["parameterStyle"], style);
+        }
         assert!(!state.exists());
         let requests = server.handle.join().unwrap();
         let body = request_body(&requests[1]);
@@ -152,6 +180,15 @@ fn provider_presets_are_saved_and_explicit_options_still_win() {
             assert!(body.get("thinking").is_none());
         } else {
             assert_eq!(body["thinking"]["type"], thinking);
+        }
+        if style == "openai" {
+            assert!(body.get("max_completion_tokens").is_some());
+            assert!(body.get("max_tokens").is_none());
+            assert!(body.get("temperature").is_none());
+        } else {
+            assert!(body.get("max_tokens").is_some());
+            assert!(body.get("max_completion_tokens").is_none());
+            assert_eq!(body.get("temperature").is_some(), thinking != "enabled");
         }
     }
 }

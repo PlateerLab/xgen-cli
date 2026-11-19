@@ -65,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     request.request_options = RequestOptions {
         response_format: config.response_format,
         thinking: config.thinking,
+        ..RequestOptions::default()
     };
     request.allow_dirs = vec![".".into()];
     request.allow_executables = config.allow_executables;

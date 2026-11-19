@@ -298,7 +298,9 @@ def main():
         recalled = "│ > Inspect viewer background" if args.results else "│ > queued after resize"
         wait_for(lambda: recalled in capture(), "history after resize")
         tmux("send-keys", "-t", "fixture", "C-c", "C-d")
-        wait_for(lambda: (root / "stty.txt").exists(), "terminal restoration")
+        # The shell creates stty.txt before stty writes it; wait for the mode list itself.
+        wait_for(lambda: (root / "stty.txt").exists()
+                 and "icanon" in (root / "stty.txt").read_text(), "terminal restoration")
         modes = (root / "stty.txt").read_text().split()
         assert "icanon" in modes and "-icanon" not in modes, "raw mode not restored"
         print(json.dumps({"status": "passed", "results": args.results, "modelCalls": len(requests), "artifacts": str(root)}))
