@@ -1442,7 +1442,7 @@ impl ModelCliError {
         match self {
             Self::Check(error) => match error {
                 ModelCheckError::AuthenticationRejected | ModelCheckError::InvalidCredential => {
-                    "Run xgen model setup to enter a valid API key locally; never paste keys into chat."
+                    "For a saved key, run xgen model logout PROFILE, then xgen model setup --name PROFILE to enter a new key locally. Check xgen model list for profile names; never paste keys into chat."
                 }
                 ModelCheckError::ModelNotAdvertised | ModelCheckError::InvalidModel => {
                     "Run xgen model setup and select an exact model ID advertised by the endpoint."
@@ -1476,7 +1476,7 @@ impl ModelCliError {
                 }
             },
             Self::Profile(ModelProfileError::CredentialNotFound) => {
-                "The saved API key is unavailable. Run xgen model setup to enter it again locally, or inject XGEN_OPENAI_API_KEY for this process."
+                "The saved API key is unavailable. Check xgen model list, then run xgen model setup --name PROFILE to enter it again locally, or inject XGEN_OPENAI_API_KEY for this process."
             }
             Self::Profile(ModelProfileError::CredentialStoreUnavailable) => {
                 "Unlock the OS credential store, or inject XGEN_OPENAI_API_KEY and omit --store-token. No plaintext key file is used."

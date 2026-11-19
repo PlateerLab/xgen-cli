@@ -38,7 +38,8 @@ Provider/model 메뉴는 잘못된 번호를 같은 메뉴에서 다시 받는�
 
 Model setup/check/configuration 오류는 기존 reason·exit code와 정적 `recovery:` 문장을 함께 출력한다.
 인증 재설정, exact model ID, API root, response format·parameter style, provider 가용성·출력/시간 예산을
-안내한다. Provider 응답 원문·실제 endpoint·key를 오류에 추가하지 않는다. 기존 profile의 옵션은 자동
+안내한다. 폐기된 저장 key는 `model logout PROFILE` 뒤 같은 profile을 재설정하도록 안내하며
+재설정만으로 기존 key가 교체된다고 가정하지 않는다. Provider 응답 원문·실제 endpoint·key를 오류에 추가하지 않는다. 기존 profile의 옵션은 자동
 변경하지 않고 OpenAI profile 갱신 예시를 문서에 제공한다.
 
 README 첫 화면은 일반 설치·모델 연결·작은 작업·복구 순서로 정리하고 현재 preset/TUI 동작과 맞춘다.
