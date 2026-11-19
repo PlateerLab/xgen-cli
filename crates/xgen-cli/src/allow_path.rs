@@ -53,7 +53,7 @@ impl WorkspaceReadAuthorization {
         if files.iter().any(|path| directories.contains(path)) {
             return Err(WorkspaceReadAuthorizationError::DuplicateEntry);
         }
-        let planner_scope_hint = planner_scope_hint(&files, &directories)?;
+        let planner_scope_hint = planner_scope_hint(&files, &directories, true)?;
         let entries = files
             .iter()
             .map(|path| CatalogEntry { kind: "file", path })
@@ -82,6 +82,11 @@ impl WorkspaceReadAuthorization {
 
     pub(crate) fn planner_scope_hint(&self) -> &str {
         &self.planner_scope_hint
+    }
+
+    pub(crate) fn scoped_planner_scope_hint(&self) -> String {
+        planner_scope_hint(&self.files, &self.directories, false)
+            .expect("validated path catalog has a bounded serializable hint")
     }
 
     pub(crate) fn authorizes_material(
@@ -205,6 +210,7 @@ pub(crate) enum WorkspaceReadAuthorizationError {
 fn planner_scope_hint(
     files: &BTreeSet<String>,
     directories: &BTreeSet<String>,
+    include_tool_guidance: bool,
 ) -> Result<String, WorkspaceReadAuthorizationError> {
     let directories = directories
         .iter()
@@ -218,9 +224,15 @@ fn planner_scope_hint(
         .map_err(|_| WorkspaceReadAuthorizationError::Canonicalization)?;
     let files = serde_json::to_string(&files)
         .map_err(|_| WorkspaceReadAuthorizationError::Canonicalization)?;
-    let hint = format!(
-        "Caller-authorized directory roots (list/search targets and descendant stat/read/write-atomic/apply-patch targets): {directories}. Additional exact files (stat/read only): {files}. write-atomic requires expectedDigest=null for creation or the exact digest previously read for replacement. apply-patch requires the exact whole-file digest previously read (read-text digest or read-text-lines fileDigest) and 1..={MAX_APPLY_PATCH_EDITS} non-overlapping edits; every oldText must occur exactly once."
-    );
+    let hint = if include_tool_guidance {
+        format!(
+            "Caller-authorized directory roots (list/search targets and descendant stat/read/write-atomic/apply-patch targets): {directories}. Additional exact files (stat/read only): {files}. write-atomic requires expectedDigest=null for creation or the exact digest previously read for replacement. apply-patch requires the exact whole-file digest previously read (read-text digest or read-text-lines fileDigest) and 1..={MAX_APPLY_PATCH_EDITS} non-overlapping edits; every oldText must occur exactly once."
+        )
+    } else {
+        format!(
+            "Caller-authorized directory roots and descendants: {directories}. Additional exact files (read only): {files}. Use these paths only with the capabilities offered in this Run."
+        )
+    };
     if hint.len() > MAX_PLANNER_SCOPE_HINT_BYTES {
         return Err(WorkspaceReadAuthorizationError::PlannerHintTooLarge);
     }

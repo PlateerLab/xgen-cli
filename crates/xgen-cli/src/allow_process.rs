@@ -146,6 +146,7 @@ impl fmt::Debug for ProcessTooling {
 pub(crate) struct ProcessExecutionAuthorization {
     canonical_resources: BTreeSet<String>,
     planner_scope_hint: String,
+    logical_ids_json: String,
     catalog_digest: String,
     web_search_enabled: bool,
 }
@@ -191,6 +192,7 @@ impl ProcessExecutionAuthorization {
         Ok(Self {
             canonical_resources,
             planner_scope_hint,
+            logical_ids_json: encoded_ids,
             catalog_digest: sha256_digest(&canonical),
             web_search_enabled: ids.contains(WEB_SEARCH_EXECUTABLE_ID),
         })
@@ -208,6 +210,17 @@ impl ProcessExecutionAuthorization {
         &self.planner_scope_hint
     }
 
+    pub(crate) fn scoped_planner_scope_hint(&self, execute_offered: bool) -> String {
+        if execute_offered {
+            self.planner_scope_hint().to_owned()
+        } else {
+            format!(
+                "Caller-catalogued process executable logical IDs: {}. Use executable IDs only with the capabilities offered in this Run.",
+                self.logical_ids_json
+            )
+        }
+    }
+
     pub(crate) fn catalog_digest(&self) -> &str {
         &self.catalog_digest
     }
@@ -221,6 +234,7 @@ impl fmt::Debug for ProcessExecutionAuthorization {
             .field("web_search_enabled", &self.web_search_enabled)
             .field("resources", &"<redacted>")
             .field("planner_scope_hint", &"<redacted>")
+            .field("logical_ids_json", &"<redacted>")
             .field("catalog_digest", &self.catalog_digest)
             .finish()
     }
@@ -285,6 +299,9 @@ mod tests {
         );
         assert!(!debug.contains(&executable.to_string_lossy().into_owned()));
         assert!(!debug.contains("test-helper"));
+        let scoped = tooling.authorization().scoped_planner_scope_hint(false);
+        assert!(scoped.contains("test-helper"));
+        assert!(!scoped.contains("process.execute"));
         assert!(ProcessTooling::build(directory.path(), "primary", ["test=relative"]).is_err());
         assert!(
             ProcessTooling::build(

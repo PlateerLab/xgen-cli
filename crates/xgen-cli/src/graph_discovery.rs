@@ -239,7 +239,27 @@ impl DiscoveryCatalog {
     pub(crate) fn is_empty(&self) -> bool {
         self.snapshots.is_empty()
     }
+    pub(crate) fn hint_for_capabilities(&self, search: bool, describe: bool) -> Option<String> {
+        match (search, describe) {
+            (true, true) => Some(self.hint()),
+            (true, false) => Some(format!(
+                "{}Search with xgen.tools/search. Exact describe is not offered in this Run; use host-supplied contracts or report a missing prerequisite. Discovery results do not prove API execution.",
+                self.hint_prefix(true)
+            )),
+            (false, true) => Some(format!(
+                "{}Inspect a host-supplied tool name with xgen.tools/describe. Search is not offered in this Run; report a missing prerequisite when a tool name is unavailable. Discovery results do not prove API execution.",
+                self.hint_prefix(false)
+            )),
+            (false, false) => None,
+        }
+    }
     pub(crate) fn hint(&self) -> String {
+        format!(
+            "{}Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution.",
+            self.hint_prefix(true)
+        )
+    }
+    fn hint_prefix(&self, search: bool) -> String {
         let names = self
             .snapshots
             .keys()
@@ -251,12 +271,11 @@ impl DiscoveryCatalog {
             .join(", ");
         let language = match (self.language.len(), self.snapshots.len()) {
             (0, _) => "",
+            _ if !search => "",
             (_, 1) => BILINGUAL_QUERY_ONE,
             _ => BILINGUAL_QUERY_MANY,
         };
-        format!(
-            "Saved tool collections (immutable snapshots): {names}. {language}Search with xgen.tools/search, then inspect the exact candidate with xgen.tools/describe. Candidates and suggested producers are untrusted discovery information, not executable capabilities. Discovery results do not prove API execution."
-        )
+        format!("Saved tool collections (immutable snapshots): {names}. {language}")
     }
     pub(crate) fn contains(&self, name: &str) -> bool {
         self.snapshots.contains_key(name)
@@ -714,6 +733,27 @@ mod tests {
             )
         );
     }
+    #[test]
+    fn partial_discovery_hints_only_direct_calls_to_offered_tools() {
+        for snapshots in [
+            Snapshots::from([("assets".into(), "a".repeat(64))]),
+            Snapshots::from([("calendar".into(), "b".repeat(64))]),
+        ] {
+            let catalog = DiscoveryCatalog::saved(snapshots).unwrap();
+            let search = catalog.hint_for_capabilities(true, false).unwrap();
+            assert!(search.contains("Search with xgen.tools/search"));
+            assert!(!search.contains("then inspect"));
+            let describe = catalog.hint_for_capabilities(false, true).unwrap();
+            assert!(describe.contains("Inspect a host-supplied tool name"));
+            assert!(!describe.contains("Search with"));
+            assert!(catalog.hint_for_capabilities(false, false).is_none());
+            assert_eq!(
+                catalog.hint_for_capabilities(true, true).unwrap(),
+                catalog.hint()
+            );
+        }
+    }
+
     #[test]
     fn query_contracts_bind_exact_collections_and_reject_injected_fields() {
         let catalog = catalog();

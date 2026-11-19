@@ -150,6 +150,10 @@ durable completion에 저장해. 기존 기본 출력은 유지해.
 검증이 누락·실패했거나 이후 변경으로 낡았으면 완료를 거절해.
 [완료 검증 조건](docs/development/receipt-completion-checks.md)을 확인해.
 
+필요한 도구가 정해진 headless 실행은 `run --capability ID`를 반복해 도구 범위를 제한할 수 있다.
+모델에 제공하는 목록과 실제 실행 가능한 목록이 함께 제한되며, 재개할 때도 저장된 범위를 사용한다.
+각 도구의 승인은 별도로 필요하다. [Run별 capability 범위](docs/development/capability-scope.md).
+
 ## 제품 원칙
 
 - 사용자는 `xgen` 하나만 설치합니다.

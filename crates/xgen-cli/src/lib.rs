@@ -3,6 +3,7 @@
 mod allow_file;
 mod allow_path;
 mod allow_process;
+mod capability_scope;
 mod change_report;
 mod composition;
 mod driver;

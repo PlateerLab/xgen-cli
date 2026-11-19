@@ -14,6 +14,12 @@
 
 ## 책임과 개발 범위
 
+2026-11-19 구현·로컬 검증 완료: [Run별 capability 범위](docs/development/capability-scope.md), [PR #144](https://github.com/PlateerLab/xgen-cli/pull/144).
+`run --capability ID`는 선택한 정의와 instance만 planner/admission에 등록하고 manifest와
+실행 profile에 결속한다. 기본 전체 catalog·기존 승인·Receipt를 유지하며 resume은 저장한 범위를
+복원한다. 이번 검증 결과·한계는 [ADR-0087](docs/adr/0087-run-capability-scope.md)을 따른다.
+초기 별도 호스트의 요청 크기 수치는 PR의 선행 기록이며 실제 모델 품질·운영 채택은 미검증이다.
+
 | 구성 요소 | 책임 | 별도로 추적할 개선 |
 | --- | --- | --- |
 | xgen CLI | 연결·인증 관리, 도구 호출 계약, 권한·승인, 실행, Receipt, 최종 응답, 사용자 경험 | 연결 흐름, 어댑터, 결과 검증, 배포·자동 실행 |
@@ -186,3 +192,7 @@
 - 알려진 흔들림(기존 main에도 있음): `smoke-inline-tui.py --rapid-resize`의 `heldout-burst-restored`가 burst 중간 크기의 입력창 조각이 화면에 남아 가끔 시간 초과한다. 맥 로컬 main 8회 중 1회, 수정본 14회 중 1회. 원인은 연속 reflow를 프런트엔드가 다 따라가지 못해 지울 위치를 잘못 잡는 것(미해결). 같은 스크립트의 `stty.txt` 읽기 경합(파일 생성 직후 빈 내용 읽음)은 고쳤다.
 - TUI 사용성(사용자 요청, 2026-11-03, 미구현): Claude Code `/model`처럼 화살표로 고르는 model 선택기. opencode는 TypeScript/Go라 그대로 못 가져온다. 같은 Rust인 OpenAI Codex CLI TUI(ratatui, Apache-2.0)가 참고·이식 후보 — 셀 단위 diff 렌더링이라 지우고 다시 그리는 깜빡임 구조 자체가 없다. 한 단계씩: 깜빡임 수정 → `/model` 선택기 → 렌더러 교체 여부는 ADR로 따로 판단.
 - 18초 응답(사용자 보고, 2026-11-03): 시간 전부가 한 번의 HTTP 호출 안이었다(usage elapsedMillis 18324, 출력 52 token). 같은 경로를 tmux TUI·`xgen run`으로 다시 재면 2~5초, 직접 호출 1.5~2초라 일회성 provider 지연으로 본다(원인 확정 아님).
+
+- xgen-cli 자체 개발 순서(2026-11-19, 사용자 승인): 미완료 #144 검증·정리 후 실행 중 후속 지시 반영을 다음 큰 작업으로 둔다. 독립 Run 병렬 실행·상위 Router는 이후 후보이며 아직 구현하지 않았다.
+- #144 정리(구현·로컬 검증 완료): 최초 CI는 test의 빈 String 생성에 대한 Clippy1건에서 중단됐다. 최신 main을 병합해 수정했으며, 범위 밖 도구를 지시하는 안내와 필수 completion 검사 모순도 실제 실행에서 재현해 고쳤다. read/stat 승인·resume, 선택 write의 별도 승인, 숨긴 write 차단, HTTP 원문·요청 크기 검증을 진행한다. 독립 diff 검토 도구는 인증 오류로 이용하지 못했으며 직접 코드 검토와 회귀 검사를 수행한다.
+- #144 최종 로컬 검증: Rust798개(4 ignored), Python162개(9 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 이전 rc.6의 미완료 HTTP Run을 새 바이너리로 재개해 catalog digest와 API 본문이 유지됨을 두 fixture에서 확인했다. 실제 모델 판단 품질·토큰 금액 절감은 미측정이다. 작업은 기존 `/home/son/projects/xgen-cli-wt/capability-scope`의 `codex/capability-scope`에서 진행했다.
