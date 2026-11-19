@@ -14,13 +14,15 @@
 
 ## 책임과 개발 범위
 
-2026-11-19 구현·로컬 검증: [최초 사용과 기본 preview 설치](docs/adr/0088-first-use-preview-distribution.md).
+2026-11-19 구현·배포·공개 설치 검증 완료: [최초 사용과 기본 preview 설치](docs/adr/0088-first-use-preview-distribution.md).
 실행 파일 없는 bootstrap을 기본 설치로 받는 문제를 고쳐 첫 stable 전에는 검증한 launcher preview를
 `latest`로 제공한다. Provider/model 오입력 재선택과 정적 오류 복구 안내, 현재 OpenAI preset 안내를
 추가했다. Rust800개·npm20개·격리한 CLI의 3개 edit/test/approval-resume layout과 TUI smoke를 통과했다.
-rc.7은 5개 release build 뒤 assembly의 npm 의존성 누락으로 미게시 실패했다. Verifier의 무의존성
-경계를 복원하고 rc.8로 재배포한다. 공개 registry 기본 설치는 검증 예정이며 실제 모델 품질 평가는
-인증 부재로 미실행이다.
+rc.7은 assembly 의존성 누락으로 미게시 실패했고, 무의존성 경계를 복원해
+[rc.8](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.8)을 게시했다. Main CI7개와 release19개 job이 통과했고,
+Windows 공개 npm 설치의 첫 optional package 누락은 동일 artifact 재실행에서 통과했다(원인 미확정).
+공개 기본 npm 설치·first-use3개 layout·TUI·native 설치·raw byte parity·attestation을 확인했다.
+Launcher의 `latest`/`next`는 rc.8이며 실제 모델 품질 평가는 인증 부재로 미실행이다.
 소유자는 xgen CLI·npm 배포 경로다. 도구 검색·browser-use·SEV 알고리즘은 이번 변경 대상이 아니다.
 
 2026-11-19 구현·로컬 검증 완료: [Run별 capability 범위](docs/development/capability-scope.md), [PR #144](https://github.com/PlateerLab/xgen-cli/pull/144).
