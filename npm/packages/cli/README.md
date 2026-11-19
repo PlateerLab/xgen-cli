@@ -12,7 +12,7 @@ xgen
 
 첫 실행에서 provider, 숨김 API key와 model을 선택하면 연결을 검증하고 설정을 저장해.
 최초 stable 게시 전까지 기본 설치는 검증된 최신 preview를 가리키고, 그 뒤에는 stable을 따라.
-Preview 채널은 `@xgen-ai/cli@next`, 고정 설치는 `@xgen-ai/cli@0.1.0-rc.7`이야.
+Preview 채널은 `@xgen-ai/cli@next`, 고정 설치는 `@xgen-ai/cli@0.1.0-rc.8`이야.
 
 현재 OS/CPU의 exact-version optional dependency 하나에 담긴 Rust 실행 파일을 사용해.
 설치 script, 추가 download, native compile은 없어. `--omit=optional`은 실행 파일을 빼므로 지원하지 않아.

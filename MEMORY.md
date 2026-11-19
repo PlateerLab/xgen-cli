@@ -17,8 +17,10 @@
 2026-11-19 구현·로컬 검증: [최초 사용과 기본 preview 설치](docs/adr/0088-first-use-preview-distribution.md).
 실행 파일 없는 bootstrap을 기본 설치로 받는 문제를 고쳐 첫 stable 전에는 검증한 launcher preview를
 `latest`로 제공한다. Provider/model 오입력 재선택과 정적 오류 복구 안내, 현재 OpenAI preset 안내를
-추가했다. Rust800개·npm19개·격리한 CLI의 3개 edit/test/approval-resume layout과 TUI smoke를 통과했다.
-rc.7 게시·공개 registry 기본 설치는 검증 예정이며 실제 모델 품질 평가는 인증 부재로 미실행이다.
+추가했다. Rust800개·npm20개·격리한 CLI의 3개 edit/test/approval-resume layout과 TUI smoke를 통과했다.
+rc.7은 5개 release build 뒤 assembly의 npm 의존성 누락으로 미게시 실패했다. Verifier의 무의존성
+경계를 복원하고 rc.8로 재배포한다. 공개 registry 기본 설치는 검증 예정이며 실제 모델 품질 평가는
+인증 부재로 미실행이다.
 소유자는 xgen CLI·npm 배포 경로다. 도구 검색·browser-use·SEV 알고리즘은 이번 변경 대상이 아니다.
 
 2026-11-19 구현·로컬 검증 완료: [Run별 capability 범위](docs/development/capability-scope.md), [PR #144](https://github.com/PlateerLab/xgen-cli/pull/144).

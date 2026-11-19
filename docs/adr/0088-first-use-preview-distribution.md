@@ -1,7 +1,7 @@
 # ADR-0088: 기본 preview 설치와 최초 모델 연결 복구
 
 - 날짜: 2026-11-19
-- 상태: 채택, rc.7 게시 검증 예정
+- 상태: 채택, rc.7 조립 실패·미게시, rc.8 게시 검증 예정
 - 범위: 일반 배포·CLI 표시. Planner 입력·journal·권한·자동 재시도 계약은 바꾸지 않는다.
 
 ## 문제와 근거
@@ -22,7 +22,8 @@ RC6 뒤의 OpenAI parameter style, TUI idle redraw와 Run capability scope도 �
 Stable이 하나라도 게시됐거나 더 높은 version이 존재하면 preview로 `latest`를 갱신하지 않는다.
 잘못된 registry version, 존재하지 않는 candidate/alias, `next` 불일치는 fail-closed한다.
 SemVer 비교는 private npm workspace의 고정 `semver@7.8.6` devDependency로 한다. Launcher runtime과
-native binary에는 이 의존성이 들어가지 않는다. `verify-release`의 tag 판정도 같은 parser를 사용한다.
+native binary에는 이 의존성이 들어가지 않는다. 의존성을 설치하지 않는 assembly verifier는 기존
+dependency-free 경계를 유지한다. 그 경로의 tag 문법은 build metadata를 허용하지 않는다.
 
 Platform package는 exact optional dependency이므로 기본 alias를 옮기지 않는다. Alias 갱신 실패는
 동일 release job 재실행으로 복구하며 tarball을 덮어쓰지 않는다. 기존 release concurrency group으로
@@ -50,7 +51,7 @@ README 첫 화면은 일반 설치·모델 연결·작은 작업·복구 순서�
 - Rust 800 passed, 0 failed, 4 ignored. Clippy·fmt·release build·license·문서/workflow 검사 통과.
 - Pinned graph-tool-call과 compiled CLI를 사용한 Python 검사 162개 통과(10 skipped). Python 3.14의
   기존 SQLite ResourceWarning은 남지만 실패는 없었다.
-- npm 정책 검사 19개: 서로 다른 prerelease 계열, 낮은 stable·build metadata의 hyphen,
+- npm 정책 검사 20개(assembly 무의존성 import 회귀 추가): 서로 다른 prerelease 계열, 낮은 stable·build metadata의 hyphen,
   더 높은 preview, 잘못된 metadata, 동일 게시 재실행·SRI/provenance 경계를 검증했다.
 - `scripts/smoke-first-use.py`: 격리한 config/state와 실제 CLI에서 provider/model 오입력 뒤 설정 성공,
   실패한 재설정의 기존 profile 보존, compatibility 재검사, Python·JSON 설계 layout과 별도 text layout의
@@ -68,5 +69,17 @@ README 첫 화면은 일반 설치·모델 연결·작은 작업·복구 순서�
 
 ## 배포 결과
 
-rc.7 후보는 RC6 뒤 변경을 함께 포함한다. GitHub/npm 게시와 5개 플랫폼 release 검증 결과는 게시 후
-추가한다. 이 문서의 로컬 통과를 게시 완료나 일반 사용자 작업 성공률의 근거로 해석하지 않는다.
+rc.7 태그의 source `ca5392b`는 main CI 7개와 release 5개 native build·설치 검사를 통과했지만,
+[release run](https://github.com/PlateerLab/xgen-cli/actions/runs/44460752126)의 assembly에서
+`ERR_MODULE_NOT_FOUND`로 실패했다. Assembly는 npm 의존성을 설치하지 않는데 verifier에 private
+`semver` import를 추가한 실수였다. GitHub Release와 npm package는 게시되지 않았다.
+태그는 이동하거나 재사용하지 않고 rc.8로 다시 진행한다.
+
+수정은 verifier의 기존 무의존성 경계를 복원하는 것이다. `semver`는 기존 `npm ci` 뒤에 실행하는
+publisher에서만 사용한다. 깨끗한 임시 checkout에서 verifier를 import하는 검사를 추가해 수정 전
+실패·수정 후 통과를 확인했다. rc.7의 실제 5개 build artifact를 받아 `node_modules` 없는 checkout에서
+launcher까지 6개 package의 assembly verifier를 재생해 통과했다. Artifact 재사용 게시가 아니라
+실패 경로의 수정 검증이며 rc.8은 새 source/tag에서 다시 빌드한다.
+
+rc.8의 GitHub/npm 게시와 공개 설치 결과는 완료 후 추가한다. 로컬 fixture 통과를 실제 모델의 작업
+성공률 근거로 해석하지 않는다.
