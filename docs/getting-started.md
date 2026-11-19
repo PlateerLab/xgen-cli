@@ -159,13 +159,13 @@ Checksum은 전송 손상을 탐지하지만 같은 release publisher 자체를 
 
 ## 로컬 모델 연결
 
-현재 검증된 기준은 vLLM의 OpenAI-compatible Chat Completions endpoint다. 다음 조건을 모두 만족해야
-실제 planner call이 통과한다.
+로컬·원격 OpenAI-compatible Chat Completions endpoint를 연결한다. 다음 조건을 모두 만족해야
+실제 planner call이 통과한다. Provider별 검증 범위는 아래 표를 따른다.
 
 - base URL이 bare host가 아니라 API root를 가리킨다. 대부분 `/v1`이지만 provider가 자기 API를
   다르게 번호 붙이면 그 경로를 쓴다(예: `/api/paas/v4`). 끝에 `/`가 붙어도 같게 취급한다.
 - plaintext HTTP는 `127.0.0.1` 또는 `::1` literal loopback만 사용한다.
-- server가 strict JSON Schema response format을 지원한다.
+- server가 선택한 response format(`json_schema` 또는 `json_object`)을 지원하고 production proposal을 반환한다.
 - response의 `model` 문자열이 설정한 served model ID와 정확히 같다.
 - custom CA, ambient proxy, redirect와 자동 retry에 의존하지 않는다.
 
@@ -255,7 +255,7 @@ XGEN_OPENAI_API_KEY="$(secret-manager-command)" xgen model check --compatibility
 Credential은 `--token-stdin`, `XGEN_OPENAI_API_KEY`, profile secure store 순서다. Stored credential은
 profile URL과 최종 URL이 정확히 같을 때만 쓴다.
 
-`xgen model setup`은 bounded `GET /v1/models` 뒤 실제 strict JSON Schema
+`xgen model setup`은 bounded `GET /v1/models` 뒤 profile의 response format·parameter style로
 `POST /v1/chat/completions`를 보내 두 요청이 모두 성공한 profile만 commit한다. Workspace, SQLite 또는
 Run state를 만들지 않는다. `model check` 기본형은 기존 자동화 호환성을 위해 catalog GET만 수행하고,
 `--compatibility`를 지정하면 같은 inference probe를 추가한다. Redirect, retry와 ambient proxy는
@@ -335,7 +335,7 @@ xgen run `
   "README를 읽고 핵심을 요약해줘."
 ```
 
-RC3에서는 사용자가 파일명을 미리 나열하지 않고 선택한 workspace directory를 탐색하고 별도 승인 아래
+Workspace mode에서는 사용자가 파일명을 미리 나열하지 않고 선택한 workspace directory를 탐색하고 별도 승인 아래
 atomic write할 수 있다.
 
 ```bash
@@ -354,7 +354,7 @@ xgen run \
 directory 밖의 exact file만 `--allow-file Cargo.toml`로 추가한다. 미완료 재개에는 원래와 동일한
 `--allow-dir`/`--allow-file` 집합을 다시 제공해야 한다.
 
-RC3에서는 test/build용 executable도 absolute path로 명시할 수 있다. 경로를 model에 보내지는 않으며
+Workspace mode에서는 test/build용 executable도 absolute path로 명시할 수 있다. 경로를 model에 보내지는 않으며
 logical ID만 planning constraint에 노출한다.
 
 ```bash
@@ -432,7 +432,7 @@ xgen resume run-0123456789abcdef0123456789abcdef
 ```
 
 상세 재개 절차는 [Public local run/resume prototype](development/public-local-run-resume.md)을 따른다.
-RC3는 workspace discovery, bounded atomic text write/patch와 명시적 shell-free process 실행을
+현재 preview는 workspace discovery, bounded atomic text write/patch와 명시적 shell-free process 실행을
 제공한다. Browser와 MCP는 후속 범위이므로 현 상태를 Claude Code/Codex 전체 기능과 동일하다고 해석하지
 않는다. Discovery 경계는
 [Workspace filesystem discovery](development/workspace-filesystem-discovery.md), write 경계는
@@ -452,11 +452,11 @@ Native 설치본은 위 installer를 같은 install directory에 exact tag로 �
 binary의 checksum, version과 protocol을 먼저 확인하고 성공한 파일만 같은 directory rename으로 교체한다.
 실행 중인 `xgen`를 교체하지 말고 모든 session을 종료한 뒤 업데이트한다.
 
-RC3 npm package만 문제가 있고 같은 RC3 GitHub Release가 정상이라면 npm 설치본을 제거하고 exact RC3
-native installer로 전환할 수 있다. 두 채널은 같은 release binary를 담으므로 이는 제품 version
+npm package만 문제가 있고 같은 version의 GitHub Release가 정상이라면 npm 설치본을 제거하고 동일
+version의 native installer로 전환할 수 있다. 두 채널은 같은 release binary를 담으므로 이는 제품 version
 rollback이 아니라 설치 채널 전환이다.
 
-제품 version을 RC2로 되돌려야 하면 기존 RC3 binary와 state를 지우거나 덮어쓰지 말고 RC2를 별도
+이전 RC3→RC2 전환 예시: 제품 version을 RC2로 되돌려야 하면 기존 RC3 binary와 state를 지우거나 덮어쓰지 말고 RC2를 별도
 user-owned directory에 설치한다. RC3가 만든 Run을 RC2로 열거나 resume하는 것은 지원하지 않는다.
 RC2에서 시작해 아직 model egress가 필요한 Run은 원래 RC2 binary로 마치고, 새 작업은 RC3에서 새 Run으로
 시작한다. 완료된 RC2 Run은 RC3에서 offline replay할 수 있다.
@@ -514,15 +514,15 @@ profile 저장소를 격리하려면 `XGEN_CONFIG_HOME`을 따로 설정한다. 
 | `xgen: command not found` | npm global bin 또는 native install directory가 현재 `PATH`에 있는지 확인하고 새 terminal에서 다시 실행한다. |
 | `unsupported_platform` 또는 platform package 없음 | 지원 OS/architecture와 Node.js version을 확인하고 `--omit=optional` 없이 exact package를 재설치한다. |
 | Installer가 destination을 거부 | 관리자 공용 경로 대신 user-owned directory를 사용하고 symbolic link/reparse point나 broadly writable directory를 제거하지 말고 다른 빈 경로를 선택한다. |
-| PowerShell에서 installer 차단 | Script를 먼저 검토한다. 현재 process 한정 execution-policy 예외는 조직 정책이 허용할 때만 사용한다. SmartScreen 경고는 RC3에 Authenticode가 없기 때문이다. |
+| PowerShell에서 installer 차단 | Script를 먼저 검토한다. 현재 process 한정 execution-policy 예외는 조직 정책이 허용할 때만 사용한다. 현재 preview에는 Authenticode가 없어 SmartScreen 경고가 나타날 수 있다. |
 | `base_url_must_name_the_api_root` | base URL이 host만 있고 경로가 없다. `https://api.openai.com`이 아니라 `https://api.openai.com/v1`처럼 API root까지 적는다. 어떤 경로인지는 provider 문서가 정한다. |
 | `credential_store_unavailable` | 평문 저장 fallback은 없다. Secret manager 출력을 `--token-stdin`이나 현재 process의 `XGEN_OPENAI_API_KEY`로 전달한다. |
-| `chat_completions_incompatible` | Provider가 strict JSON Schema 요청을 받아들였지만 실제로 강제하지 않았거나 envelope 밖으로 답했다. Probe는 production planner와 같은 proposal schema를 보내고 schema 밖 field를 하나 더 요구하므로, 문법을 강제하지 못하는 서버는 planner call 대신 `model setup`에서 여기서 닫힌다. 이는 의도된 동작이다. Probe 스키마는 구조만 강제하므로(ADR-0037) `additionalProperties`, `required`, `enum`, `const`를 강제하지 못하는 provider가 여기서 걸린다. |
-| `model_not_advertised` 또는 compatibility 실패 | URL이 bare host가 아니라 provider의 API root인지, exact served model ID와 strict JSON Schema Chat Completions 지원을 확인한다. Redirect나 자동 retry에 의존하지 않는다. |
+| `chat_completions_incompatible` | 선택한 response format·parameter style과 응답의 exact model ID를 확인한다. `json_schema`에서는 strict enforcement도 검사한다. 기존 OpenAI profile은 `xgen model setup --response-format json_object --parameter-style openai`로 갱신하고 compatibility를 다시 검사한다. |
+| `model_not_advertised` 또는 compatibility 실패 | URL이 bare host가 아니라 provider의 API root인지, exact served model ID와 선택한 structured response format 지원을 확인한다. Redirect나 자동 retry에 의존하지 않는다. |
 | `model setup`/`model check`의 `timeout` | Inference probe는 production planner와 같은 wall-clock 예산을 쓴다. 로컬 model은 첫 로드가 크기와 disk cache 상태에 따라 수십 초 걸릴 수 있으므로 endpoint에서 model을 한 번 warm-up한 뒤 재시도한다. |
 | `provider_output_truncated` | Probe나 planner 응답이 출력 token 예산에서 잘렸다. Reasoning을 많이 쓰는 model은 최종 JSON 전에 예산을 소진할 수 있으므로 model의 thinking 설정이나 profile의 출력 예산을 조정한다. Rate limit이 아니므로 재시도로 해결되지 않는다. |
 | `proposal_rejected.*` | 뒤의 class가 Core가 제안을 거부한 이유다. `capability_unavailable`/`capability_unsupported`는 허용하지 않은 capability 선택, `invocation_invalid`는 scope 밖 인자나 스키마 위반, `tool_call_budget_exhausted`는 예산 소진, `repeated_finished_action`은 방금 끝난 읽기를 같은 인자로 다시 제안한 경우다. 예산 소진이 아닌 거절은 연속 2번까지 자동으로 다시 묻고 세 번째에 멈추며, 다시 물을 때 거절 이유를 함께 준다. `repeated_finished_action`만은 따로 연속 8번까지 다시 묻는다([ADR-0061](adr/0061-rejected-response-retry.md), [ADR-0064](adr/0064-planning-feedback.md), [ADR-0067](adr/0067-step-arguments-and-repeat-limit.md)). Class는 Core 판정이며 model 출력 원문이 아니다. |
-| `model_rejected.*` | 뒤의 class는 journal의 model call settlement와 같은 값이다. `planner_invalid_response`는 provider가 strict JSON Schema를 지키지 않은 응답(문법 미지원·미적용), `provider_limit`은 출력 예산·요청 크기 초과, `provider_rejected`는 4xx 거부다. `planner_invalid_response`만 연속 2번까지 자동으로 다시 묻는다(ADR-0061). Class는 Core 판정이며 model 출력 원문이 아니다. |
+| `model_rejected.*` | 뒤의 class는 journal의 model call settlement와 같은 값이다. `planner_invalid_response`는 provider가 strict JSON Schema를 지키지 않은 응답(문법 미지원·미적용), `provider_limit`은 출력 예산·요청 크기 초과, `provider_rejected`는 4xx 거부다. `planner_invalid_response`와 출력이 잘린 응답은 연속 2번까지 자동으로 다시 묻는다(ADR-0061, ADR-0073). Class는 Core 판정이며 model 출력 원문이 아니다. |
 | `configuration_mismatch` | 원래 workspace, file/directory scope, executable와 model profile binding(inference timeout·출력 예산 포함)으로 resume한다. 자동 대체하지 말고 필요하면 새 Run을 시작한다. |
 | `model_call_unknown.timeout`이 planner 호출마다 반복 | 프로필의 inference timeout이 model·hardware에 비해 짧다. 로컬 27B는 호출당 60초 안팎이 걸리므로 `--inference-timeout`을 올린다. |
 | `model_call_unknown.transport_unavailable` / `.interrupted` | 요청이 전송됐을 수 있으나 결과를 못 받았다(연결 끊김) 또는 process가 응답 전에 끝났다. 자동 replay하지 않으므로 endpoint 상태를 확인한 뒤 `resume`한다. |
@@ -543,5 +543,5 @@ project는 민감정보가 없는 최소 fixture로 새로 만든다. 세부 범
 - Run state에는 goal과 bounded tool output이 포함될 수 있으므로 state root 전체를 민감 데이터로 취급한다.
 - SQLite는 binary에 내장된 local library다. SQLite server나 별도 database 설치가 필요하지 않다.
 - 전송 여부가 불확정한 model/effect는 Unknown으로 보존하며 자동 replay하지 않는다.
-- macOS/Windows RC3 binary에는 OS code signing/notarization이 없다. Checksum과 GitHub attestation은
+- macOS/Windows preview binary에는 OS code signing/notarization이 없다. Checksum과 GitHub attestation은
   전송 무결성과 build provenance를 확인하지만 OS publisher 서명을 대신하지 않는다.
