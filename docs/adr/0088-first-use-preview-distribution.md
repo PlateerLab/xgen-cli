@@ -1,7 +1,7 @@
 # ADR-0088: 기본 preview 설치와 최초 모델 연결 복구
 
 - 날짜: 2026-11-19
-- 상태: 채택, rc.7 조립 실패·미게시, rc.8 게시 검증 예정
+- 상태: 채택, rc.7 미게시 실패 뒤 rc.8 게시·공개 설치 검증 완료
 - 범위: 일반 배포·CLI 표시. Planner 입력·journal·권한·자동 재시도 계약은 바꾸지 않는다.
 
 ## 문제와 근거
@@ -49,7 +49,7 @@ README 첫 화면은 일반 설치·모델 연결·작은 작업·복구 순서�
 ## 검증과 한계
 
 - Rust 800 passed, 0 failed, 4 ignored. Clippy·fmt·release build·license·문서/workflow 검사 통과.
-- Pinned graph-tool-call과 compiled CLI를 사용한 Python 검사 162개 통과(10 skipped). Python 3.14의
+- 초기 구현 후보에서 pinned graph-tool-call과 compiled CLI를 사용한 Python 검사 162개 통과(10 skipped). Python 3.14의
   기존 SQLite ResourceWarning은 남지만 실패는 없었다.
 - npm 정책 검사 20개(assembly 무의존성 import 회귀 추가): 서로 다른 prerelease 계열, 낮은 stable·build metadata의 hyphen,
   더 높은 preview, 잘못된 metadata, 동일 게시 재실행·SRI/provenance 경계를 검증했다.
@@ -81,5 +81,20 @@ publisher에서만 사용한다. 깨끗한 임시 checkout에서 verifier를 imp
 launcher까지 6개 package의 assembly verifier를 재생해 통과했다. Artifact 재사용 게시가 아니라
 실패 경로의 수정 검증이며 rc.8은 새 source/tag에서 다시 빌드한다.
 
-rc.8의 GitHub/npm 게시와 공개 설치 결과는 완료 후 추가한다. 로컬 fixture 통과를 실제 모델의 작업
-성공률 근거로 해석하지 않는다.
+rc.8은 source `b893d1f`의 [main CI 7개](https://github.com/PlateerLab/xgen-cli/actions/runs/44463791162) 통과 뒤
+새 태그로 빌드했다. [릴리즈 workflow](https://github.com/PlateerLab/xgen-cli/actions/runs/44464782757)는
+최종 19개 job이 모두 통과했다. 공개 Windows npm 설치의 첫 실행은 optional native package가 없어
+실패했지만 같은 source·artifact의 해당 job만 재실행해 설치·버전·고지·REPL·재설치·삭제가 통과했다.
+Staged Windows npm 설치는 첫 실행부터 통과했다. Registry 반영 지연 가능성은 있으나 최초 누락
+원인은 확정하지 않았고 별도 engine 변경은 하지 않았다.
+
+[GitHub rc.8](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.8)은 2026-11-19 05:40:55 UTC에
+17개 asset, prerelease, `immutable=true`로 게시됐다. npm 여섯 package는 `next=0.1.0-rc.8`,
+launcher는 `latest=0.1.0-rc.8`도 확인했다. Platform package의 기본 alias는 옮기지 않는다.
+
+Linux x86-64의 별도 새 HOME·npm cache·prefix에서 version 없는 공개 npm 설치와 exact 재설치를
+직접 확인했다. 그 설치본으로 `smoke-first-use.py`의 3개 layout(14 fixture model POST),
+`smoke-inline-tui.py --results`(5 fixture model POST)를 통과했다. 공개 GitHub checksum·exact native
+installer·npm/native raw binary 일치·`gh attestation verify`도 통과했고 user profile은 변경하지 않았다.
+실제 모델 호출·사용자 작업 성공률 평가는 미실행이다. 이 결과를 Claude Code/Codex 수준의 일반 작업
+신뢰성 검증으로 해석하지 않는다.
