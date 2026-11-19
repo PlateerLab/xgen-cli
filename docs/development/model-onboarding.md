@@ -112,7 +112,8 @@ file/log regression을 담당한다. 설계와 실패 순서는 [ADR-0032](../ad
 endpoint는 진단에 추가하지 않는다. 제공자·model 번호를 잘못 입력하면 같은 메뉴에서 다시 고를 수 있고,
 `q`나 EOF는 설정을 중단한다. Compatibility probe가 실패하면 기존 profile을 바꾸지 않는다.
 
-- `credential_not_found`: `xgen model setup`으로 key를 로컬에서 다시 입력한다. Headless는 secret manager에서 `XGEN_OPENAI_API_KEY`를 process에 주입할 수 있다.
+- `credential_not_found`: `xgen model list`에서 profile 이름을 확인하고 `xgen model setup --name PROFILE`로 key를 로컬에서 다시 입력한다. Headless는 secret manager에서 `XGEN_OPENAI_API_KEY`를 process에 주입할 수 있다.
+- `authentication_rejected`: 저장된 key가 폐기됐다면 `xgen model logout PROFILE`로 지운 뒤 `xgen model setup --name PROFILE`로 다시 입력한다. 기존 key가 남아 있으면 setup이 재사용한다. Environment key가 있으면 그 값이 우선이므로 로컬에서 갱신하거나 해제한다.
 - `model_not_advertised`: `xgen model setup`에서 목록에 있는 정확한 model ID를 고른다.
 - `request_rejected` / `chat_completions_incompatible`: response format·parameter style과 응답의 exact model ID를 확인한다. Alias가 다른 snapshot ID를 반환하면 그 snapshot을 목록에서 선택한다.
 - `provider_output_truncated`: `xgen model setup --max-output-tokens 4096`처럼 출력 예산을 조정하고 compatibility를 다시 검사한다.
