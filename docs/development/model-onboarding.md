@@ -114,14 +114,19 @@ endpoint는 진단에 추가하지 않는다. 제공자·model 번호를 잘못 
 
 - `credential_not_found`: `xgen model list`에서 profile 이름을 확인하고 `xgen model setup --name PROFILE`로 key를 로컬에서 다시 입력한다. Headless는 secret manager에서 `XGEN_OPENAI_API_KEY`를 process에 주입할 수 있다.
 - `authentication_rejected`: 저장된 key가 폐기됐다면 `xgen model logout PROFILE`로 지운 뒤 `xgen model setup --name PROFILE`로 다시 입력한다. 기존 key가 남아 있으면 setup이 재사용한다. Environment key가 있으면 그 값이 우선이므로 로컬에서 갱신하거나 해제한다.
-- `model_not_advertised`: `xgen model setup`에서 목록에 있는 정확한 model ID를 고른다.
+- `model_not_advertised`: 서버가 광고한 정확한 ID를 `xgen model setup --name PROFILE --model MODEL_ID`로 지정한다. 기존 profile은 저장된 model을 재사용하므로 `setup`만 다시 실행하면 번호 선택창이 나오지 않는다.
 - `request_rejected` / `chat_completions_incompatible`: response format·parameter style과 응답의 exact model ID를 확인한다. Alias가 다른 snapshot ID를 반환하면 그 snapshot을 목록에서 선택한다.
 - `provider_output_truncated`: `xgen model setup --max-output-tokens 4096`처럼 출력 예산을 조정하고 compatibility를 다시 검사한다.
 - `timeout` / `rate_limited`: provider 상태·할당량을 확인하고 재검사한다. 느린 model은 `--inference-timeout SECONDS`로 조정할 수 있다.
 
+기존 profile의 model 교체는 `--name PROFILE --model MODEL_ID`로 지정한다. `PROFILE`과 `MODEL_ID`는
+실제 이름·서버가 광고한 ID로 바꾼다. `xgen model list`는 저장된 profile 목록이며 서버 model 목록은 아니다.
+서버 목록을 번호로 다시 고르려면 새로운 profile 이름과 provider로 `model setup`을 실행한다.
+
 이전 OpenAI profile은 저장된 옵션을 자동으로 바꾸지 않으므로 다음처럼 명시적으로 갱신한다.
+아래는 `default` profile 예시이며 다른 이름이면 `--name` 값을 바꾼다.
 
 ```bash
-xgen model setup --provider openai --response-format json_object --parameter-style openai
+xgen model setup --name default --provider openai --response-format json_object --parameter-style openai
 xgen model check --compatibility
 ```
