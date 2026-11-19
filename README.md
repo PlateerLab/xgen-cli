@@ -1,24 +1,20 @@
 # XGEN CLI
 
-Local-first general-purpose agent CLI and harness.
+터미널에서 프로젝트를 읽고 수정하고 테스트하는 로컬 에이전트야. 하단 입력창, 실행 중 상태 표시,
+승인, 실행 기록과 중단한 작업 재개를 제공해. 로컬 또는 원격 OpenAI-compatible 모델에 연결해서 써.
 
-> 현재 상태: 프로토콜 v0.1 검증, dependency DAG와 Receipt-gated 재개 frontier를 갖춘 model-free WorkGraph, embedded SQLite schema 8 store, effect 실행·복구 조정기, 결정론적 Capability Registry·Router, I/O 없는 Permission Broker, secret-free invocation material 복구, Direct Executor와 Core-owned Execution Receipt 검증 경계, 장기 Run용 VerifiedRunIndex를 실행할 수 있습니다. Provider-neutral bounded AgentLoop는 비신뢰 `PlanProposal`을 검증해 다중 Step DAG와 reconstructable input sidecar를 원자 commit하고 재시작 뒤 한 frontier action씩 이어갑니다. Model call은 provider 호출 전에 보수적인 possible-send slot을 journal에 예약하며 accepted/rejected/Unknown을 재시작 뒤 복원하고, 불확정 호출을 자동 재시도하지 않습니다. 별도 `xgen-provider-openai` leaf adapter는 OpenAI-compatible Chat Completions의 단일 요청과 strict structured proposal을 이 lifecycle에 연결합니다. 내부 WorkGraph는 planned `ReadOnly`/`Idempotent`/`NonIdempotent`, Core Receipt v2의 bounded Artifact commitment와 event-anchored typed `ToolOutputRecord`를 지원하며, generation-checked `PlanningContext v3`는 Step의 plan journal 순서와 passed Receipt에 결합된 exact ToolOutput의 관찰 순서를 보존해 다음 model turn에 전달합니다. NonIdempotent durable output은 결과만 보존하고 Started 뒤 불확정 effect의 no-replay 의미는 유지합니다. Public `xgen run/resume`은 기존 exact `--allow-file` mode를 보존하면서, 명시적 `--allow-dir` mode에서 네 read Capability와 `write-atomic`·`apply-patch`로 workspace를 탐색·수정합니다. Host가 등록한 executable은 별도 승인 뒤 shell 없이 bounded cwd·argv·환경·timeout·출력 제한으로 실행하며 결과를 durable하게 보존하고 불확정 실행을 자동 반복하지 않습니다. Dynamic path/query/write/process material은 Run 전용 embedded `materials.sqlite3`에 digest-bound recipe로 저장되어 approval pause 뒤 다른 process에서도 복원됩니다. 모델 프로필은 일반 설정과 OS 보안 credential 저장소를 분리하고 catalog와 실제 strict-JSON inference를 모두 검증합니다. Bare `xgen`는 이 경계 위에서 Thinking 표시와 검증된 최종 응답을 제공하고 model/read/write/execute를 각각 묻는 가벼운 REPL을 시작합니다. 로컬 JSON OpenAPI 명세로 연결한 제한된 HTTP GET·호스트 지정 POST 조회는 지원합니다. 지원 범위는 [HTTP 조회 문서](docs/development/http-read-tools.md)를 따르며, HTTP 쓰기·범용 MCP 클라이언트·XGEN compatibility adapter는 후속 범위입니다.
+**Developer Preview** 단계야. 모델에 따라 작업이 반복되거나 일부 수정만 끝낼 수 있어.
+실행 결과와 diff를 확인하고 쓰는 걸 권장해. HTTP 조회는 지원하며 HTTP 쓰기·범용 MCP 클라이언트는 후속 범위야.
 
 ## 설치와 첫 모델 연결
 
-`v0.1.0-rc.6` release artifact가 게시되면 Linux x86-64/ARM64, macOS Intel/Apple Silicon, Windows
-x86-64용 동일 native binary를 GitHub checksum installer와 npm 두 경로로 제공합니다. Native installer는
-Rust, Node.js, Python, SQLite 실행 파일이나 XGEN state용 별도 daemon을 요구하지 않습니다. npm 경로만
-얇은 launcher를 위해 Node.js 22.14 이상이 필요하며 install script, GitHub 추가 download와 native
-compile은 수행하지 않습니다. 사용할 model endpoint는 로컬 또는 원격에 별도로 실행 중이어야 합니다.
-후보 version PR의 merge만으로 artifact가 생기지는 않으며 GitHub/npm에 해당 version이 게시된 뒤 설치
-명령을 사용해야 합니다.
-
-Node.js가 이미 있다면 exact RC를 npm으로 설치할 수 있습니다. `--omit=optional`은 native package를
-제거하므로 사용하지 않습니다.
+Node.js 22.14 이상이면 npm으로 설치해. 최초 stable 게시 전까지 기본 설치는 검증된 최신 preview를
+가리켜. 이후 기본 설치는 stable을 따르고, preview는 `@next`로 선택할 수 있어.
+Linux x86-64/ARM64, macOS Intel/Apple Silicon, Windows x86-64를 지원해.
+`--omit=optional`은 실행 파일을 빼므로 사용하지 마.
 
 ```bash
-npm install --global @xgen-ai/cli@0.1.0-rc.6
+npm install --global @xgen-ai/cli
 xgen --version
 ```
 
@@ -30,8 +26,8 @@ Linux/macOS:
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.6
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.7
 rm -f "$installer"
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -40,9 +36,9 @@ Windows PowerShell:
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.6/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.7/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.6
+& $installer -Version v0.1.0-rc.7
 Remove-Item -LiteralPath $installer
 $env:Path = "$env:LOCALAPPDATA\XGEN\bin;$env:Path"
 ```
@@ -72,7 +68,7 @@ xgen --debug
 xgen --max-model-turns 48
 ```
 
-RC3의 workspace mode는 다음처럼 프로젝트 root와 실행 가능한 개발 도구를 명시적으로 허용한다.
+Headless workspace mode는 다음처럼 프로젝트 root와 실행 가능한 개발 도구를 명시적으로 허용한다.
 
 ```bash
 xgen run \
@@ -90,15 +86,14 @@ Process는 shell 없이 실행되지만 별도 `--allow-execute` 전에는
 `execute_approval_required`로 pause한다. 허용한 executable과 하위 process는 사용자 OS 권한으로 project
 code를 실행하므로 이는 sandbox가 아니다. 승인·재개 예시는 [시작하기](docs/getting-started.md)를 따른다.
 
-RC3의 포함 범위와 알려진 한계는 [Developer Preview RC3 후보](docs/development/rc3-release-candidate.md)에
+초기 RC3의 포함 범위와 알려진 한계는 [Developer Preview RC3 후보](docs/development/rc3-release-candidate.md)에
 정리되어 있다. 일반 문제는 GitHub Issues, 민감한 취약점은 [보안 정책](SECURITY.md)의 비공개 신고
 경로를 사용한다.
 
 대화형 모드는 현재 디렉터리 전체를 workspace catalog로 열되 실제 read/write/execute와 model egress를
-각각 별도로 승인한다. 일반 질문과 후속 질문은 도구 없이 답하며, 최근 요청·답변을 제한된 문맥으로 이어간다. `/model`, `/status`, `/usage`, `/permissions`, `/resume`, `/clear`, `/exit`을 지원하며 줄 끝
-`\`로 여러 줄 goal을 입력한다. 직전 durable completion만 다음 goal의 비신뢰 session context로 이어지고
+각각 별도로 승인한다. 일반 질문과 후속 질문은 도구 없이 답하며, 최근 요청·답변을 제한된 문맥으로 이어간다. `/model`, `/status`, `/usage`, `/permissions`, `/resume`, `/clear`, `/exit`을 지원하며 Alt+Enter로 여러 줄 goal을 입력한다. 입력 기록은 위·아래 화살표로 탐색한다. 직전 durable completion만 다음 goal의 비신뢰 session context로 이어지고
 `/clear`가 이를 끊는다. Model의 strict structured proposal을 그대로 화면에 흘리지 않고, 검증된 최종
-summary 전에는 Thinking 표시만 출력한다. `--debug` 또는 pipe 입력에서는 기존 redacted durable progress를
+summary 전에는 진행 상태와 완료된 도구 활동을 표시한다. `--debug` 또는 pipe 입력에서는 기존 redacted durable progress를
 출력한다.
 
 모델 응답이 거절되면 최종 답변이 저장되지 않았음을 표시하고 `/resume RUN_ID`를 안내한다. 이미 저장된
@@ -110,13 +105,13 @@ summary 전에는 Thinking 표시만 출력한다. `--debug` 또는 pipe 입력�
 비용은 선택적으로 단가를 지정했을 때만 추정한다. [사용량 계측 계약](docs/development/model-usage-2026-10-04.md)을 따른다.
 
 `model check` 기본형은 선택 profile의 endpoint에 `GET /v1/models` 하나만 보내 기존 자동화 계약을
-유지한다. `--compatibility`를 지정하면 strict structured output POST를 한 번 더 보낸다. `model setup`은
+유지한다. `--compatibility`를 지정하면 선택한 response format의 structured output POST를 한 번 더 보낸다. `model setup`은
 두 검증을 모두 통과한 뒤에만 profile을 활성화하며 workspace·Run state는 만들지 않는다.
 
 `--workspace` 기본값은 현재 디렉터리다. Headless/CI에서는 원격 HTTPS key를
 `XGEN_OPENAI_API_KEY` 또는 `--token-stdin`으로 현재 invocation에만 전달할 수 있다. OS 보안 저장소가
-없는 Linux server에서 평문 파일로 자동 fallback하지 않는다. 현재 호환 경계는 Chat Completions,
-strict JSON Schema response와 응답의 exact model ID를 지원하는 서버다. 설치·검증·삭제와 OS별 제약은
+없는 Linux server에서 평문 파일로 자동 fallback하지 않는다. 현재 호환 경계는 Chat Completions, structured JSON proposal과 응답의 exact model ID를 지원하는 서버다.
+OpenAI preset은 `json_object`와 `openai` parameter style을 사용한다. 설치·검증·삭제와 OS별 제약은
 [시작하기](docs/getting-started.md)와 [모델 온보딩](docs/development/model-onboarding.md)을 따른다.
 
 Unix headless `run`의 goal은 최대 65,536 UTF-8 바이트입니다. Windows는 OS command-line

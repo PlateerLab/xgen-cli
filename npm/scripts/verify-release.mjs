@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import semver from 'semver';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
@@ -123,7 +124,7 @@ export async function verifyRelease(directory, tag) {
   const { catalog, launcher, version } = await distributionMetadata();
   assert.match(tag, /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/);
   assert.equal(tag, `v${version}`);
-  const distTag = version.includes('-') ? 'next' : 'latest';
+  const distTag = semver.prerelease(version) ? 'next' : 'latest';
   const launcherTarball = path.join(directory, 'xgen-cli.tgz');
   const expectedTarballs = [launcherTarball];
   for (const specification of catalog.platforms) {

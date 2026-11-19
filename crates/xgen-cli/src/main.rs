@@ -1035,11 +1035,7 @@ fn prompt_provider() -> Result<String, ModelCliError> {
         .collect();
     eprintln!("{}", menu.join("\n"));
     let custom = PROVIDER_PRESETS.len() + 1;
-    let answer = prompt_line("Provider number: ")?;
-    let chosen = answer
-        .trim()
-        .parse::<usize>()
-        .map_err(|_| ModelCliError::InputUnavailable)?;
+    let chosen = prompt_number("Provider number (q to cancel): ", custom)?;
     if chosen == custom {
         return Ok("custom".to_owned());
     }
@@ -1442,6 +1438,77 @@ enum ModelCliError {
 }
 
 impl ModelCliError {
+    const fn recovery_hint(self) -> &'static str {
+        match self {
+            Self::Check(error) => match error {
+                ModelCheckError::AuthenticationRejected | ModelCheckError::InvalidCredential => {
+                    "Run xgen model setup to enter a valid API key locally; never paste keys into chat."
+                }
+                ModelCheckError::ModelNotAdvertised | ModelCheckError::InvalidModel => {
+                    "Run xgen model setup and select an exact model ID advertised by the endpoint."
+                }
+                ModelCheckError::IncompatibleResponse => {
+                    "Check response format, parameter style and exact response model ID with xgen model setup --help, then run xgen model check --compatibility. Model aliases may return a different snapshot ID."
+                }
+                ModelCheckError::RequestRejected => {
+                    "Check the provider's response format and parameter style with xgen model setup --help. Updating a saved profile requires explicit options; then retry xgen model check --compatibility."
+                }
+                ModelCheckError::OutputTruncated => {
+                    "Increase --max-output-tokens with xgen model setup, then retry xgen model check --compatibility."
+                }
+                ModelCheckError::Timeout
+                | ModelCheckError::RateLimited
+                | ModelCheckError::Unavailable => {
+                    "Check provider availability or quota, then retry xgen model check --compatibility. For a slow model, adjust --inference-timeout with xgen model setup."
+                }
+                ModelCheckError::InvalidBaseUrl | ModelCheckError::InvalidBasePath => {
+                    "Use xgen model setup --base-url with the API root (for example https://provider.example/v1), not /models or /chat/completions."
+                }
+                ModelCheckError::InsecureCredentialTransport
+                | ModelCheckError::InsecureEndpointTransport => {
+                    "Use HTTPS for remote providers. Plain HTTP is allowed only for a loopback IP address without an API key."
+                }
+                ModelCheckError::InvalidResponse => {
+                    "Check that --base-url points to an OpenAI-compatible API root serving GET /models."
+                }
+                ModelCheckError::InvalidTokenizer | ModelCheckError::Configuration => {
+                    "Review xgen model setup --help and correct the model configuration before retrying."
+                }
+            },
+            Self::Profile(ModelProfileError::CredentialNotFound) => {
+                "The saved API key is unavailable. Run xgen model setup to enter it again locally, or inject XGEN_OPENAI_API_KEY for this process."
+            }
+            Self::Profile(ModelProfileError::CredentialStoreUnavailable) => {
+                "Unlock the OS credential store, or inject XGEN_OPENAI_API_KEY and omit --store-token. No plaintext key file is used."
+            }
+            Self::Profile(ModelProfileError::ProfileNotFound) | Self::MissingConfiguration => {
+                "Run xgen model setup to connect a model, then xgen model list to inspect saved profiles."
+            }
+            Self::Profile(
+                ModelProfileError::ConcurrentModification | ModelProfileError::ProfileCommitUnknown,
+            ) => {
+                "Run xgen model list to inspect the saved result before retrying; another process may have changed the profile."
+            }
+            Self::Profile(_) => {
+                "Inspect xgen model list and the private XGEN_CONFIG_HOME directory. Keep existing configuration files until the error is understood."
+            }
+            Self::InputUnavailable => {
+                "Use an interactive terminal for numbered choices, or pass --provider, --base-url and --model explicitly; see xgen model setup --help."
+            }
+            Self::InvalidCredential => {
+                "Enter a non-empty API key locally with xgen model setup; never paste keys into chat."
+            }
+            Self::CredentialRequiresHttps => {
+                "Use HTTPS when supplying an API key. Loopback HTTP connections must not carry a key."
+            }
+            Self::InvalidEnvironment
+            | Self::InvalidInferenceLimits
+            | Self::InvalidRequestOptions => {
+                "Review explicit options and XGEN_OPENAI_* environment settings with xgen model setup --help, correct them, and retry."
+            }
+        }
+    }
+
     const fn code(self) -> &'static str {
         match self {
             Self::Profile(error) => error.code(),
@@ -2222,12 +2289,49 @@ fn prompt_model(models: &[String]) -> Result<String, ModelCliError> {
     for (index, model) in models.iter().enumerate() {
         eprintln!("  {}) {model}", index + 1);
     }
-    let selected = prompt_line("Select model number: ")?
-        .parse::<usize>()
-        .ok()
-        .filter(|index| (1..=models.len()).contains(index))
-        .ok_or(ModelCliError::InputUnavailable)?;
+    let selected = prompt_number("Select model number (q to cancel): ", models.len())?;
     Ok(models[selected - 1].clone())
+}
+
+fn prompt_number(prompt: &str, count: usize) -> Result<usize, ModelCliError> {
+    read_number(
+        &mut std::io::stdin().lock(),
+        &mut std::io::stderr().lock(),
+        prompt,
+        count,
+    )
+}
+
+fn read_number(
+    input: &mut impl std::io::BufRead,
+    output: &mut impl std::io::Write,
+    prompt: &str,
+    count: usize,
+) -> Result<usize, ModelCliError> {
+    if count == 0 {
+        return Err(ModelCliError::InputUnavailable);
+    }
+    loop {
+        write!(output, "{prompt}")
+            .and_then(|()| output.flush())
+            .map_err(|_| ModelCliError::InputUnavailable)?;
+        let mut value = String::new();
+        if input
+            .read_line(&mut value)
+            .map_err(|_| ModelCliError::InputUnavailable)?
+            == 0
+            || value.trim().eq_ignore_ascii_case("q")
+        {
+            return Err(ModelCliError::InputUnavailable);
+        }
+        if let Ok(selected) = value.trim().parse::<usize>()
+            && (1..=count).contains(&selected)
+        {
+            return Ok(selected);
+        }
+        writeln!(output, "Enter a number from 1 to {count}, or q to cancel.")
+            .map_err(|_| ModelCliError::InputUnavailable)?;
+    }
 }
 
 fn print_state_directory_details(error: &PublicRunError) {
@@ -2241,17 +2345,23 @@ fn print_state_directory_details(error: &PublicRunError) {
 fn present_model_command_error(command: &str, error: ModelCliError) -> ExitCode {
     eprintln!("XGEN model {command}: FAIL");
     eprintln!("  reason={}", error.code());
+    eprintln!("  recovery: {}", error.recovery_hint());
     ExitCode::from(error.exit_code())
 }
 
 fn present_model_configuration_error(error: ModelCliError) -> ExitCode {
     eprintln!("XGEN_ERROR code={}", error.code());
+    eprintln!("  recovery: {}", error.recovery_hint());
     ExitCode::from(error.exit_code())
 }
 
 fn present_model_check_error(error: ModelCheckError) -> ExitCode {
     eprintln!("XGEN model check: FAIL");
     eprintln!("  reason={}", error.code());
+    eprintln!(
+        "  recovery: {}",
+        ModelCliError::Check(error).recovery_hint()
+    );
     ExitCode::from(error.exit_code())
 }
 
@@ -2466,6 +2576,33 @@ mod provider_preset_tests {
 #[cfg(test)]
 mod onboarding_tests {
     use super::*;
+
+    #[test]
+    fn numbered_choices_recover_from_invalid_input_without_restarting_setup() {
+        // Provider/model menus and a held-out single-item catalog share the same reader.
+        for count in [PROVIDER_PRESETS.len() + 1, 3, 1] {
+            let input = format!("invalid\n\n0\n{}\n{count}\n", count + 1);
+            let mut output = Vec::new();
+            assert_eq!(
+                read_number(&mut input.as_bytes(), &mut output, "Choice: ", count).unwrap(),
+                count
+            );
+            let output = String::from_utf8(output).unwrap();
+            assert_eq!(output.matches("Enter a number").count(), 4);
+            assert!(!output.contains("invalid"));
+        }
+    }
+
+    #[test]
+    fn numbered_choices_stop_on_cancellation_eof_and_empty_catalog() {
+        for input in ["", "invalid\n", "q\n", "Q\n"] {
+            assert!(matches!(
+                read_number(&mut input.as_bytes(), &mut Vec::new(), "Choice: ", 2),
+                Err(ModelCliError::InputUnavailable)
+            ));
+        }
+        assert!(read_number(&mut "1\n".as_bytes(), &mut Vec::new(), "Choice: ", 0).is_err());
+    }
 
     struct UnavailableCredentials(ModelProfileError);
 

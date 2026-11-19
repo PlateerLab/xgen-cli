@@ -65,9 +65,24 @@ jobs:
             sudo apt-get update
             sudo apt-get install --yes tmux
           fi
+          python3 scripts/smoke-first-use.py
           python3 scripts/smoke-inline-tui.py
           python3 scripts/smoke-inline-tui.py --rapid-resize
           python3 scripts/smoke-inline-tui.py --results --rapid-resize
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.20.0
+          package-manager-cache: false
+
+      - name: Check npm distribution contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix npm
+          npm run check --prefix npm
+          npm test --prefix npm
 
       - name: Test Python scripts without API calls
         run: python3 -m unittest discover -s scripts/tests

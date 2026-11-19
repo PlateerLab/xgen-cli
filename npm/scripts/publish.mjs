@@ -6,6 +6,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import semver from 'semver';
 
 import { npmInvocation } from './config.mjs';
 import { verifyRelease } from './verify-release.mjs';
@@ -80,6 +81,41 @@ export function validateExistingPublication(remote, report, version, distTag) {
   );
 }
 
+// Before the first stable release, a verified preview is also the default install.
+// Once a stable version exists, preview publication must leave `latest` alone.
+export function shouldPromotePreview(metadata, version) {
+  assert(semver.valid(version) && semver.prerelease(version), 'expected a preview version');
+  assert(Array.isArray(metadata.versions), 'registry versions are missing');
+  assert(metadata.versions.every((value) => typeof value === 'string' && semver.valid(value)),
+    'registry contains an invalid version');
+  assert(metadata.versions.includes(version), 'preview is not published');
+  assert.equal(metadata['dist-tags']?.next, version, 'preview is not the verified next version');
+  const latest = metadata['dist-tags']?.latest;
+  assert(latest === undefined || metadata.versions.includes(latest), 'latest is not published');
+  return !metadata.versions.some((value) => !semver.prerelease(value) || semver.gt(value, version));
+}
+
+async function promotePreview(name, version) {
+  const result = await run(['view', name, 'versions', 'dist-tags', '--json']);
+  const metadata = JSON.parse(result.stdout);
+  if (!shouldPromotePreview(metadata, version)) {
+    console.log(`npm latest: SKIP ${name}@${version} (stable or newer version exists)`);
+    return;
+  }
+  if (metadata['dist-tags'].latest !== version) {
+    await run(['dist-tag', 'add', `${name}@${version}`, 'latest']);
+  }
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const remote = await remoteMetadata(name, version);
+    if (remote?.['dist-tags']?.latest === version) {
+      console.log(`npm latest: PASS ${name}@${version} (developer preview)`);
+      return;
+    }
+    await delay(5000);
+  }
+  throw new Error(`${name}@${version} latest promotion did not become verifiable`);
+}
+
 async function publishOne(report, version, distTag) {
   const bytes = await readFile(report.tarball);
   const localIntegrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
@@ -123,10 +159,13 @@ async function publishOne(report, version, distTag) {
 async function main() {
   const { directory, tag } = parseArguments(process.argv.slice(2));
   const { launcher, reports, version } = await verifyRelease(directory, tag);
-  const distTag = version.includes('-') ? 'next' : 'latest';
+  const distTag = semver.prerelease(version) ? 'next' : 'latest';
   for (const report of publicationOrder(reports, launcher.name)) {
     await publishOne(report, version, distTag);
   }
+  // Optional platform dependencies are pinned; only the launcher needs this alias.
+  // Run this after all package integrity/provenance checks, including on an identical retry.
+  if (distTag === 'next') await promotePreview(launcher.name, version);
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

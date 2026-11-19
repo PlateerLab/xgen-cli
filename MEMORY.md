@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-03 (KST)
+갱신: 2026-11-19 (KST)
 
 ## 사용자가 정한 방향
 
@@ -13,6 +13,13 @@
 - 화면에는 작업 중 상태 표시와 최종 응답이 우선이다. 상세 실행 과정의 상시 노출은 필수가 아니다.
 
 ## 책임과 개발 범위
+
+2026-11-19 구현·로컬 검증: [최초 사용과 기본 preview 설치](docs/adr/0088-first-use-preview-distribution.md).
+실행 파일 없는 bootstrap을 기본 설치로 받는 문제를 고쳐 첫 stable 전에는 검증한 launcher preview를
+`latest`로 제공한다. Provider/model 오입력 재선택과 정적 오류 복구 안내, 현재 OpenAI preset 안내를
+추가했다. Rust800개·npm19개·격리한 CLI의 3개 edit/test/approval-resume layout과 TUI smoke를 통과했다.
+rc.7 게시·공개 registry 기본 설치는 검증 예정이며 실제 모델 품질 평가는 인증 부재로 미실행이다.
+소유자는 xgen CLI·npm 배포 경로다. 도구 검색·browser-use·SEV 알고리즘은 이번 변경 대상이 아니다.
 
 2026-11-19 구현·로컬 검증 완료: [Run별 capability 범위](docs/development/capability-scope.md), [PR #144](https://github.com/PlateerLab/xgen-cli/pull/144).
 `run --capability ID`는 선택한 정의와 instance만 planner/admission에 등록하고 manifest와
