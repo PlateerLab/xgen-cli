@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-19 (KST)
+갱신: 2026-11-20 (KST)
 
 ## 사용자가 정한 방향
 
@@ -13,6 +13,14 @@
 - 화면에는 작업 중 상태 표시와 최종 응답이 우선이다. 상세 실행 과정의 상시 노출은 필수가 아니다.
 
 ## 책임과 개발 범위
+
+2026-11-20 구현·로컬 검증: [Native build 전 공통 조립 검사](docs/adr/0089-release-assembly-preflight.md).
+PR Fast/Linux와 release quality에서 dependency·credential 없는 임시 환경으로 실제 pack→조립→checksum을
+검사한다. Production과 같은 entrypoint를 쓰며 입력/출력은 platform catalog에서 파생한다.
+Stable/prerelease 두 fixture·잘못된 입력 6개와 static/호출 시점 의존성 누락을 검증했다(로컬 약7~9초).
+별도 공개 rc.8 실제 asset으로 17개 조립 결과·게시본 byte parity·Linux installer smoke도 통과했다.
+Native ABI·실제 모델·registry 전파 문제 해결이나 전체 CI 시간 단축은 이 결과로 주장하지 않는다.
+이번 작업은 배포 경로만 변경하며 현재 사용자 배포본은 rc.8을 유지한다.
 
 2026-11-19 구현·배포·공개 설치 검증 완료: [최초 사용과 기본 preview 설치](docs/adr/0088-first-use-preview-distribution.md).
 실행 파일 없는 bootstrap을 기본 설치로 받는 문제를 고쳐 첫 stable 전에는 검증한 launcher preview를

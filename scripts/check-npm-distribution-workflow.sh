@@ -13,7 +13,8 @@ workflow=${1:-"$repo_root/.github/workflows/release.yml"}
 python3 - \
     "$workflow" \
     "$repo_root/npm/scripts/publish.mjs" \
-    "$repo_root/npm/scripts/smoke.mjs" <<'PY'
+    "$repo_root/npm/scripts/smoke.mjs" \
+    "$repo_root/.github/workflows/ci.yml" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -25,6 +26,7 @@ lines = workflow.read_text(encoding="utf-8").splitlines()
 text = "\n".join(lines)
 publisher_text = publisher.read_text(encoding="utf-8")
 smoke_text = smoke.read_text(encoding="utf-8")
+ci_text = Path(sys.argv[4]).read_text(encoding="utf-8")
 
 
 def fail(message: str) -> None:
@@ -37,6 +39,23 @@ for secret_marker in ("_authToken", "npm_password"):
 
 if re.search(r"npm_[A-Za-z0-9]{20,}", text):
     fail("literal npm token value is forbidden")
+
+preflight = "node npm/scripts/preflight-release.mjs"
+fast = ci_text.split("\n  quality:", 1)[0]
+quality = text.split("\n  build:", 1)[0]
+for body, later, label in (
+    (fast, "rustup toolchain install", "PR Rust toolchain setup"),
+    (fast, "npm ci --ignore-scripts --prefix npm", "PR npm dependencies"),
+    (quality, "npm ci --ignore-scripts --prefix npm", "release npm dependencies"),
+    (quality, "cargo clippy", "release compilation"),
+):
+    if body.count(preflight) != 1 or later not in body or body.index(preflight) > body.index(later):
+        fail(f"assembly preflight must run before {label}")
+assembly = text.split("\n  assemble:", 1)[1].split("\n  publish:", 1)[0]
+if assembly.count('node npm/scripts/assemble-release.mjs --directory release --tag "$RELEASE_TAG"') != 1:
+    fail("release must use the shared assembly entrypoint")
+if "node npm/scripts/pack.mjs" in assembly or "node npm/scripts/verify-release.mjs" in assembly:
+    fail("release assembly must not duplicate shared packaging commands")
 
 job_starts = [index for index, line in enumerate(lines) if line == "  publish-npm:"]
 if len(job_starts) != 1:

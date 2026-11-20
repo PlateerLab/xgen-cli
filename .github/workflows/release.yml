@@ -134,6 +134,9 @@ jobs:
           set -euo pipefail
           test "$NPM_PUBLISH_ENABLED" = "true"
 
+      - name: Preflight release assembly without dependencies or credentials
+        run: node npm/scripts/preflight-release.mjs
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -363,58 +366,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node npm/scripts/pack.mjs --launcher --output-dir release
-          expected=(
-            xgen-x86_64-unknown-linux-musl
-            xgen-aarch64-unknown-linux-musl
-            xgen-x86_64-apple-darwin
-            xgen-aarch64-apple-darwin
-            xgen-x86_64-pc-windows-msvc.exe
-            xgen-cli.tgz
-            xgen-cli-linux-x64-musl.tgz
-            xgen-cli-linux-arm64-musl.tgz
-            xgen-cli-darwin-x64.tgz
-            xgen-cli-darwin-arm64.tgz
-            xgen-cli-win32-x64.tgz
-          )
-          test "$(find release -mindepth 1 -maxdepth 1 | wc -l)" -eq "${#expected[@]}"
-          for asset in "${expected[@]}"; do
-            test -f "release/$asset" && test ! -L "release/$asset"
-          done
-          chmod 0755 \
-            release/xgen-x86_64-unknown-linux-musl \
-            release/xgen-aarch64-unknown-linux-musl \
-            release/xgen-x86_64-apple-darwin \
-            release/xgen-aarch64-apple-darwin
-          node npm/scripts/verify-release.mjs \
-            --directory release \
-            --tag "$RELEASE_TAG"
-          install -m 0755 install/xgen-installer.sh release/xgen-installer.sh
-          install -m 0644 install/xgen-installer.ps1 release/xgen-installer.ps1
-          install -m 0644 LICENSE release/LICENSE.txt
-          install -m 0644 crates/xgen-cli/licenses/NATIVE_RUNTIME_PROVENANCE.md \
-            release/NATIVE_RUNTIME_PROVENANCE.md
-          install -m 0644 THIRD_PARTY_LICENSES.txt release/THIRD_PARTY_LICENSES.txt
-          (
-            cd release
-            export LC_ALL=C
-            sha256sum LICENSE.txt NATIVE_RUNTIME_PROVENANCE.md THIRD_PARTY_LICENSES.txt \
-              xgen-*.tgz xgen-* \
-              > checksums.sha256
-            sha256sum -c checksums.sha256
-          )
-          expected+=(
-            xgen-installer.sh
-            xgen-installer.ps1
-            LICENSE.txt
-            NATIVE_RUNTIME_PROVENANCE.md
-            THIRD_PARTY_LICENSES.txt
-            checksums.sha256
-          )
-          test "$(find release -mindepth 1 -maxdepth 1 | wc -l)" -eq "${#expected[@]}"
-          for asset in "${expected[@]}"; do
-            test -f "release/$asset" && test ! -L "release/$asset"
-          done
+          node npm/scripts/assemble-release.mjs --directory release --tag "$RELEASE_TAG"
+          (cd release && sha256sum -c checksums.sha256)
           sh scripts/smoke-installer.sh \
             release/xgen-x86_64-unknown-linux-musl \
             xgen-x86_64-unknown-linux-musl \
