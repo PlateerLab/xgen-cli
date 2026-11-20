@@ -40,7 +40,13 @@ binary를 감싸는 선택형 설치 채널이며 제품 runtime을 다시 구�
 
 로컬 확인:
 
+릴리즈 전 보완과 version·문서 변경을 한 PR에 모아 검증한다. 먼저 아래 preflight를 실행해
+조립 경로를 확인한 뒤 Rust 검사와 tag 생성으로 넘어간다. 이 검사는 약 7~9초의 로컬 byte fixture
+검사이며 실제 OS build·실행·서명이나 npm 게시를 대신하지 않는다. 자세한 경계는
+[ADR-0089](../adr/0089-release-assembly-preflight.md)를 따른다.
+
 ```bash
+node npm/scripts/preflight-release.mjs
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked

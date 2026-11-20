@@ -35,6 +35,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.20.0
+          package-manager-cache: false
+
+      - name: Preflight release assembly without dependencies or credentials
+        run: node npm/scripts/preflight-release.mjs
+
       - name: Install pinned Rust toolchain
         run: rustup toolchain install --no-self-update
 
@@ -69,12 +78,6 @@ jobs:
           python3 scripts/smoke-inline-tui.py
           python3 scripts/smoke-inline-tui.py --rapid-resize
           python3 scripts/smoke-inline-tui.py --results --rapid-resize
-
-      - name: Install pinned Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24.20.0
-          package-manager-cache: false
 
       - name: Check npm distribution contract
         shell: bash
