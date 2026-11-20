@@ -162,7 +162,8 @@ def trial(binary, case, repeat, directory, config, proxy):
                 record['process_outputs_before_approval'] = sum(
                     output['invocation']['capabilityId'] == 'xgeny.process/execute' for output in before[4])
                 if record['approval_pause_observed']:
-                    result = invoke([str(binary), 'resume', database.parent.name, *common, '--allow-execute'])
+                    result = invoke([str(binary), 'resume', database.parent.name, *common, '--allow-execute',
+                                     '--max-ticks', str(config['max_ticks'])])
                 else:
                     record['outcome'] = 'expected_pause_missing'
             record['exit_code'] = result.returncode
