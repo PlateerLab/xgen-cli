@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Serial planning-size pilot using the real driver; no live request without a frozen manifest."""
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import http.server
@@ -412,7 +413,7 @@ def run_bounded(command, cwd, env, timeout):
 def receipt_command_evidence(database, outputs):
     process_outputs = [output for output in outputs if output['invocation']['capabilityId'] == 'xgeny.process/execute']
     commands = ORACLES.observed_commands(database, outputs)
-    with sqlite3.connect(f'file:{database}?mode=ro', uri=True) as connection:
+    with closing(sqlite3.connect(f'file:{database}?mode=ro', uri=True)) as connection:
         receipts = {row[0]: strict_json(row[1]) for row in connection.execute('SELECT effect_id, receipt_json FROM execution_receipts')}
         starts = {}
         for sequence, raw in connection.execute('SELECT sequence, event_json FROM run_events ORDER BY sequence'):
@@ -556,7 +557,7 @@ def evaluate(binary, case, repeat, condition, directory, config, proxy):
             record['false_completion'] = record['task_completed'] and not (record['oracle_passed'] and record['protected_preserved'] and record['writes_in_scope'])
             manifest = strict_json((database.parent / 'manifest.json').read_bytes())['record']
             record['request_profile_digest'] = manifest['requestProfileDigest']
-            with sqlite3.connect(f'file:{database.parent / "usage.sqlite3"}?mode=ro', uri=True) as connection:
+            with closing(sqlite3.connect(f'file:{database.parent / "usage.sqlite3"}?mode=ro', uri=True)) as connection:
                 observations = [strict_json(row[0]) for row in connection.execute('SELECT record_json FROM observations')]
             record['adapter_outcomes'] = [item['outcome'] for item in observations]
             record['accepted_plan_sizes'] = [len(item['steps']) for item in events if item['type'] == 'plan_accepted']
