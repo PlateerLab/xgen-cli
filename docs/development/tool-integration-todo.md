@@ -18,6 +18,12 @@
 - [x] **외부 도구 평가:** [Firecrawl Local 독립 실행](../research/2026-11-22-firecrawl-local-evaluation.md). Cloud off에서 정적·JS·공개 문서 추출, PDF 차단/로컬 추출 분리, process tree RSS·오류 의미를 확인했다. xgen 통합이나 기본 backend 채택이 아니다.
 - [ ] **xgen 설계 후보:** 별도 작업으로 웹 읽기 adapter의 원격 status/blocked/warning·출처 전달, public-only 경계, Cloud 명시 설정, 렌더링 자원·중단 정리와 배포 방식을 검토한다. 구현·계약 변경은 아직 시작하지 않았다.
 
+## 코딩 하네스 개선의 평가 기반 — 2026-11-20
+
+- [x] **xgen 평가:** [고정 코딩 기준선](coding-baseline.md)의 공개 CLI 실행기·5종 설계/보류 fixture·반복/완료/비용 집계 구현과 mock 계약 검증. Runtime·prompt 변경이나 실제 모델 품질 검증이 아니다.
+- [ ] **xgen 평가:** 로컬 모델 인증과 유효 quote를 준비하고 배포본의 실제 모델 기준선 실행. 현재 활성 모델 검사는 `authentication_rejected`로 종료했다.
+- [ ] **xgen 하네스:** 기준선 뒤 prompt·도구 설명 축소를 별도 실험. 변경 중에는 설계 과업만 사용하고, 고정 후보의 채택은 별도 보류 과업에서 판정한다.
+
 ## 0. 검토한 기반
 
 - [x] Registry·Router와 의미 기반 tool search의 차이 확인. 검토 당시 없던 검색 계층은 현재 2번에서 내장 연결했다.

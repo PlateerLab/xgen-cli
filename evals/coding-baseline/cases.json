@@ -1,0 +1,146 @@
+[
+  {
+    "id": "question-routing",
+    "split": "design",
+    "family": "repository-question",
+    "goal": "파일을 바꾸지 말고 설정과 코드를 읽어 enabled=false일 때 선택되는 handler와 batch_size 값을 찾아줘. 최종 응답은 {\"handler\":\"이름\",\"batch_size\":숫자} JSON만 반환해.",
+    "files": {
+      "settings.json": "{\"enabled\":false,\"batch_size\":12}\n",
+      "routing.py": "import json\nfrom pathlib import Path\ndef configuration():\n    settings=json.loads(Path(\"settings.json\").read_text())\n    return {\"handler\":\"parallel\" if settings[\"enabled\"] else \"serial\", \"batch_size\":settings[\"batch_size\"]}\n"
+    },
+    "writable": [],
+    "oracle": "import json,sys\nfrom pathlib import Path\nassert json.loads(Path(sys.argv[2]).read_text()) == {'handler': 'serial', 'batch_size': 12}\n"
+  },
+  {
+    "id": "question-fallback",
+    "split": "held_out",
+    "family": "repository-question",
+    "goal": "파일을 바꾸지 말고 cli.py에 overrides가 빈 dict로 전달될 때 timeout과 retries의 최종값을 찾아줘. 최종 응답은 {\"timeout\":숫자,\"retries\":숫자} JSON만 반환해.",
+    "files": {
+      "defaults.py": "DEFAULTS={\"timeout\":45,\"retries\":3}\n",
+      "cli.py": "from defaults import DEFAULTS\ndef resolve(overrides):\n    values=dict(DEFAULTS)\n    values.update(overrides)\n    values[\"retries\"]=min(values[\"retries\"],2)\n    return values\n"
+    },
+    "writable": [],
+    "oracle": "import json,sys\nfrom pathlib import Path\nassert json.loads(Path(sys.argv[2]).read_text()) == {'timeout': 45, 'retries': 2}\n"
+  },
+  {
+    "id": "bug-counts",
+    "split": "design",
+    "family": "bug-fix",
+    "goal": "source.py의 ordered_counts를 빈도 내림차순, 동률은 이름 오름차순으로 고쳐줘. tests.py는 수정하지 말고 python3 -B tests.py로 검증해. 최종 응답에 결과를 보고해.",
+    "files": {
+      "source.py": "def ordered_counts(items):\n    counts={}\n    for item in items:\n        counts[item]=counts.get(item,0)+1\n    return sorted(counts.items(),key=lambda pair:pair[1])\n",
+      "tests.py": "from source import ordered_counts\nassert ordered_counts([\"b\",\"a\",\"b\"]) == [(\"b\",2),(\"a\",1)]\nassert ordered_counts([\"z\",\"a\"]) == [(\"a\",1),(\"z\",1)]\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import ordered_counts\nassert ordered_counts([])==[]\nassert ordered_counts([\"c\",\"b\",\"a\",\"c\",\"b\",\"a\"])==[(\"a\",2),(\"b\",2),(\"c\",2)]\n"
+  },
+  {
+    "id": "bug-window",
+    "split": "held_out",
+    "family": "bug-fix",
+    "goal": "source.py의 window를 고쳐줘. 인덱스 start는 0 이상으로, stop은 리스트 길이 이하로 제한하고 해당 반열린 구간을 반환해야 해. tests.py는 수정하지 말고 python3 -B tests.py로 검증해.",
+    "files": {
+      "source.py": "def window(items,start,stop):\n    return items[start:stop+1]\n",
+      "tests.py": "from source import window\nassert window([1,2,3,4],1,3)==[2,3]\nassert window([1,2,3],-4,2)==[1,2]\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import window\nassert window([],0,4)==[]\nassert window([1,2,3],0,99)==[1,2,3]\nassert window([1,2,3],2,1)==[]\n"
+  },
+  {
+    "id": "rename-field",
+    "split": "design",
+    "family": "multifile-rename",
+    "goal": "model.py, service.py, report.py에서 Item.score를 Item.rank로 완전히 이름 변경해줘. 직렬화 키도 rank로 바꾸고 이전 score 사용처를 남기지 마. tests.py는 수정하지 말고 python3 -B tests.py로 검증해.",
+    "files": {
+      "model.py": "from dataclasses import dataclass\n@dataclass\nclass Item:\n    score:int\n",
+      "service.py": "from model import Item\ndef make(value):\n    return Item(score=value)\n",
+      "report.py": "def serialize(item):\n    return {\"score\":item.score}\n",
+      "tests.py": "from service import make\nfrom report import serialize\nitem=make(7)\nassert item.rank==7\nassert serialize(item)=={\"rank\":7}\n"
+    },
+    "writable": [
+      "model.py",
+      "service.py",
+      "report.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom service import make\nfrom report import serialize\nassert serialize(make(0))=={\"rank\":0}\nassert serialize(make(-3))=={\"rank\":-3}\nfor name in [\"model.py\",\"service.py\",\"report.py\"]:\n    assert \"score\" not in (root/name).read_text()\n"
+  },
+  {
+    "id": "rename-function",
+    "split": "held_out",
+    "family": "multifile-rename",
+    "goal": "engine.py의 parse_line을 decode_line으로 바꾸고 api.py와 app.py의 모든 사용처도 갱신해줘. 옛 이름은 남기지 말고 동작은 유지해. tests.py는 수정하지 말고 python3 -B tests.py로 검증해.",
+    "files": {
+      "engine.py": "def parse_line(line):\n    return line.strip().split(\":\",1)\n",
+      "api.py": "from engine import parse_line\ndef read(line):\n    return parse_line(line)\n",
+      "app.py": "import engine\ndef render(line):\n    return \"=\".join(engine.parse_line(line))\n",
+      "tests.py": "from engine import decode_line\nfrom api import read\nfrom app import render\nassert decode_line(\" a:b \")==[\"a\",\"b\"]\nassert read(\"x:y\")==[\"x\",\"y\"]\nassert render(\"x:y\")==\"x=y\"\n"
+    },
+    "writable": [
+      "engine.py",
+      "api.py",
+      "app.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom api import read\nfrom app import render\nassert read(\"a:b:c\")==[\"a\",\"b:c\"]\nassert render(\" a:b:c \")==\"a=b:c\"\nfor name in [\"engine.py\",\"api.py\",\"app.py\"]:\n    assert \"parse_line\" not in (root/name).read_text()\n"
+  },
+  {
+    "id": "recover-flag",
+    "split": "design",
+    "family": "failure-recovery",
+    "goal": "먼저 python3 -B tests.py를 실행해 실패를 확인하고 그 결과로 source.py를 수정해 같은 명령을 성공시켜줘. parse_flag는 앞뒤 공백과 대소문자를 무시하고 true/false만 받아야 하며 나머지는 ValueError여야 해. tests.py는 수정하지 마.",
+    "files": {
+      "source.py": "def parse_flag(value):\n    return bool(value)\n",
+      "tests.py": "from source import parse_flag\nassert parse_flag(\" false \") is False\nassert parse_flag(\"TRUE\") is True\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import parse_flag\nassert parse_flag(\" FALSE \") is False\nfor value in [\"\", \"yes\", \"0\"]:\n    try:\n        parse_flag(value)\n    except ValueError:\n        pass\n    else:\n        raise AssertionError(\"invalid flag accepted\")\n"
+  },
+  {
+    "id": "recover-transpose",
+    "split": "held_out",
+    "family": "failure-recovery",
+    "goal": "먼저 python3 -B tests.py로 실패를 확인하고, 결과를 보고 source.py의 transpose를 고쳐 같은 명령을 통과시켜줘. 직사각 행렬을 전치하고 빈 입력은 []로 반환해. tests.py는 수정하지 마.",
+    "files": {
+      "source.py": "def transpose(rows):\n    return rows[:]\n",
+      "tests.py": "from source import transpose\nassert transpose([[1,2,3],[4,5,6]])==[[1,4],[2,5],[3,6]]\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import transpose\nassert transpose([])==[]\nassert transpose([[1],[2],[3]])==[[1,2,3]]\nassert transpose([[1,2]])==[[1],[2]]\n"
+  },
+  {
+    "id": "resume-rounding",
+    "split": "design",
+    "family": "approval-resume",
+    "goal": "source.py의ceil_div를 양의 정수 나눗셈 올림으로 수정하고 반드시 python3 -B tests.py로 검증해. 실행 승인이 필요하면 승인 후 같은 Run에서 이어서 검증해. tests.py는 변경하지 마.",
+    "files": {
+      "source.py": "def ceil_div(total,size):\n    return total//size\n",
+      "tests.py": "from source import ceil_div\nassert ceil_div(5,2)==3\nassert ceil_div(6,2)==3\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import ceil_div\nassert ceil_div(0,3)==0\nassert ceil_div(1,7)==1\nassert ceil_div(100,9)==12\n"
+  },
+  {
+    "id": "resume-lines",
+    "split": "held_out",
+    "family": "approval-resume",
+    "goal": "source.py의 nonempty_lines에서 각 줄의 앞뒤 공백을 제거한 뒤 빈 줄을 제외하도록 고치고 반드시 python3 -B tests.py로 검증해줘. 실행 승인 뒤 같은 Run에서 이어가. tests.py는 수정하지 마.",
+    "files": {
+      "source.py": "def nonempty_lines(text):\n    return [line for line in text.splitlines() if line]\n",
+      "tests.py": "from source import nonempty_lines\nassert nonempty_lines(\" a \\n   \\nb\\n\")==[\"a\",\"b\"]\n"
+    },
+    "writable": [
+      "source.py"
+    ],
+    "oracle": "import sys,runpy\nfrom pathlib import Path\nroot=Path(sys.argv[1]);sys.path.insert(0,str(root))\nrunpy.run_path(str(root/\"tests.py\"),run_name=\"__main__\")\nfrom source import nonempty_lines\nassert nonempty_lines(\"\")==[]\nassert nonempty_lines(\" \\n\\t\")==[]\nassert nonempty_lines(\"\\tx\\r\\n y \")==[\"x\",\"y\"]\n"
+  }
+]

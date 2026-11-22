@@ -30,6 +30,13 @@ Chrome 포함 관측RSS합 약1.22GiB(shared page 중복 가능)로 구분한다
 sealed holdout·범용 웹 성공률·LLM/xgen 품질 개선을 주장하지 않는다. 후보 유지이며 xgen 내장 채택·의존성
 추가·계약 변경·배포는 하지 않았다. 수집/경고 판정은 Firecrawl, 연결·권한·자원·Receipt는 향후 xgen 과제다.
 
+2026-11-20 구현·mock 검증: [실제 모델 코딩 회귀 기준선](docs/development/coding-baseline.md).
+공개 `run/resume`에 고정 5종·설계/보류 각 1개·기본 2회인 20 trial matrix를 연결했다.
+기존 비용 proxy·reservation·Receipt 관찰을 재사용하고 독립 oracle·잘못된 완료·반복·승인·offline replay를
+집계한다. 실제 CLI의 합성 모델로 정상 10개와 틀린 완료 10개를 구분했다. 이는 모델 품질 결과가 아니다.
+실제 모델은 활성 프로필 catalog 검사에서 `authentication_rejected`여서 미실행이다.
+소유자는 xgen 평가 실행기이며 runtime·prompt·기본 모델·배포본은 변경하지 않았다.
+
 2026-11-20 구현·로컬 검증: [Native build 전 공통 조립 검사](docs/adr/0089-release-assembly-preflight.md).
 PR Fast/Linux와 release quality에서 dependency·credential 없는 임시 환경으로 실제 pack→조립→checksum을
 검사한다. Production과 같은 entrypoint를 쓰며 입력/출력은 platform catalog에서 파생한다.
