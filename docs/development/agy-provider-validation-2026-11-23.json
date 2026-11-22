@@ -1,0 +1,67 @@
+{
+  "date_kst": "2026-11-23",
+  "status": "experimental implementation; live smoke blocked at authentication",
+  "model_default": "gemini-3.8-flash-low",
+  "supported_platform": "Linux",
+  "rust": {
+    "passed": 808,
+    "failed": 0,
+    "ignored": 4
+  },
+  "python": {
+    "ran": 178,
+    "passed": 122,
+    "skipped": 56
+  },
+  "checks": {
+    "workspace_clippy": true,
+    "fmt": true,
+    "public_docs": true,
+    "protocol": true
+  },
+  "public_cli_mock_cases": [
+    "catalog/setup/explicit compatibility check",
+    "read/completion and normalized usage persistence",
+    "write then execute approval and same-run resume",
+    "binary drift rejected before model I/O",
+    "settings mutation rejected before accepting proposal",
+    "native activity/timeout/output/duplicate JSON fail closed",
+    "SIGINT child-group and private workspace cleanup",
+    "completed offline replay without binary/workspace",
+    "API-only profile format1 and agy-required format2"
+  ],
+  "independent_diff_review": "delegate MCP authentication failure; direct review performed",
+  "initial_parallel_python_check": {
+    "failed": 1,
+    "observation": "completion evidence collection failed; exact cause not established; focused and full sequential reruns passed"
+  },
+  "live_smoke": {
+    "catalog_setup_exit": 77,
+    "code": "agy_authentication_required",
+    "inference_started": false,
+    "cases_completed": 0,
+    "prior_python_19_of_20_reused_as_new_quality_score": false
+  },
+  "released": false,
+  "source_files_sha256": {
+    "crates/xgen-cli/src/agy.rs": "b6e88f6ea8af6232baa4a603b7c7501dab47d48e9c0de4722720661ae43ddc69",
+    "crates/xgen-cli/src/agy-agent.md": "c960a7a9a97811c7a21c2fa52f06a72ede7ef3677dcc882c70160b043eb2a829",
+    "crates/xgen-cli/src/composition.rs": "2961438f20d4dcd04c3ee561b3509134b2e01ac811df8d5b76045debb8c71969",
+    "crates/xgen-cli/src/main.rs": "1ca83856a70f03cd7a8a7ee97a3df12e4cfb78dcd7fd9c4aa55dc3617862c366",
+    "crates/xgen-cli/src/model_profile.rs": "83ac22f11d6ad10a6f79c1e7ef69ab84db8e3dd3994a633eabb2c0eddaf5974a",
+    "crates/xgen-cli/src/repl.rs": "7f0a5132229eafac8a759f3315755b9f73ce7ebe832ce73d1469d8b537c6c427",
+    "crates/xgen-cli/src/lib.rs": "d9da864debad756f5ec9fc1a6047d6544ec382718f4e2433c8761d472b902919",
+    "crates/xgen-provider-openai/src/lib.rs": "4596dbc8fca35efe6590e625775654cabc164f5f0934b5eeb194b0415af39042",
+    "crates/xgen-adapter-process/src/lib.rs": "d195e2e3fe517f1bb788f692ea89071dff4156b004f96875b39b6aba2c4a9d33",
+    "crates/xgen-adapter-process/src/terminal/mod.rs": "351fd88be205852278f1c660b5a2381c40f493d0fbe5891cff8a4d9173303c66",
+    "crates/xgen-cli/tests/agy_provider.rs": "73a2d33e81016526032e22fdaad588a83d812285ed347795b40fc761638edfa3",
+    "crates/xgen-cli/tests/fixtures/agy_fake.py": "b8b853ff84b9023e2af464235f9311558152bcde2c7f3a1be4c39ac3487079bc"
+  },
+  "validation_logs_sha256": {
+    "workspace-tests": "bafff5978f03bcddef0ae653e6cf9903f51c06611b24a8311080316523fc43c6",
+    "clippy": "3ab7803a3fe26c73eebb8fe18198dba9da473856553243c2a222f39e95992898",
+    "python": "41e9c1a1b72eecff830004351b10997b1230e4947fe3562fe5e0ec12bffcdbe2",
+    "docs": "0461e7306eae7f8ab83d735a47eadfebab0c0018f4318ee9bfc763919cce1b59",
+    "protocol": "2578f4c45f628fe4c1901c000c571562621d3985604499adfeab34f630f1625c"
+  }
+}

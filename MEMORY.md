@@ -15,6 +15,20 @@
 
 ## 책임과 개발 범위
 
+2026-11-23 실험 기능 구현: [agy provider](docs/development/agy-provider.md), [ADR-0090](docs/adr/0090-experimental-agy-provider.md).
+`model setup --provider agy`·대화형 선택·저장 프로필·run/resume에 Rust transport를 연결했다. 기본은
+Flash Low/60초, 첫 지원은 Linux다. 기존 API wire/prompt/proposal 검증을 재사용하고 descriptor에 실행
+파일 hash와 생성 agent/settings·한도 정책을 결속한다. Native 관찰 후 중단·bounded pipes·취소/host 종료
+process group 및 private 임시 폴더 정리·cache 포함 usage를 구현했다. API credential은 가져오지 않는다.
+합성 CLI의 실제 public 경로에서 질문·승인/재개·offline replay·binary/settings drift·native/timeout/출력
+초과·SIGINT child 정리를 검증했다. 새 Rust 경로의 실제 Gemini smoke는 catalog 인증 필요에서 중단돼
+미검증이며 이전 Python 평가19/20과 구분한다. 독립 delegate MCP 검토도 인증 오류로 미완료다.
+최종 Rust808통과·4 ignored, Python122통과·56skip, clippy/fmt/docs/protocol 통과. 초기 병렬 Python1건
+증거 수집 실패는 원인 미확정이며 focused/전체 순차 재검사 통과. Agy 포함 profile format2, API-only는1을
+유지한다. 구버전 rc.8과 개발 빌드는 별도 설정 폴더를 사용한다.
+정식 채택·macOS/Windows 실행·배포는 하지 않았다. 책임: xgen은 host transport/계약, agy는 로그인
+영속성·native 도구 잔존·숨은 retry/billing이다. 인증 복구 뒤 새 경로의 실제 smoke를 이어간다.
+
 2026-11-23 agy 인증 조회 진단: 로그인 credential은 OS keyring에 남아 있고 잠금도 없었다.
 같은 사용자/HOME/binary에서 `SSH_CONNECTION` 또는 `SSH_CLIENT`가 있으면 `agy models`는 sign-in 필요로
 실패했고, 둘 다 제외하면 재로그인 없이23개 모델 조회가 성공했다. 기존 평가의 환경 allowlist도 SSH 변수를

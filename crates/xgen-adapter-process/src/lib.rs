@@ -8,7 +8,8 @@ mod verifier;
 mod web_search;
 pub use terminal::{
     TERMINAL_SCOPE, TERMINAL_VERSION, TerminalAdapter, TerminalOperation,
-    install_host_exit_cleanup, resolve_terminal_session, terminal_supported,
+    install_host_exit_cleanup, register_host_exit_cleanup, resolve_terminal_session,
+    terminal_supported,
 };
 
 use std::fmt;

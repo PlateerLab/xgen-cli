@@ -8,12 +8,16 @@
 
 목표: 사용자는 `xgen`에서 시스템을 한 번 연결하고 자연어로 요청한다. 내부에서는 API·화면 도구를 찾고, 필요한 모델을 호출하고, 실제 결과를 검증해 최종 응답을 제공한다.
 
-## CLI 경유 모델 연결 후보 — 2026-11-22
+## CLI 경유 모델 연결 후보 — 2026-11-23
+
+- [x] **xgen 실험 기능 구현:** [Linux agy provider](agy-provider.md), [ADR-0090](../adr/0090-experimental-agy-provider.md). Setup/프로필/Run 재개·hash/policy drift·native 감지 후 중단·시간/bytes·취소/child 정리·usage 변환을 연결했다. 합성 CLI의 public 경로 검증 완료, 배포는 하지 않았다.
+- [ ] **새 Rust 경로 실제 검증:** 공식 agy 인증 복구 후 질문·쓰기/검증 승인·같은 Run 재개를 실행한다. 현재 catalog 단계에서 인증 필요로 중단. 기존 Python19/20을 새 경로의 결과로 대체하지 않는다.
+- [ ] **후속 검증:** 독립 diff 검토(delegate MCP 인증 오류)와 macOS/Windows 실행 지원. Native 사전 차단·숨은 retry/비용은 agy 별도 과제다.
 
 - [x] **실제 연결 smoke:** [agy Gemini 제안 → xgen 실행](../research/2026-11-22-agy-planner-probe.md). 질문·승인 쓰기·실패 복구 3종, CLI9회·xgen Receipt6개를 확인했다. 정식 provider나 품질 평가가 아니다.
 - [x] **개발용 평가 연결기·실측:** [고정 20회](../research/2026-11-23-agy-coding-baseline.md) 19/20 통과. 시간/bytes/호출 한도·strict JSON·pin 검사·UNKNOWN 보존 구현. native manage_task 관찰1회 중단, USD/내부 요청 횟수 미확인. 정식 provider 채택은 아니다.
 - [x] **Usage 후속:** [정규화·오프라인 재집계](../research/2026-11-23-agy-controls.md). Cache 제외 input을 host inclusive input으로 변환. 기존98회 중97회 usage 확인, 1회 미확인 유지. 격리 구성의 deny hook은 실제 적용되지 않아 사전 차단으로 채택하지 않았다.
-- [ ] **xgen 일반 설계 후보:** CLI transport의 native tool 처리, strict JSON·시간/크기/호출/출력 상한, usage·비용·profile/resume drift 계약을 검토한다. agy runtime 완전 제거와 모든 도구·메모리 자동 이전은 아직 입증하지 않았다.
+- [ ] **정식 채택 판단:** 새 Rust 경로의 실제 모델 검증과 독립 검토 뒤 결정한다. agy runtime 완전 제거·모든 도구/메모리 자동 이전·정확한 USD cap은 지원하지 않는다.
 
 ## 웹 읽기 도구 후보 조사 — 2026-11-22
 

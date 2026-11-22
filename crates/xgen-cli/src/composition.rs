@@ -390,6 +390,15 @@ pub enum LocalCommandResult {
 ///
 /// Returns only stable, redacted configuration, transport, status, and response classes.
 pub fn check_openai_model(request: ModelCheckRequest) -> Result<(), ModelCheckError> {
+    if crate::agy::is_agy(&request.base_url) {
+        let model = request.model.clone();
+        return if list_openai_models(request)?.contains(&model) {
+            Ok(())
+        } else {
+            Err(ModelCheckError::ModelNotAdvertised)
+        };
+    }
+
     let ModelCheckRequest {
         base_url,
         model,
@@ -413,6 +422,21 @@ pub fn check_openai_model(request: ModelCheckRequest) -> Result<(), ModelCheckEr
 ///
 /// Returns only stable, redacted configuration, transport, status, and response classes.
 pub fn list_openai_models(request: ModelCheckRequest) -> Result<Vec<String>, ModelCheckError> {
+    if crate::agy::is_agy(&request.base_url) {
+        if request.credential.is_some() {
+            return Err(ModelCheckError::InvalidCredential);
+        }
+        let spec = crate::agy::Spec::parse(&request.base_url)
+            .map_err(|()| ModelCheckError::Configuration)?;
+        return crate::agy::Transport::new(
+            spec,
+            &request.model,
+            request.inference_limits.timeout(),
+        )
+        .map_err(|()| ModelCheckError::Configuration)?
+        .models();
+    }
+
     let ModelCheckRequest {
         base_url,
         model,
@@ -436,6 +460,32 @@ pub fn list_openai_models(request: ModelCheckRequest) -> Result<Vec<String>, Mod
 ///
 /// Returns only stable redacted failure classes and never exposes provider response bodies.
 pub fn check_openai_compatibility(request: ModelCheckRequest) -> Result<(), ModelCheckError> {
+    if crate::agy::is_agy(&request.base_url) {
+        if request.credential.is_some() {
+            return Err(ModelCheckError::InvalidCredential);
+        }
+        let config = planner_config(
+            &request.base_url,
+            DEFAULT_PLANNER_ID,
+            &request.model,
+            &request.tokenizer,
+            request.inference_limits,
+            request.request_options,
+            false,
+        )
+        .map_err(|_| ModelCheckError::Configuration)?;
+        let spec = crate::agy::Spec::parse(&request.base_url)
+            .map_err(|()| ModelCheckError::Configuration)?;
+        let mut transport =
+            crate::agy::Transport::new(spec, &request.model, request.inference_limits.timeout())
+                .map_err(|()| ModelCheckError::Configuration)?;
+        return OpenAiCompatibilityChecker::with_external_transport(config, move |body, limit| {
+            transport.send(body, limit)
+        })
+        .check()
+        .map_err(map_compatibility_check_failure);
+    }
+
     let ModelCheckRequest {
         base_url,
         model,
@@ -1159,7 +1209,12 @@ where
         .map_err(|_| PublicRunError::Configuration)?
         .with_completion_checks(request.completion_checks)
         .map_err(|_| PublicRunError::Configuration)?;
-    let planner = remote_planner(config, request.credential)?;
+    let planner = remote_planner(
+        config,
+        request.credential,
+        &request.base_url,
+        request.inference_limits,
+    )?;
     let state_root = discover_state_root().map_err(|_| PublicRunError::Configuration)?;
     let layout = RunLayout::create(&state_root, manifest.run_id()).map_err(map_layout_create)?;
     layout
@@ -1470,7 +1525,12 @@ where
                 changed_items: Vec::new(),
             });
         }
-        Some(remote_planner(config, resolved.credential)?)
+        Some(remote_planner(
+            config,
+            resolved.credential,
+            &resolved.base_url,
+            resolved.inference_limits,
+        )?)
     } else {
         None
     };
@@ -2301,7 +2361,22 @@ fn planner_config(
     options: RequestOptions,
     planning_constraints_required: bool,
 ) -> Result<OpenAiPlannerConfig, PublicRunError> {
-    let config = OpenAiPlannerConfig::new(base_url, planner_id, model, tokenizer)
+    let endpoint = crate::agy::endpoint(base_url).map_err(|()| PublicRunError::Configuration)?;
+    if crate::agy::is_agy(base_url) {
+        crate::agy::Spec::parse(base_url)
+            .and_then(|spec| spec.verify())
+            .map_err(|()| PublicRunError::ConfigurationMismatch {
+                field: "agy_executable_or_policy",
+                changed_items: Vec::new(),
+            })?;
+        if options.response_format != xgen_provider_openai::ResponseFormat::JsonObject
+            || options.thinking != xgen_provider_openai::ThinkingMode::Default
+            || options.parameter_style != xgen_provider_openai::ParameterStyle::Compatible
+        {
+            return Err(PublicRunError::Configuration);
+        }
+    }
+    let config = OpenAiPlannerConfig::new(&endpoint, planner_id, model, tokenizer)
         .and_then(|config| config.with_max_output_tokens(limits.max_output_tokens()))
         .and_then(|config| config.with_timeout(limits.timeout()))
         .and_then(|config| config.with_response_format(options.response_format))
@@ -2337,7 +2412,21 @@ fn artifact_schema_from_environment(
 fn remote_planner(
     config: OpenAiPlannerConfig,
     credential: Option<BearerCredential>,
+    base_url: &str,
+    limits: InferenceLimits,
 ) -> Result<OpenAiPlanner, PublicRunError> {
+    if crate::agy::is_agy(base_url) {
+        if credential.is_some() {
+            return Err(PublicRunError::Configuration);
+        }
+        let spec = crate::agy::Spec::parse(base_url).map_err(|()| PublicRunError::Configuration)?;
+        let mut transport = crate::agy::Transport::new(spec, config.model(), limits.timeout())
+            .map_err(|()| PublicRunError::Configuration)?;
+        return Ok(OpenAiPlanner::with_external_transport(
+            config,
+            move |body, limit| transport.send(body, limit),
+        ));
+    }
     OpenAiPlanner::new(config, credential).map_err(map_provider_config)
 }
 

@@ -291,6 +291,7 @@ pub(crate) struct Cancellation {
 impl Cancellation {
     pub(crate) fn request(&self) {
         self.requested.store(true, Ordering::SeqCst);
+        xgen_cli::agy::request_cancellation();
     }
 
     fn is_requested(&self) -> bool {
@@ -299,6 +300,7 @@ impl Cancellation {
 
     fn clear(&self) {
         self.requested.store(false, Ordering::SeqCst);
+        xgen_cli::agy::clear_cancellation();
     }
 }
 
