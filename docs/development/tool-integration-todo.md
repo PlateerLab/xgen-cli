@@ -1,6 +1,6 @@
 # xgen CLI 도구·모델 통합 TODO
 
-갱신: 2026-11-22 (KST)
+갱신: 2026-11-23 (KST)
 
 이 파일은 공동 개발 작업 목록의 정본이다. 방향과 확인된 사실은 [MEMORY.md](../../MEMORY.md), SEV·브라우저 검토 근거는 [통합 검토](browser-tool-graph-sev-2026-10-06.md)를 참조한다. 모든 개발 항목은 일반 기능이다. 시스템별 명세·업무 규칙·인증 설정은 별도 입력으로 관리한다.
 
@@ -11,6 +11,7 @@
 ## CLI 경유 모델 연결 후보 — 2026-11-22
 
 - [x] **실제 연결 smoke:** [agy Gemini 제안 → xgen 실행](../research/2026-11-22-agy-planner-probe.md). 질문·승인 쓰기·실패 복구 3종, CLI9회·xgen Receipt6개를 확인했다. 정식 provider나 품질 평가가 아니다.
+- [x] **개발용 평가 연결기·실측:** [고정 20회](../research/2026-11-23-agy-coding-baseline.md) 19/20 통과. 시간/bytes/호출 한도·strict JSON·pin 검사·UNKNOWN 보존 구현. native manage_task 관찰1회 중단, USD/내부 요청 횟수 미확인. 정식 provider 채택은 아니다.
 - [ ] **xgen 일반 설계 후보:** CLI transport의 native tool 처리, strict JSON·시간/크기/호출/출력 상한, usage·비용·profile/resume drift 계약을 검토한다. agy runtime 완전 제거와 모든 도구·메모리 자동 이전은 아직 입증하지 않았다.
 
 ## 웹 읽기 도구 후보 조사 — 2026-11-22

@@ -113,3 +113,8 @@ quote를 준비한 뒤 실행해야 하며, 현재 완료율·토큰·금액 측
 로컬 전체 Python 검사 168개 중 112개 통과·56개 조건부 skipped, 새 baseline 검사 6개는 모두 통과했다.
 공개 문서 계약 검사도 통과했다. 새 fixture는 원본에서 실패하고 알려진 수정에서 통과하는지 검사했으며,
 공통 DB 관찰 함수의 connection을 명시적으로 닫아 반복 실행 시 ResourceWarning도 제거했다.
+
+## 공식 CLI 경유 별도 평가
+
+[agy 연결 평가](agy-coding-baseline.md)는 같은 과업·oracle·run/resume을 재사용한다. 공식 CLI의
+로그인과 bounded proposal transport를 쓰며, 위 API 경로의 가격·지출 예약 계약과는 구분한다.

@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-22 (KST)
+갱신: 2026-11-23 (KST)
 
 ## 사용자가 정한 방향
 
@@ -14,12 +14,21 @@
 
 ## 책임과 개발 범위
 
+2026-11-23 구현·실측: [agy 경유 고정 코딩 20회](docs/research/2026-11-23-agy-coding-baseline.md).
+기존 과업·oracle·public run/resume을 재사용한 bounded 연결기로 19/20 통과(질문·버그·이름 변경·복구 각4/4,
+승인3/4). CLI98회·Receipt78개·잘못된 완료/중복 effect/effect Unknown0, model-call Unknown1이다.
+실패1회는 agy 자체 manage_task를 관찰해 중단한 건이며 사전 실행 차단 보장은 아니다. Pin은 전부 불변,
+trial 자동 재실행0. CLI97회 보고 input875,435/output20,274의 부분합을 보존했고, usage 없는1회·cache 의미
+불명2회 때문에 전체 usage/USD/provider 내부 요청 수는 미확인이다. Python175개 중119통과·56skip.
+개발용 평가 연결기는 구현했지만 정식 provider·profile/resume 계약·배포 채택·타 에이전트 대비 우위는
+미검증이다. 소유자: native 도구/usage 의미는 agy 경로, transport·검증·계약은 xgen이다.
+
 2026-11-22 실제 연결 검증: [agy Gemini 계획 전용 실험](docs/research/2026-11-22-agy-planner-probe.md).
 공식 CLI의 제안만 임시 bridge로 받아 xgen의 읽기·쓰기 승인/재개·실패 테스트 수정 3종을 각1회 완료했다.
 agy CLI9회에서 관찰한 native tool event0·xgen Receipt6개·Unknown/중복 effect0, agent workspace 불변을
 확인했다. 별도 진단에는 manage_task 실행과 반복 JSON 응답이 있어 raw model API나 agy 하네스 완전
-제거로 보지 않는다. 기존 도구·private memory 전체 이전, 정식 provider·예산/재개 계약, 20회 기준선과
-품질 우위는 미검증이다. Runtime·prompt·배포본은 변경하지 않았다. 도구 잔존/schema는 agy 경로,
+제거로 보지 않는다. 기존 도구·private memory 전체 이전, 정식 provider·예산/재개 계약과
+품질 우위는 미검증이다. 20회 기준선은 위 11-23 결과로 이어진다. Runtime·prompt·배포본은 변경하지 않았다. 도구 잔존/schema는 agy 경로,
 transport·권한·예산·Receipt 결속은 향후 xgen 과제다.
 
 2026-11-22 독립 실행 검증: [Firecrawl Local 0.1.1 평가](docs/research/2026-11-22-firecrawl-local-evaluation.md).

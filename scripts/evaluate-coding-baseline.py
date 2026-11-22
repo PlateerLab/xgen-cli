@@ -253,7 +253,7 @@ def attach_cost(record, ledger):
         call['usage'] is not None and call['usage']['cache'] is not None for call in calls))
 
 
-def aggregate(records, planned, ledger):
+def quality_aggregate(records, planned):
     groups = {}
     for split in ['design', 'held_out']:
         for family in sorted(FAMILIES):
@@ -263,7 +263,6 @@ def aggregate(records, planned, ledger):
                 'false_completions': sum(r['false_completion'] is True for r in rows),
                 'unknown_completion_checks': sum(r['false_completion'] is None for r in rows),
                 'median_seconds': statistics.median(r['elapsed_seconds'] for r in rows) if rows else None,
-                'known_cost_nano_usd': sum(r['known_cost_nano_usd'] for r in rows),
                 'repeated_finished_actions': sum(r['repeated_finished_actions'] or 0 for r in rows),
                 'model_calls_subtotal': sum(r.get('model_calls') or 0 for r in rows),
                 'incomplete_evidence_trials': sum(not r.get('evidence_complete', False) for r in rows),
@@ -280,12 +279,21 @@ def aggregate(records, planned, ledger):
             'repeated_identical_results': sum(r.get('repeated_identical_results') or 0 for r in records),
             'token_subtotals': {key: sum(r['token_subtotals'][key] for r in records)
                                for key in ['input', 'output', 'cache']},
-            'known_cost_nano_usd': ledger.committed,
-            'unknown_reserved_nano_usd': sum(ledger.reservations.values()),
-            'actual_cost_nano_usd': ledger.committed if not ledger.reservations
-                and ledger.config['quote']['kind'] == 'fixed_tier' else None,
-            'complete_token_usage': all(r['complete_token_usage'] for r in records),
-            'aborted': ledger.aborted, 'abort_reason': ledger.abort_reason}
+            'complete_token_usage': all(r['complete_token_usage'] for r in records)}
+
+
+def aggregate(records, planned, ledger):
+    result = quality_aggregate(records, planned)
+    for key, group in result['groups'].items():
+        split, family = key.split('/')
+        group['known_cost_nano_usd'] = sum(r['known_cost_nano_usd'] for r in records
+                                         if r['split'] == split and r['family'] == family)
+    result.update(known_cost_nano_usd=ledger.committed,
+                  unknown_reserved_nano_usd=sum(ledger.reservations.values()),
+                  actual_cost_nano_usd=ledger.committed if not ledger.reservations
+                      and ledger.config['quote']['kind'] == 'fixed_tier' else None,
+                  aborted=ledger.aborted, abort_reason=ledger.abort_reason)
+    return result
 
 
 def execute(binary, cases, config, output, upstream, key=None, split='all'):
