@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-20 (KST)
+갱신: 2026-11-22 (KST)
 
 ## 사용자가 정한 방향
 
@@ -13,6 +13,14 @@
 - 화면에는 작업 중 상태 표시와 최종 응답이 우선이다. 상세 실행 과정의 상시 노출은 필수가 아니다.
 
 ## 책임과 개발 범위
+
+2026-11-22 독립 실행 검증: [Firecrawl Local 0.1.1 평가](docs/research/2026-11-22-firecrawl-local-evaluation.md).
+Cloud를 끄고 정적·JS 합성 문서와 공개 문서·PDF를 각3회 비교했다. 정적/JS/공개 CSV의 내용 보존은
+각3/3, 공개 PDF는403 차단으로0/3였고 같은 PDF의 로컬 제공은3/3이었다. HTTP404·403도 CLI exit0·
+success=true일 수 있어 statusCode·blocked·본문·warning을 함께 보존해야 한다. 대기RSS 약17.4MiB,
+Chrome 포함 관측RSS합 약1.22GiB(shared page 중복 가능)로 구분한다. 측정기 수정과 실패 원본을 기록했고
+sealed holdout·범용 웹 성공률·LLM/xgen 품질 개선을 주장하지 않는다. 후보 유지이며 xgen 내장 채택·의존성
+추가·계약 변경·배포는 하지 않았다. 수집/경고 판정은 Firecrawl, 연결·권한·자원·Receipt는 향후 xgen 과제다.
 
 2026-11-20 구현·로컬 검증: [Native build 전 공통 조립 검사](docs/adr/0089-release-assembly-preflight.md).
 PR Fast/Linux와 release quality에서 dependency·credential 없는 임시 환경으로 실제 pack→조립→checksum을
