@@ -1,0 +1,162 @@
+{
+  "format_version": 1,
+  "date_kst": "2026-11-23",
+  "scope": "isolated custom-agent configuration; not a proof about all agy configurations",
+  "settings_scope": "private temporary workspace only; no global settings edited",
+  "agy_sha256": "37873b8062391b6202a3d3199ec012abc9e53aab720d26cd65699441497d8c94",
+  "model": "gemini-3.8-flash-low",
+  "readonly_hook_discovery": {
+    "exit_code": 0,
+    "named_hook_enabled": true,
+    "inference_calls": 0
+  },
+  "standalone_handler_denies": true,
+  "native_preexecution_block_verified": false,
+  "adopt_deny_hook": false,
+  "probes": [
+    {
+      "case": "task-list",
+      "gate": false,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "initial",
+      "native_tool_names": [
+        "manage_task"
+      ],
+      "native_unique_steps": 1,
+      "native_transitions": 2
+    },
+    {
+      "case": "task-list",
+      "gate": true,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "initial",
+      "native_tool_names": [
+        "manage_task"
+      ],
+      "native_unique_steps": 1,
+      "native_transitions": 2
+    },
+    {
+      "case": "read-file",
+      "gate": false,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "initial",
+      "native_tool_names": [],
+      "native_unique_steps": 0,
+      "native_transitions": 0
+    },
+    {
+      "case": "read-file",
+      "gate": true,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "initial",
+      "native_tool_names": [],
+      "native_unique_steps": 0,
+      "native_transitions": 0
+    },
+    {
+      "case": "task-list",
+      "gate": false,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "explicit-hook-name",
+      "native_tool_names": [
+        "manage_task"
+      ],
+      "native_unique_steps": 1,
+      "native_transitions": 2
+    },
+    {
+      "case": "task-list",
+      "gate": true,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "explicit-hook-name",
+      "native_tool_names": [
+        "manage_task"
+      ],
+      "native_unique_steps": 1,
+      "native_transitions": 2
+    },
+    {
+      "case": "read-file",
+      "gate": false,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": false,
+      "phase": "explicit-hook-name",
+      "native_tool_names": [],
+      "native_unique_steps": 0,
+      "native_transitions": 0
+    },
+    {
+      "case": "read-file",
+      "gate": true,
+      "exit": 0,
+      "reason": null,
+      "hook_calls": 0,
+      "final_status": "SUCCESS",
+      "marker_returned": true,
+      "phase": "explicit-hook-name",
+      "native_tool_names": [
+        "read_file"
+      ],
+      "native_unique_steps": 1,
+      "native_transitions": 2
+    }
+  ],
+  "artifact_sha256": {
+    "task-list-control.ndjson": "0fb1d8e1272904f36d025341c452ecd2a802e8a6277103afe95e23d01fdf9954",
+    "task-list-deny.ndjson": "9d2a6a682daaf6765843b3c36b9b9adbe03ac7024884fd16b461efa7d72a5020",
+    "read-file-control.ndjson": "8b282d935e3b98801c7f11fed77ca26543ef5ac1b0b8f54dfac19cb2c94b2b47",
+    "read-file-deny.ndjson": "291604f9a058922b1417efcc273909353f4a399f02f6760f08e21f588c256825",
+    "explicit-task-list-control.ndjson": "ff5445ac4ba51bebefaaf37b58fb8aadaaa42ccddd206414227e8d1e93b4028d",
+    "explicit-task-list-deny.ndjson": "e1cebd356b49a816a94ff7b026a8f5ad885b53f5184f76b17d0460c747af6a2b",
+    "explicit-read-file-control.ndjson": "92412e02549b33126cd3802d810534a843cdb4928fa7d003011ae7f2ffa6e642",
+    "explicit-read-file-deny.ndjson": "e39ec90d95e719a5419de123a7e1d3111eec34d09aec835dd34fa757c3d9b694"
+  },
+  "diagnostic_model_cli_attempts": 8,
+  "design_limitations": [
+    "read-file positive controls did not call the requested tool; not a valid blocked-vs-success comparison",
+    "with explicit hook name, gated read-file still returned the fixture marker, so that configuration does not enforce a read boundary",
+    "inheritCustomizations=false excludes inherited hooks as well as skills/rules; hooks discovery alone is not evidence of effective agent hook registration",
+    "does not test enabling broad user customization inheritance or all possible agy settings",
+    "initial diagnostic uses were observational, not accepted xgen planner attempts"
+  ],
+  "diagnostic_usage": {
+    "usd_cost": null,
+    "provider_internal_request_count": null,
+    "calls_with_complete_usage": 8,
+    "token_subtotals": {
+      "input": 12280,
+      "uncached_input": 12280,
+      "output": 4050,
+      "cache": 0,
+      "reasoning": 3511
+    }
+  }
+}

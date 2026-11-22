@@ -63,21 +63,26 @@ def validate(config):
 
 
 def usage(value):
-    """CLI-reported subtotals; missing or inconsistent fields never become zero."""
-    result = {'input': None, 'output': None, 'cache': None, 'reasoning': None}
+    """Normalize agy uncached input + cache to inclusive host prompt tokens.
+
+    The official headless multi-turn example reports cache=30214, input=278,
+    output=4 and total=282: CLI input/total exclude cache; thinking is in output.
+    https://antigravity.google/docs/cli/headless/
+    """
+    result = {key: None for key in ['input', 'uncached_input', 'output', 'cache', 'reasoning']}
     if not isinstance(value, dict):
         return result
-    for target, source in [('input', 'input_tokens'), ('output', 'output_tokens'),
+    for target, source in [('uncached_input', 'input_tokens'), ('output', 'output_tokens'),
                            ('cache', 'cache_read_tokens'), ('reasoning', 'thinking_tokens')]:
         number = value.get(source)
         if type(number) is int and number >= 0:
             result[target] = number
-    if (result['input'] is not None and result['output'] is not None
+    if (result['uncached_input'] is not None and result['output'] is not None
             and (type(value.get('total_tokens')) is not int
-                 or value['total_tokens'] != result['input'] + result['output'])):
+                 or value['total_tokens'] != result['uncached_input'] + result['output'])):
         return {key: None for key in result}
-    if result['cache'] is not None and (result['input'] is None or result['cache'] > result['input']):
-        result['cache'] = None
+    if result['uncached_input'] is not None and result['cache'] is not None:
+        result['input'] = result['uncached_input'] + result['cache']
     if result['reasoning'] is not None and (result['output'] is None or result['reasoning'] > result['output']):
         result['reasoning'] = None
     return result
@@ -301,6 +306,8 @@ def attach_usage(record, bridge):
     record['token_subtotals'] = {key: sum(call['usage'][key] for call in calls if call['usage'][key] is not None)
                                for key in ['input', 'output', 'cache']}
     record['complete_token_usage'] = record['unknown_usage_calls'] == 0
+    record['uncached_input_subtotal'] = sum(call['usage']['uncached_input'] for call in calls
+                                         if call['usage']['uncached_input'] is not None)
     record['usd_cost'] = None
     if any(not call['accepted'] for call in calls):
         record['accepted'] = False
@@ -314,7 +321,9 @@ def aggregate(records, planned, bridge, stop_reason):
                   native_tool_events=sum(call['native_tool_events'] for call in bridge.calls),
                   agy_rejections=dict(Counter(call['reason'] for call in bridge.calls if call['reason'])),
                   unknown_usage_calls=sum(row['unknown_usage_calls'] for row in records),
-                  pinned_inputs_unchanged=bridge.unchanged())
+                  pinned_inputs_unchanged=bridge.unchanged(),
+                  usage_semantics='agy-uncached-input/v1',
+                  uncached_input_subtotal=sum(row['uncached_input_subtotal'] for row in records))
     return result
 
 
@@ -360,6 +369,7 @@ def execute(binary, agy, config, cases, output):
                          for path, checksum in pins.items()},
                 'schedule': [{'case': case['id'], 'repeat': repeat} for case, repeat in plan],
                 'automatic_trial_retries': 0, 'usd_cost': None,
+                'usage_semantics': 'agy-uncached-input/v1',
                 'limitations': ['official CLI agent runtime remains', 'native calls rejected after observation',
                     'output bytes bounded, native output token ceiling not enforceable',
                     'provider internal retries/request count and billing unknown']}
@@ -408,17 +418,83 @@ def execute(binary, agy, config, cases, output):
     return result
 
 
+
+def reanalyse_usage(directory):
+    """Read private artifacts offline; never rewrite the original ledger or quality score."""
+    ledger = directory / 'agy-ledger.jsonl'
+    rows = [S.strict_json(line) for line in ledger.read_bytes().splitlines() if line.strip()]
+    reserved = [row for row in rows if row.get('status') == 'reserved']
+    indices = [row['index'] for row in reserved]
+    if (any(type(index) is not int for index in indices)
+            or indices != list(range(1, len(indices) + 1))
+            or any(row.get('index') not in indices for row in rows if row.get('status') == 'settled')):
+        raise ValueError('invalid reservation sequence')
+    calls = []
+    for row in reserved:
+        path = directory / f'agy-call-{row["index"]:04d}.ndjson'
+        events, checksum, observation = [], None, 'trace_missing'
+        if path.exists():
+            if path.stat().st_size > 131_072:
+                raise ValueError('raw trace exceeds supported offline bound')
+            raw = path.read_bytes()
+            checksum = hashlib.sha256(raw).hexdigest()
+            try:
+                events = [S.strict_json(line) for line in raw.splitlines() if line.strip()]
+                observation = 'parsed'
+            except (ValueError, TypeError):
+                events, observation = [], 'invalid_stream'
+        finals = [event.get('result') for event in events if isinstance(event, dict)
+                  and event.get('event') == 'result']
+        observed = usage(None)
+        if observation == 'parsed':
+            if len(finals) != 1 or not isinstance(finals[0], dict):
+                observation = 'result_count_or_shape_invalid'
+            else:
+                observed = usage(finals[0].get('usage'))
+                observation = 'complete' if all(observed[k] is not None for k in ['input', 'output', 'cache']) else 'usage_incomplete'
+        calls.append({'index': row['index'], 'trial': row['trial'], 'trace_sha256': checksum,
+                      'final_count': len(finals), 'observation': observation, 'usage': observed})
+    keys = ['input', 'uncached_input', 'output', 'cache', 'reasoning']
+    return {'format_version': 1, 'usage_semantics': 'agy-uncached-input/v1',
+            'model_io_performed': False, 'quality_remeasured': False,
+            'source_manifest_sha256': S.digest(directory / 'manifest.json'),
+            'source_ledger_sha256': S.digest(ledger), 'normalizer_source_sha256': S.digest(Path(__file__)),
+            'cli_attempts': len(calls), 'usd_cost': None, 'provider_internal_request_count': None,
+            'coverage_calls': {key: sum(call['usage'][key] is not None for call in calls) for key in keys},
+            'token_subtotals': {key: sum(call['usage'][key] for call in calls
+                                       if call['usage'][key] is not None) for key in keys},
+            'unknown_usage_calls': sum(any(call['usage'][key] is None for key in ['input', 'output', 'cache'])
+                                       for call in calls), 'calls': calls}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary', type=Path, required=True)
-    parser.add_argument('--agy', type=Path, default=shutil.which('agy'))
-    parser.add_argument('--config', type=Path, default=ROOT / 'evals/coding-baseline/agy-config.json')
-    parser.add_argument('--cases', type=Path, default=ROOT / 'evals/coding-baseline/cases.json')
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--binary', type=Path)
+    parser.add_argument('--agy', type=Path)
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--cases', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--reanalyse-usage', type=Path, help='read a private batch offline; print new usage only')
     args = parser.parse_args()
+    if args.reanalyse_usage is not None:
+        if any(value is not None for value in [args.binary, args.output, args.agy, args.config, args.cases]):
+            parser.error('offline reanalysis accepts only --reanalyse-usage')
+        try:
+            result = reanalyse_usage(args.reanalyse_usage.resolve(strict=True))
+        except (OSError, ValueError, TypeError, KeyError):
+            parser.exit(2, 'offline usage reanalysis failed; original artifacts unchanged\n')
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    if args.binary is None or args.output is None:
+        parser.error('--binary and --output are required for live evaluation')
+    agy = args.agy or shutil.which('agy')
+    if agy is None:
+        parser.error('--agy is required when agy is absent from PATH')
+    config = args.config or ROOT / 'evals/coding-baseline/agy-config.json'
+    cases = args.cases or ROOT / 'evals/coding-baseline/cases.json'
     try:
-        result = execute(args.binary.resolve(strict=True), Path(args.agy).resolve(strict=True),
-                         S.strict_json(args.config.read_bytes()), S.strict_json(args.cases.read_bytes()),
+        result = execute(args.binary.resolve(strict=True), Path(agy).resolve(strict=True),
+                         S.strict_json(config.read_bytes()), S.strict_json(cases.read_bytes()),
                          args.output.resolve())
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         parser.exit(2, 'agy baseline preflight failed; check private local configuration and pinned inputs\n')

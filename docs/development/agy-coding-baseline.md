@@ -43,8 +43,9 @@ init에서 검사한다. native tool/subagent event를 관찰하면 해당 프�
   xgen의 원래 proposal validator로 넘긴다. transport 성공은 과업 합격을 뜻하지 않는다.
 - 오류가 난 시도도 ledger와 trial 결과에 남긴다. 전체 스케줄 미완료와 usage 누락을 숨기지 않는다.
   native event·잘못된 응답 등 transport 거절이 한 번이라도 있는 trial은 보수적으로 실패 처리한다.
-- CLI 보고 input/output/cache를 검증하고 확인된 부분합만 집계한다. 누락은 0으로 채우지 않는다.
-  reasoning은 원본 ledger에 별도 보존하며 output의 부분집합으로 취급한다. USD 계산에는 사용하지 않는다.
+- CLI input은 cache를 제외하므로 host input은 uncached + cache로 정규화한다. 계약 이름은
+  `agy-uncached-input/v1`이고 manifest에 남긴다. 누락은 0으로 채우지 않고 uncached도 별도 보존한다.
+  reasoning은 output의 부분집합으로 취급하며 더하지 않는다. USD 계산에는 사용하지 않는다.
 
 출력 폴더는 비공개다. 모델 응답·fixture·state DB가 있으므로 폴더 전체를 공유하지 않는다. 공개 기록에는
 집계·제한·비민감 hash만 옮긴다. 성공만 골라 재측정하거나 실패 후 같은 batch를 덮어쓰지 않는다.
@@ -55,3 +56,17 @@ init에서 검사한다. native tool/subagent event를 관찰하면 해당 프�
 연결해 execute 승인 전 정지·같은 Run 재개·offline replay를 검사했다. native event 조기 중단, timeout의
 자식 process 정리, 출력 한도, durable 호출 한도, pin drift, usage 누락도 별도로 검사했다.
 이는 실제 모델 품질 검증과 구분한다.
+
+## 원본 usage 오프라인 재집계
+
+```bash
+python3 scripts/evaluate-agy-coding-baseline.py \
+  --reanalyse-usage /tmp/xgen-agy-existing-batch
+```
+
+인증·binary·모델 연결 없이 기존 raw NDJSON을 읽어 새 usage 집계 JSON을 stdout에 출력한다.
+원본 ledger·quality score·DB를 수정하지 않는다. 원본 manifest/ledger·trace와 새 정규화 코드의 hash를
+남긴다. 누락·깨진 응답은 UNKNOWN으로 보존한다. 과거 품질 평가를 새 코드로 다시 실행한 것은 아니다.
+
+[도구 차단·usage 후속 확인](../research/2026-11-23-agy-controls.md)에서 해석 근거와 재집계 수치를
+설명한다. 현재 격리 agent에서 deny-hook의 실제 적용을 검증하지 못했으므로 native 감지 후 중단을 유지한다.

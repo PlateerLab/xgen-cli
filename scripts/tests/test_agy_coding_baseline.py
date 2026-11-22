@@ -32,13 +32,82 @@ def init():
 
 class AgentTransportTests(unittest.TestCase):
     def test_missing_or_inconsistent_usage_stays_unknown(self):
-        self.assertEqual(M.usage(None), {'input': None, 'output': None, 'cache': None, 'reasoning': None})
+        self.assertEqual(M.usage(None), {'input': None, 'uncached_input': None, 'output': None, 'cache': None, 'reasoning': None})
         partial = M.usage({'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34})
-        self.assertEqual(partial['input'], 30)
+        self.assertEqual(partial['uncached_input'], 30)
+        self.assertIsNone(partial['input'])
         self.assertIsNone(partial['cache'])
         self.assertIsNone(M.usage({'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 33})['input'])
-        self.assertIsNone(M.usage({'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34,
-                                   'cache_read_tokens': 31})['cache'])
+        for uncached, cached, output in [(278, 30214, 4), (2087, 7003, 109), (2789, 5234, 107)]:
+            result = M.usage({'input_tokens': uncached, 'output_tokens': output,
+                              'total_tokens': uncached + output, 'cache_read_tokens': cached})
+            self.assertEqual(result['input'], uncached + cached)
+            self.assertEqual(result['cache'], cached)
+            self.assertEqual(result['uncached_input'], uncached)
+
+    def test_invalid_counters_are_not_fabricated(self):
+        for counter in [True, -1, 1.5, '30', None]:
+            result = M.usage({'input_tokens': counter, 'output_tokens': 4,
+                              'total_tokens': 34, 'cache_read_tokens': 100})
+            self.assertIsNone(result['input'])
+            self.assertIsNone(result['uncached_input'])
+        result = M.usage({'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34,
+                          'cache_read_tokens': 100, 'thinking_tokens': 3})
+        self.assertEqual(result['input'], 130)
+        self.assertEqual(result['output'], 4)  # Thinking must not be added twice.
+        self.assertEqual(result['reasoning'], 3)
+        for cached in [None, True, -1, '100']:
+            invalid = M.usage({'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34,
+                               'cache_read_tokens': cached, 'thinking_tokens': 5})
+            self.assertIsNone(invalid['input'])
+            self.assertEqual(invalid['uncached_input'], 30)
+            self.assertIsNone(invalid['cache'])
+            self.assertIsNone(invalid['reasoning'])
+
+    def test_offline_usage_reanalysis_preserves_evidence_and_missing_attempts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'manifest.json').write_text('{}')
+            ledger = root / 'agy-ledger.jsonl'
+            ledger.write_text(''.join(json.dumps({'status': 'reserved', 'index': index, 'trial': 'fixture'})
+                                      + '\n' for index in [1, 2, 3]))
+            (root / 'agy-call-0001.ndjson').write_text(json.dumps({'event': 'result', 'result': {
+                'usage': {'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34,
+                          'cache_read_tokens': 100, 'thinking_tokens': 3}}}) + '\n')
+            (root / 'agy-call-0002.ndjson').write_text('{"event":')
+            before = M.S.inventory(root)
+            result = M.reanalyse_usage(root)
+            self.assertEqual(M.S.inventory(root), before)
+            self.assertEqual(result['cli_attempts'], 3)
+            self.assertEqual(result['unknown_usage_calls'], 2)
+            self.assertEqual(result['coverage_calls']['input'], 1)
+            self.assertEqual(result['token_subtotals']['input'], 130)
+            self.assertEqual(result['token_subtotals']['uncached_input'], 30)
+            self.assertIsNone(result['usd_cost'])
+            self.assertFalse(result['model_io_performed'])
+            self.assertFalse(result['quality_remeasured'])
+            ledger.write_text(ledger.read_text() + json.dumps({'status': 'reserved', 'index': 3, 'trial': 'fixture'}))
+            with self.assertRaises(ValueError):
+                M.reanalyse_usage(root)
+
+    def test_offline_usage_rejects_orphan_settlement_and_ambiguous_final(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'manifest.json').write_text('{}')
+            ledger = root / 'agy-ledger.jsonl'
+            reserved = {'status': 'reserved', 'index': 1, 'trial': 'fixture'}
+            ledger.write_text(json.dumps(reserved) + '\n' + json.dumps({'status': 'settled', 'index': 2}))
+            with self.assertRaises(ValueError):
+                M.reanalyse_usage(root)
+            ledger.write_text(json.dumps(reserved))
+            final = {'event': 'result', 'result': {'usage': {
+                'input_tokens': 30, 'output_tokens': 4, 'total_tokens': 34, 'cache_read_tokens': 100}}}
+            for duplicate in [{'event': 'result', 'result': None}, final]:
+                (root / 'agy-call-0001.ndjson').write_text(json.dumps(final) + '\n' + json.dumps(duplicate))
+                result = M.reanalyse_usage(root)
+                self.assertEqual(result['unknown_usage_calls'], 1)
+                self.assertEqual(result['coverage_calls']['input'], 0)
+                self.assertEqual(result['calls'][0]['final_count'], 2)
 
     def test_agent_environment_excludes_unrelated_parent_variables(self):
         with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, {'XGEN_EVAL_ENV_SENTINEL': 'private-parent-only'}):
@@ -129,7 +198,7 @@ elif len(context["toolOutputs"])==1:
 else:
  proposal={"formatVersion":1,"kind":"completion_candidate","steps":[],"summary":"Verified artifact."}
 print(json.dumps({"event":"init","init":{"agent":"xgen-planner-only","model":"gemini-3.8-flash-low","tools":[]}}),flush=True)
-print(json.dumps({"event":"result","result":{"status":"SUCCESS","response":json.dumps(proposal),"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"cache_read_tokens":0}}}),flush=True)
+print(json.dumps({"event":"result","result":{"status":"SUCCESS","response":json.dumps(proposal),"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"cache_read_tokens":150}}}),flush=True)
 '''
             command = script(root, body)
             bridge = M.Bridge(CONFIG, root, agent_workspace, command, settings, {settings: M.S.digest(settings)})
@@ -154,7 +223,8 @@ print(json.dumps({"event":"result","result":{"status":"SUCCESS","response":json.
                 report = M.aggregate([row], 20, bridge, None)
                 self.assertFalse(report['complete_schedule'])
                 self.assertIsNone(report['usd_cost'])
-                self.assertEqual(report['token_subtotals']['input'], 300)
+                self.assertEqual(report['token_subtotals']['cache'], 450)
+                self.assertEqual(report['token_subtotals']['input'], 750)
             finally:
                 bridge.shutdown()
                 bridge.server_close()

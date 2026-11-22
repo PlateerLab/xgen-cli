@@ -49,6 +49,9 @@
 
 ## 사용량과 비용의 한계
 
+아래는 최초 측정 당시의 집계다. 이후 [usage 정규화 후속 확인](2026-11-23-agy-controls.md)에서
+cache 포함 입력으로 변환하는 오류를 고쳤다. 최초 JSON과 품질 점수는 보존했다.
+
 최종 usage가 있는 97회에서 CLI가 보고한 부분합은 input_tokens 875,435, output_tokens 20,274,
 cache_read_tokens 20,392, thinking_tokens 9,957이다. 중단한 1회는 최종 usage가 없다.
 Thinking은 output의 부분집합으로 취급하며 별도로 더하지 않는다. 공급자 원시 응답이나 청구서를 확인한

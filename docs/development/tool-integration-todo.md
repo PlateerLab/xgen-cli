@@ -12,6 +12,7 @@
 
 - [x] **실제 연결 smoke:** [agy Gemini 제안 → xgen 실행](../research/2026-11-22-agy-planner-probe.md). 질문·승인 쓰기·실패 복구 3종, CLI9회·xgen Receipt6개를 확인했다. 정식 provider나 품질 평가가 아니다.
 - [x] **개발용 평가 연결기·실측:** [고정 20회](../research/2026-11-23-agy-coding-baseline.md) 19/20 통과. 시간/bytes/호출 한도·strict JSON·pin 검사·UNKNOWN 보존 구현. native manage_task 관찰1회 중단, USD/내부 요청 횟수 미확인. 정식 provider 채택은 아니다.
+- [x] **Usage 후속:** [정규화·오프라인 재집계](../research/2026-11-23-agy-controls.md). Cache 제외 input을 host inclusive input으로 변환. 기존98회 중97회 usage 확인, 1회 미확인 유지. 격리 구성의 deny hook은 실제 적용되지 않아 사전 차단으로 채택하지 않았다.
 - [ ] **xgen 일반 설계 후보:** CLI transport의 native tool 처리, strict JSON·시간/크기/호출/출력 상한, usage·비용·profile/resume drift 계약을 검토한다. agy runtime 완전 제거와 모든 도구·메모리 자동 이전은 아직 입증하지 않았다.
 
 ## 웹 읽기 도구 후보 조사 — 2026-11-22

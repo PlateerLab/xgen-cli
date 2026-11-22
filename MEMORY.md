@@ -14,6 +14,15 @@
 
 ## 책임과 개발 범위
 
+2026-11-23 후속 구현·검증: [agy 도구 차단·usage 확인](docs/research/2026-11-23-agy-controls.md).
+공식 headless 예제와 실측에서 agy input은 cache 제외임을 확인해 host input=uncached+cache로 정규화했다
+(`agy-uncached-input/v1`). 기존98회 원본을 오프라인 재집계: 97회 보고 input895,827/cache20,392/
+output20,274, 미확인1회. 이전 cache 이상2회는 변환 가정 오류였고 원본·19/20 품질 점수는 불변이다.
+Python178개 중122통과·56skip. 격리 custom agent에서는 workspace deny hook이 목록에 보여도 실행되지
+않아 manage_task 사전 차단을 검증하지 못했다(진단8회). 광범위한 사용자 customization 상속을 켜는 안은
+채택하지 않았고, 모든 agy 설정에서 불가능하다는 결론은 아니다. 기존 native 관찰 후 중단을 유지한다.
+정식 provider/profile/resume 계약·배포는 미완료이며 runtime·prompt는 바꾸지 않았다.
+
 2026-11-23 구현·실측: [agy 경유 고정 코딩 20회](docs/research/2026-11-23-agy-coding-baseline.md).
 기존 과업·oracle·public run/resume을 재사용한 bounded 연결기로 19/20 통과(질문·버그·이름 변경·복구 각4/4,
 승인3/4). CLI98회·Receipt78개·잘못된 완료/중복 effect/effect Unknown0, model-call Unknown1이다.
