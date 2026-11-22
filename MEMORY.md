@@ -14,6 +14,14 @@
 
 ## 책임과 개발 범위
 
+2026-11-22 실제 연결 검증: [agy Gemini 계획 전용 실험](docs/research/2026-11-22-agy-planner-probe.md).
+공식 CLI의 제안만 임시 bridge로 받아 xgen의 읽기·쓰기 승인/재개·실패 테스트 수정 3종을 각1회 완료했다.
+agy CLI9회에서 관찰한 native tool event0·xgen Receipt6개·Unknown/중복 effect0, agent workspace 불변을
+확인했다. 별도 진단에는 manage_task 실행과 반복 JSON 응답이 있어 raw model API나 agy 하네스 완전
+제거로 보지 않는다. 기존 도구·private memory 전체 이전, 정식 provider·예산/재개 계약, 20회 기준선과
+품질 우위는 미검증이다. Runtime·prompt·배포본은 변경하지 않았다. 도구 잔존/schema는 agy 경로,
+transport·권한·예산·Receipt 결속은 향후 xgen 과제다.
+
 2026-11-22 독립 실행 검증: [Firecrawl Local 0.1.1 평가](docs/research/2026-11-22-firecrawl-local-evaluation.md).
 Cloud를 끄고 정적·JS 합성 문서와 공개 문서·PDF를 각3회 비교했다. 정적/JS/공개 CSV의 내용 보존은
 각3/3, 공개 PDF는403 차단으로0/3였고 같은 PDF의 로컬 제공은3/3이었다. HTTP404·403도 CLI exit0·

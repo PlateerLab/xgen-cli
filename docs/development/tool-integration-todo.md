@@ -8,6 +8,11 @@
 
 목표: 사용자는 `xgen`에서 시스템을 한 번 연결하고 자연어로 요청한다. 내부에서는 API·화면 도구를 찾고, 필요한 모델을 호출하고, 실제 결과를 검증해 최종 응답을 제공한다.
 
+## CLI 경유 모델 연결 후보 — 2026-11-22
+
+- [x] **실제 연결 smoke:** [agy Gemini 제안 → xgen 실행](../research/2026-11-22-agy-planner-probe.md). 질문·승인 쓰기·실패 복구 3종, CLI9회·xgen Receipt6개를 확인했다. 정식 provider나 품질 평가가 아니다.
+- [ ] **xgen 일반 설계 후보:** CLI transport의 native tool 처리, strict JSON·시간/크기/호출/출력 상한, usage·비용·profile/resume drift 계약을 검토한다. agy runtime 완전 제거와 모든 도구·메모리 자동 이전은 아직 입증하지 않았다.
+
 ## 웹 읽기 도구 후보 조사 — 2026-11-22
 
 - [x] **외부 도구 평가:** [Firecrawl Local 독립 실행](../research/2026-11-22-firecrawl-local-evaluation.md). Cloud off에서 정적·JS·공개 문서 추출, PDF 차단/로컬 추출 분리, process tree RSS·오류 의미를 확인했다. xgen 통합이나 기본 backend 채택이 아니다.
