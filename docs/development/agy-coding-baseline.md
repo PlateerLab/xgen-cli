@@ -70,3 +70,16 @@ python3 scripts/evaluate-agy-coding-baseline.py \
 
 [도구 차단·usage 후속 확인](../research/2026-11-23-agy-controls.md)에서 해석 근거와 재집계 수치를
 설명한다. 현재 격리 agent에서 deny-hook의 실제 적용을 검증하지 못했으므로 native 감지 후 중단을 유지한다.
+
+## SSH 환경의 인증 조회
+
+2026-11-23 로컬 진단에서 credential이 keyring에 있어도 `SSH_CONNECTION` 또는 `SSH_CLIENT`가 있는
+프로세스의 `agy models`는 sign-in 필요로 실패했다. 둘 다 제외하면 같은 binary·HOME에서 재로그인 없이
+23개 모델 조회에 성공했다. 평가의 `agent_environment()`는 이미 두 변수를 전달하지 않는다.
+
+```bash
+env -u SSH_CONNECTION -u SSH_CLIENT agy models
+```
+
+조회 프로세스에만 적용한다. SSH 연결·전역 환경·기존 credential을 바꾸는 절차가 아니다.
+이 관찰만으로 모든 로그인 오류의 원인을 SSH라고 일반화하거나 token이 만료됐다고 판단하지 않는다.

@@ -14,6 +14,13 @@
 
 ## 책임과 개발 범위
 
+2026-11-23 agy 인증 조회 진단: 로그인 credential은 OS keyring에 남아 있고 잠금도 없었다.
+같은 사용자/HOME/binary에서 `SSH_CONNECTION` 또는 `SSH_CLIENT`가 있으면 `agy models`는 sign-in 필요로
+실패했고, 둘 다 제외하면 재로그인 없이23개 모델 조회가 성공했다. 기존 평가의 환경 allowlist도 SSH 변수를
+제외해 정상 동작했다. 수동 조회는 `env -u SSH_CONNECTION -u SSH_CLIENT agy models`로 실행한다.
+SSH 세션·전역 환경·인증 저장소는 변경하지 않는다. 이는 관찰한 auth 경로 선택 조건이며 OAuth 만료나
+credential 소실로 판정하지 않는다. agy 내부 선택 이유·다른 버전의 동일 동작은 미검증이다.
+
 2026-11-23 후속 구현·검증: [agy 도구 차단·usage 확인](docs/research/2026-11-23-agy-controls.md).
 공식 headless 예제와 실측에서 agy input은 cache 제외임을 확인해 host input=uncached+cache로 정규화했다
 (`agy-uncached-input/v1`). 기존98회 원본을 오프라인 재집계: 97회 보고 input895,827/cache20,392/
