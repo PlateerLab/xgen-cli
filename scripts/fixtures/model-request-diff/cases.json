@@ -4,27 +4,68 @@
     {
       "name": "trust-read-with-instructions",
       "description": "Trusted interactive session: environment note, project AGENTS.md, one read, then completion.",
-      "args": ["--trust"],
+      "args": [
+        "--trust"
+      ],
       "files": {
         "README.md": "fixture readme\n",
         "AGENTS.md": "Run tests with sh scripts/test.sh.\n"
       },
       "stdin": "Read README.md and report it.\n/exit\n",
       "replies": [
-        {"plan": ["read", "xgeny.fs/read-text", {"path": "README.md"}]},
-        {"completion": "README read."}
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "completion": "README read."
+        }
       ]
     },
     {
       "name": "approved-write-and-command",
       "description": "Untrusted interactive session with session permissions: write, failed command, completion.",
       "args": [],
-      "files": {"README.md": "fixture readme\n"},
+      "files": {
+        "README.md": "fixture readme\n"
+      },
       "stdin": "/permissions model allow\n/permissions read allow\n/permissions write allow\n/permissions execute allow\nSave notes.txt, run git with a bad option, and report.\n/exit\n",
       "replies": [
-        {"plan": ["save", "xgeny.fs/write-atomic", {"path": "notes.txt", "content": "notes\n", "expectedDigest": null}]},
-        {"plan": ["bad_git", "xgeny.process/execute", {"executable": "git", "args": ["--definitely-invalid-option"], "cwd": ".", "env": {}, "timeoutMs": 30000, "maxOutputBytes": 32768}]},
-        {"completion": "Saved notes.txt; the command failed."}
+        {
+          "plan": [
+            "save",
+            "xgeny.fs/write-atomic",
+            {
+              "path": "notes.txt",
+              "content": "notes\n",
+              "expectedDigest": null
+            }
+          ]
+        },
+        {
+          "plan": [
+            "bad_git",
+            "xgeny.process/execute",
+            {
+              "executable": "git",
+              "args": [
+                "--definitely-invalid-option"
+              ],
+              "cwd": ".",
+              "env": {},
+              "timeoutMs": 30000,
+              "maxOutputBytes": 32768
+            }
+          ]
+        },
+        {
+          "completion": "Saved notes.txt; the command failed."
+        }
       ]
     },
     {
@@ -34,19 +75,177 @@
       "files": {},
       "stdin": "Explain a queue.\ny\nWhat topic did I ask about?\ny\n/exit\n",
       "replies": [
-        {"response": "A queue is first-in first-out."},
-        {"response": "You asked about a queue."}
+        {
+          "response": "A queue is first-in first-out."
+        },
+        {
+          "response": "You asked about a queue."
+        }
       ]
     },
     {
       "name": "headless-run-read",
       "description": "Headless xgen run: legacy contract without session context or instructions.",
-      "args": ["run", "Read README.md and summarize it.", "--allow-dir", ".", "--allow-remote-model-egress", "--allow-read"],
-      "files": {"README.md": "fixture readme\n", "AGENTS.md": "Not read by headless runs.\n"},
+      "args": [
+        "run",
+        "Read README.md and summarize it.",
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "--allow-read"
+      ],
+      "files": {
+        "README.md": "fixture readme\n",
+        "AGENTS.md": "Not read by headless runs.\n"
+      },
       "stdin": "",
       "replies": [
-        {"plan": ["read", "xgeny.fs/read-text", {"path": "README.md"}]},
-        {"completion": "README summarized."}
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "completion": "README summarized."
+        }
+      ]
+    },
+    {
+      "name": "headless-resume-after-read-approval",
+      "files": {
+        "README.md": "fixture readme\n"
+      },
+      "sessions": [
+        {
+          "args": [
+            "run",
+            "Read README.md and summarize it.",
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress"
+          ]
+        },
+        {
+          "args": [
+            "resume",
+            "{run_id}",
+            "--allow-dir",
+            ".",
+            "--allow-remote-model-egress",
+            "--allow-read"
+          ]
+        }
+      ],
+      "replies": [
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "completion": "README summarized."
+        }
+      ],
+      "description": "Headless Run pauses for read approval; resume in a new process rebuilds the planning context from the journal."
+    },
+    {
+      "name": "interactive-reject-then-resume",
+      "files": {
+        "README.md": "fixture readme\n"
+      },
+      "args": [],
+      "stdin": "Read README.md and report it.\ny\nn\n/resume\ny\ny\n/exit\n",
+      "replies": [
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "completion": "README read after approval."
+        }
+      ],
+      "description": "Interactive read approval declined, then /resume approves it; the follow-up request carries the read output."
+    },
+    {
+      "name": "headless-capability-scope",
+      "files": {
+        "README.md": "fixture readme\n"
+      },
+      "args": [
+        "run",
+        "Read README.md and summarize it.",
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "--allow-read",
+        "--capability",
+        "xgeny.fs/read-text"
+      ],
+      "replies": [
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "completion": "README summarized."
+        }
+      ],
+      "description": "Headless Run restricted with --capability; the catalog and guidance shrink to the selected tool (ADR-0087)."
+    },
+    {
+      "name": "headless-rejected-response-retry",
+      "description": "An invalid completion (empty summary) is rejected and asked again; the retry request carries the rejection (ADR-0061, ADR-0064).",
+      "files": {
+        "README.md": "fixture readme\n"
+      },
+      "args": [
+        "run",
+        "Read README.md and summarize it.",
+        "--allow-dir",
+        ".",
+        "--allow-remote-model-egress",
+        "--allow-read"
+      ],
+      "stdin": "",
+      "replies": [
+        {
+          "plan": [
+            "read",
+            "xgeny.fs/read-text",
+            {
+              "path": "README.md"
+            }
+          ]
+        },
+        {
+          "raw": {
+            "formatVersion": 1,
+            "kind": "completion_candidate",
+            "steps": [],
+            "summary": ""
+          }
+        },
+        {
+          "completion": "README summarized."
+        }
       ]
     }
   ]
