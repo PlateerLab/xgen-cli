@@ -24,6 +24,8 @@ FAKE_XGEN = textwrap.dedent('''\
     goal = "Read README.md" + ("\\n\\nExtra instruction." if variant == "goal" else "")
     for call in range(2):
         context = {{"runId": run_id, "goal": goal, "call": call}}
+        if variant == "dropkey":
+            context = {{"runId": run_id, "call": call}}
         if variant == "order":
             context = {{"goal": goal, "runId": run_id, "call": call}}
         content = json.dumps({{"profileVersion": "v1", "planningContext": context}})
@@ -39,6 +41,24 @@ CASES = {'formatVersion': 1, 'cases': [
      'replies': [{'completion': 'a'}, {'completion': 'b'}]},
     {'name': 'two', 'args': [], 'files': {}, 'stdin': '', 'replies': [{'response': 'c'}, {'response': 'd'}]},
 ]}
+
+
+# A stand-in for a Run and its resume in a second process: the first session announces its
+# Run on stderr, and "resume RUN" continues it.
+RESUMABLE_XGEN = textwrap.dedent('''\
+    #!{python}
+    import json, os, secrets, sys, urllib.request
+    if sys.argv[1:2] == ["resume"]:
+        run_id = sys.argv[2]
+    else:
+        run_id = "run-" + secrets.token_hex(16)
+        print("XGEN_STARTED run_id=" + run_id, file=sys.stderr)
+    body = json.dumps({{"messages": [{{"role": "user", "content": json.dumps({{"runId": run_id}})}}]}})
+    request = urllib.request.Request(os.environ["XGEN_OPENAI_BASE_URL"] + "/chat/completions",
+                                     data=body.encode(), headers={{"Content-Type": "application/json"}})
+    urllib.request.urlopen(request, timeout=10).read()
+    sys.exit(10 if sys.argv[1:2] != ["resume"] else 0)
+    ''')
 
 
 class ModelRequestDiffTests(unittest.TestCase):
@@ -95,6 +115,27 @@ class ModelRequestDiffTests(unittest.TestCase):
         # The cache prefix breaks where the reordered object starts, not at the end.
         prefix = report['prefixes'][0]
         self.assertLess(prefix['offset'], prefix['baseLength'] // 2 + 60)
+
+    @unittest.skipIf(os.name == 'nt', 'the stand-in xgen is a shebang script')
+    def test_a_removed_key_is_reported_once_not_also_as_a_key_order_change(self):
+        code, report, _ = self.run_main('same', 'dropkey')
+        self.assertEqual(code, 1)
+        [group] = report['groups']
+        self.assertEqual(group['fingerprint'], '/messages/*/content~json/planningContext/goal | removed')
+
+    @unittest.skipIf(os.name == 'nt', 'the stand-in xgen is a shebang script')
+    def test_sessions_share_state_and_later_sessions_get_the_started_run_id(self):
+        binary = self.root / 'xgen-resumable'
+        binary.write_text(RESUMABLE_XGEN.format(python=sys.executable))
+        os.chmod(binary, 0o755)
+        case = {'name': 'resume', 'files': {}, 'replies': [{'completion': 'a'}, {'completion': 'b'}],
+                'sessions': [{'args': ['run']}, {'args': ['resume', '{run_id}']}]}
+        result = M.run_case(binary, case, self.root / 'case')
+        self.assertEqual(result['exit'], [10, 0])
+        first, second = (json.loads(json.loads(r['body'])['messages'][0]['content'])['runId']
+                         for r in result['requests'])
+        self.assertEqual(first, second)
+        self.assertEqual(result['unused'], 0)
 
     def test_noisy_fields_still_compare_by_shape(self):
         base = {'runId': 'run-' + 'a' * 32}

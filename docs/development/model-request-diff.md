@@ -26,8 +26,11 @@ python3 scripts/diff-model-requests.py --base ... --head ... --case headless-run
 ## 동작
 
 - 사례는 [`scripts/fixtures/model-request-diff/cases.json`](../../scripts/fixtures/model-request-diff/cases.json)에
-  있다. 작업 파일, CLI 인자, stdin, 대본 응답(`plan`·`completion`·`response`)으로 정의한다. 현재 4개:
-  trust + 프로젝트 `AGENTS.md` + 읽기, 비trust 권한 허용 + 쓰기·실패 명령, 대화 두 턴, headless `xgen run`.
+  있다. 작업 파일, CLI 인자, stdin, 대본 응답(`plan`·`completion`·`response`)으로 정의한다. 상태를 공유하는
+  여러 process는 `sessions`로 적고, 뒤 session의 `{run_id}`는 앞 session이 `XGEN_STARTED`로 알린 Run이다.
+  현재 8개: trust + 프로젝트 `AGENTS.md` + 읽기, 비trust 권한 허용 + 쓰기·실패 명령, 대화 두 턴, headless
+  `xgen run`, headless 승인 대기 후 별도 process `xgen resume`, 대화형 읽기 거절 후 `/resume` 승인,
+  `run --capability` 범위, 잘못된 완료 응답 거절 후 재질문. 대본 응답 `raw`로 잘못된 제안도 줄 수 있다.
 - 로컬 fake model이 두 빌드에 같은 응답을 준다. 대본이 끝나면 completion으로 끝낸다. base 빌드가 대본을
   다 쓰지 않으면 경고한다(사례가 더 이상 의도한 경로를 타지 않는다는 뜻).
 - 사례는 매번 같은 임시 경로에서 다시 만든다. 빌드마다 두 번씩 돌려, 같은 빌드에서도 달라지는 필드
@@ -60,10 +63,25 @@ python3 scripts/diff-model-requests.py --base ... --head ... --case headless-run
   key 순서 차이, noise 필드의 모양 비교, 펼치기, 반복 불가능한 빌드의 오류 처리. 실제 xgen 대신 같은
   wire 형식을 보내는 stand-in을 쓴다.
 
+## 사례 추가 검증 (2026-11-27)
+
+resume·거절·범위·응답 거절 재질문 사례 4개를 더한 뒤 처음 돌린 4쌍:
+
+| 변경 | 기대 | 결과 |
+|------|------|------|
+| ADR-0067 (`b75ffe5`) | idempotent Step의 `arguments`를 planning context에서 뺀다 | 차이 14개 3묶음: `steps/*/arguments` 제거. 새 resume 사례 2개에서도 같은 지문 |
+| #144 | 범위 사례만 달라진다(이전 빌드는 `--capability`를 모름) | `headless-capability-scope`만 `#calls 0->2`, `#exit 2->0`, 나머지 6개 일치 |
+| #149 안내 문구 | 요청 무관 | 일치 |
+| ADR-0064 (`1535af8`) | 거절된 응답 뒤 재질문에만 거절 이유를 넣는다 | 재시도 사례의 3번째 호출에만 `previousResponseRejection`(reason, meaning) 추가, 나머지 7개 일치 |
+
+- 처음에는 key가 빠진 객체가 "key 목록 변경"으로도 한 번 더 잡혀 같은 변경이 두 묶음으로 나왔다. 이제 공통
+  key의 순서가 바뀐 경우만 순서 차이로 보고, 추가·제거는 각 위치에서만 보고한다. 객체 전체가 추가·제거되면
+  그 필드들만 보고한다.
+- base 빌드가 사례를 못 돌리면(예: 없는 option) 첫 오류 줄과 함께 경고한다.
+
 ## 한계
 
-- 사례가 지나가는 경로만 본다. `--capability`, HTTP 도구, web search, resume, 승인 거절 같은 경로는 아직
-  사례가 없다. 필요한 변경이 생기면 사례를 추가한다.
+- 사례가 지나가는 경로만 본다. HTTP 도구, web search, PTY terminal 경로는 아직 사례가 없다. web search·HTTP는 별도 backend가 필요하다.
 - 모델 품질이 아니라 요청 바이트만 본다. 요청이 바뀐 것이 좋은지 나쁜지는 사람이 판단한다.
 - CI에서는 돌리지 않는다. main binary를 따로 빌드해야 해서 PR 시간이 늘어난다. 지금은 모델 요청에 영향이
   있을 수 있는 PR에서 로컬로 돌리고 결과를 PR 본문에 적는다.

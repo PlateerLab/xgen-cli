@@ -31,6 +31,7 @@ DEFAULT_CASES = Path(__file__).resolve().parent / "fixtures" / "model-request-di
 HEX = re.compile(r"[0-9a-f]{16,}")
 PORT = re.compile(r"127\.0\.0\.1:\d+")
 EXCERPT = 40
+RUN_ID = re.compile(r"XGEN_STARTED run_id=(\S+)")
 
 
 class CaseError(Exception):
@@ -50,6 +51,9 @@ def reply_content(reply):
         return {"formatVersion": 1, "kind": "completion_candidate", "steps": [], "summary": reply["completion"]}
     if "response" in reply:
         return {"formatVersion": 1, "kind": "response_candidate", "steps": [], "summary": reply["response"]}
+    if "raw" in reply:
+        # Any proposal as written, including invalid ones the host must reject.
+        return reply["raw"]
     raise CaseError(f"unknown reply {sorted(reply)}")
 
 
@@ -115,15 +119,28 @@ def run_case(binary, case, root):
         "XGEN_OPENAI_TOKENIZER": "request-diff-tokenizer",
     }
     env.update(case.get("env", {}))
+    # A case is one process, or several that share state (e.g. a Run and its resume).
+    # "{run_id}" in later arguments or input is the Run the previous sessions started.
+    sessions = case.get("sessions") or [{"args": case.get("args", []), "stdin": case.get("stdin", "")}]
+    exits, stderr, stdout, run_id = [], "", "", None
     try:
-        process = subprocess.run([str(binary), *case.get("args", [])], cwd=workspace, env=env,
-                                 input=case.get("stdin", "").encode(), capture_output=True, timeout=TIMEOUT)
-    except subprocess.TimeoutExpired as error:
-        raise CaseError(f"{case['name']}: {binary} timed out after {TIMEOUT}s") from error
+        for session in sessions:
+            fill = (lambda text: text.replace("{run_id}", run_id or "")) if run_id else (lambda text: text)
+            try:
+                process = subprocess.run([str(binary), *map(fill, session.get("args", []))], cwd=workspace,
+                                         env=env, input=fill(session.get("stdin", "")).encode(),
+                                         capture_output=True, timeout=TIMEOUT)
+            except subprocess.TimeoutExpired as error:
+                raise CaseError(f"{case['name']}: {binary} timed out after {TIMEOUT}s") from error
+            exits.append(process.returncode)
+            stderr = process.stderr.decode(errors="replace")
+            stdout = process.stdout.decode(errors="replace")
+            started = RUN_ID.findall(stderr)
+            run_id = started[-1] if started else run_id
     finally:
         model.close()
-    return {"exit": process.returncode, "requests": model.requests, "unused": len(model.replies),
-            "stderr": process.stderr.decode(errors="replace")[-2000:]}
+    return {"exit": exits if len(exits) > 1 else exits[0], "requests": model.requests,
+            "unused": len(model.replies), "stderr": stderr[-2000:], "stdout": stdout[-2000:]}
 
 
 def parse(value):
@@ -201,6 +218,10 @@ def excerpt(text, offset):
     return text[start:start + EXCERPT]
 
 
+def first_line(text):
+    return next((line for line in text.splitlines() if line.strip()), "")
+
+
 def describe(case, call, pointer, base, head):
     kind = "added" if base is None else "removed" if head is None else "changed"
     if pointer.endswith("#keys") and kind == "changed" and sorted(base) == sorted(head):
@@ -253,6 +274,12 @@ def compare_case(case, base_runs, head_runs):
         for pointer in list(base) + [p for p in head if p not in base]:
             left, right = base.get(pointer), head.get(pointer)
             same = shape(left) == shape(right) if pointer in noisy else left == right
+            if not same and pointer.endswith("#keys") and (left is None or right is None):
+                same = True  # a whole object added or removed: its fields are reported instead
+            elif not same and pointer.endswith("#keys") and left and right and set(left) != set(right):
+                # Added or removed keys are reported at their own pointers; only a changed
+                # order of the keys both sides share is a separate difference here.
+                same = [k for k in left if k in right] == [k for k in right if k in left]
             if not same:
                 differences.append(describe(name, call, pointer, left, right))
         left, right = masked_body(base_requests[call]), masked_body(head_requests[call])
@@ -292,7 +319,7 @@ def main(argv=None):
             if base_runs[0]["unused"]:
                 # The case no longer drives the base build through its script; say so.
                 print(f"warning: {case['name']}: base left {base_runs[0]['unused']} scripted replies "
-                      f"unused (exit {base_runs[0]['exit']}): {base_runs[0]['stderr'][-300:]}",
+                      f"unused (exit {base_runs[0]['exit']}): {first_line(base_runs[0]['stderr'])}",
                       file=sys.stderr)
             report["cases"].append({"name": case["name"], "calls": len(base_runs[0]["requests"]),
                                     "headCalls": len(head_runs[0]["requests"]), "noiseFields": noisy,
