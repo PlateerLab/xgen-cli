@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-20 (KST)
+갱신: 2026-11-27 (KST)
 
 ## 사용자가 정한 방향
 
@@ -13,6 +13,11 @@
 - 화면에는 작업 중 상태 표시와 최종 응답이 우선이다. 상세 실행 과정의 상시 노출은 필수가 아니다.
 
 ## 책임과 개발 범위
+
+2026-11-27 구현·로컬 검증: [빌드 간 모델 요청 비교](docs/development/model-request-diff.md).
+같은 대본 응답으로 두 binary를 돌려 모델 요청을 비교하고, 같은 빌드 두 번 실행의 차이를 noise로 가린 뒤
+남은 차이를 지문으로 묶는다. 과거 PR 5쌍(#124·#131 변경, #144·#146·#147 유지)에서 ADR 기대와 모두 같았다.
+사례 4개 경로 안의 결과이고 CI에는 넣지 않았다. 모델 요청에 영향 가능한 PR은 로컬로 돌려 PR에 적는다.
 
 2026-11-20 구현·로컬 검증: [Native build 전 공통 조립 검사](docs/adr/0089-release-assembly-preflight.md).
 PR Fast/Linux와 release quality에서 dependency·credential 없는 임시 환경으로 실제 pack→조립→checksum을
