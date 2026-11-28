@@ -105,6 +105,92 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(WORKER.summary_script("获取项目列表"), "Han")
         self.assertIsNone(WORKER.summary_script("123 / {}"))
 
+    def enrich(self, name, languages, answer):
+        """Run the host's plan -> answer -> store loop with `answer(batch) -> {local key: texts}`."""
+        completed = {}
+        for _ in range(2):
+            plan = self.call("enrichment_plan", name=name, languages=languages, completed=completed)
+            if not plan["batches"]:
+                break
+            answers = [{"keys": batch["keys"], "languages": batch["languages"],
+                        "value": {"summaries": answer(batch)}} for batch in plan["batches"]]
+            completed = self.call("enrichment_apply", name=name, languages=languages, completed=completed,
+                                  answers=answers)["completed"]
+        return self.call("enrichment_apply", name=name, languages=languages, completed=completed,
+                         answers=[], store=True, model="fixture-model")
+
+    def test_summary_enrichment_bridges_languages_but_planner_sees_sources(self):
+        korean = asset_spec()
+        korean["paths"]["/assets"]["get"]["summary"] = "자산 목록 조회"
+        korean["paths"]["/assets/{asset_id}"]["get"]["summary"] = "자산 상세 조회"
+        translations = {"자산 목록 조회": "Show all inventory assets", "자산 상세 조회": "Show one inventory asset",
+                        "List calendar events": "일정 목록 보기", "Read event details": "일정 상세 보기"}
+        cases = [("korean", korean, "show one inventory asset", "getAssetDetail", "자산 상세 조회", "Hangul"),
+                 ("calendar", calendar_spec(), "일정 상세 보기", "readEventDetails", "Read event details", "Latin")]
+        for name, spec, query, expected, original, script in cases:
+            with self.subTest(system=name):
+                self.install(name, spec)
+
+                def answer(batch):
+                    rows = json.loads(batch["user"])["operations"]
+                    self.assertEqual(set(batch["schema"]["properties"]["summaries"]["required"]),
+                                     {row["key"] for row in rows})
+                    return {row["key"]: {language: translations[row["summary"]] for language in batch["languages"]}
+                            for row in rows}
+
+                stored = self.enrich(name, ["ko", "en"], answer)
+                self.assertEqual((stored["enriched"], stored["failed"], stored["targets"]), (2, 0, 2))
+                self.assertEqual(stored["summary_enrichment"],
+                                 {"languages": ["ko", "en"], "model": "fixture-model", "operations": 2})
+                hit = self.call("search", name=name, query=query, top_k=1)["candidates"][0]
+                self.assertEqual((hit["tool"], hit["description"]), (expected, original))
+                self.assertEqual(self.call("describe", name=name, tool=expected)["tool"]["description"], original)
+                view = self.call("describe_view", name=name, tool=expected, parameter_offset=0)
+                self.assertEqual(view["tool"]["description"]["text"], original)
+                digest = stored["artifact_digest"]
+                hints = self.call("language_hints", request=query, snapshots={name: digest})["collections"][name]
+                self.assertEqual(hints, {"documentation_script": script, "script_differs": False})
+                japanese = self.call("language_hints", request="資産を表示", snapshots={name: digest})
+                self.assertTrue(japanese["collections"][name]["script_differs"])
+
+    def test_summary_enrichment_keeps_only_valid_answers_and_retries_the_rest(self):
+        self.install()
+        calls = []
+
+        def answer(batch):
+            calls.append(sorted(json.loads(batch["user"])["operations"][i]["summary"]
+                                for i in range(len(batch["keys"]))))
+            if len(calls) == 1:
+                # Wrong script, over-long text and a missing key are all rejected.
+                first, second = sorted(batch["keys"])
+                return {first: {"ko": "List assets"}, second: {"ko": "자" * 201}}
+            return {key: {"ko": "자산 보기"} for key in batch["keys"]}
+
+        stored = self.enrich("assets", ["ko"], answer)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual((stored["enriched"], stored["failed"]), (2, 0))
+        record = WORKER.load(self.root, "assets")["artifact"]["metadata"]["xgen_summary_enrichment"]
+        self.assertEqual(sorted(entry["texts"]["ko"] for entry in record["entries"]), ["자산 보기", "자산 보기"])
+        with self.assertRaisesRegex(WORKER.WorkerError, "invalid_enrichment_languages"):
+            self.call("enrichment_plan", name="assets", languages=["xx"], completed={})
+        with self.assertRaisesRegex(WORKER.WorkerError, "invalid_enrichment_answer"):
+            self.call("enrichment_plan", name="assets", languages=["ko"], completed={"s9:get:/nope": {"ko": "가"}})
+        with self.assertRaisesRegex(WORKER.WorkerError, "summary_enrichment_requires_local_sources"):
+            WORKER.enrichment_operations(["https://example.com/openapi.json"], ["ko"])
+
+    def test_rebuild_keeps_summary_enrichment(self):
+        self.install()
+        self.enrich("assets", ["ko"], lambda batch: {key: {"ko": "자산 보기"} for key in batch["keys"]})
+        before = WORKER.load(self.root, "assets")["artifact"]
+        self.rewrite("assets", lambda saved: saved.update(backend_version="0.0.1"))
+        self.assertTrue(self.call("rebuild", name="assets")["rebuilt"])
+        after = WORKER.load(self.root, "assets")["artifact"]
+        self.assertEqual(after["tools"], before["tools"])
+        self.assertEqual(after["metadata"]["xgen_summary_enrichment"], before["metadata"]["xgen_summary_enrichment"])
+        self.assertEqual(after["metadata"]["xgen_http_sources"], before["metadata"]["xgen_http_sources"])
+        found = self.call("search", name="assets", query="자산 보기", top_k=2)["candidates"]
+        self.assertEqual(sorted(hit["description"] for hit in found), ["List assets in inventory", "Read asset detail"])
+
     def test_required_producers_and_source_identity(self):
         self.install()
         result = self.call("search", name="assets", query="read asset detail", top_k=1)
@@ -301,6 +387,57 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(result["candidates"][0]["tool"], target)
                 self.assertEqual(call("describe", "--name", name, target)["tool"]["name"], target)
             self.assertEqual(len(call("list")["collections"]), 2)
+
+    def test_enrich_sends_operations_to_the_model_profile_and_stores_valid_answers(self):
+        seen = []
+
+        class Model(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                seen.append(body)
+                request = json.loads(body["messages"][1]["content"])
+                text = {"ko": "자산 항목 보기", "en": "Show asset entries"}
+                answer = {"summaries": {row["key"]: {language: text[language] for language in request["languages"]}
+                                        for row in request["operations"]}}
+                payload = json.dumps({"model": body["model"], "choices": [{"index": 0, "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)}}],
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 20}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Model)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, XGEN_STATE_HOME=directory, XGEN_CONFIG_HOME=directory + "/config",
+                       XGEN_OPENAI_BASE_URL=f"http://127.0.0.1:{server.server_port}/v1",
+                       XGEN_OPENAI_MODEL="fixture-model")
+            binary = os.environ["XGEN_TOOL_TEST_BINARY"]
+            path = Path(directory) / "assets.json"
+            path.write_text(json.dumps(asset_spec()))
+
+            def call(*args):
+                result = subprocess.run([binary, "tools", *args], env=env, capture_output=True, timeout=150)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                return json.loads(result.stdout)
+
+            call("import", "--name", "assets", "--source", str(path))
+            result = call("enrich", "--name", "assets", "--languages", "ko,en")
+            self.assertEqual((result["enriched"], result["failed"], result["model_calls"]), (2, 0, 1))
+            self.assertEqual((result["prompt_tokens"], result["completion_tokens"]), (100, 20))
+            self.assertEqual(result["summary_enrichment"]["model"], "fixture-model")
+            self.assertEqual(seen[0]["response_format"]["json_schema"]["name"], "xgen_summary_enrichment_v1")
+            self.assertEqual(json.loads(seen[0]["messages"][1]["content"])["languages"], ["ko"])
+            hit = call("search", "--name", "assets", "자산 항목 보기", "--top-k", "1")["candidates"][0]
+            self.assertIn(hit["description"], ["List assets in inventory", "Read asset detail"])
+            listed = call("list")["collections"][0]
+            self.assertEqual(listed["summary_enrichment"]["operations"], 2)
 
     def test_agent_loop_with_actual_worker_on_held_out_list_requests(self):
         binary = os.environ["XGEN_TOOL_TEST_BINARY"]
