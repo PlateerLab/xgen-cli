@@ -1,14 +1,14 @@
 # 실험용 agy 모델 연결
 
 Linux 개발 빌드에서 공식 agy CLI의 기존 로그인을 사용한다. Python bridge나 별도 서버는 필요 없다.
-현재 배포된 rc.8에는 이 기능이 없다. [ADR-0090](../adr/0090-experimental-agy-provider.md)을 따른다.
+rc.9부터 Linux 배포본에 실험 기능으로 포함되며 rc.8 이하에는 없다. [ADR-0090](../adr/0090-experimental-agy-provider.md)을 따른다.
 
 ## 연결
 
 설치된 공식 agy에서 로컬 로그인을 마친 뒤 실행한다. 인증값은 xgen 설정이나 채팅에 넣지 않는다.
 
-개발 빌드와 rc.8이 같은 설정 파일을 공유하지 않도록 별도 폴더를 지정한다. Agy 프로필이 들어간 설정은
-format2이며 rc.8은 읽지 못한다. 아래 명령은 저장소 루트에서 실행한다.
+agy를 쓰는 빌드와 rc.8 이하가 같은 설정 파일을 공유하지 않도록 별도 폴더를 지정한다. Agy 프로필이 들어간 설정은
+format2이며 rc.8 이하는 읽지 못한다. 아래 명령은 저장소 루트에서 실행한다.
 
 ```bash
 export XGEN_CONFIG_HOME="$HOME/.config/xgen-agy-preview"
