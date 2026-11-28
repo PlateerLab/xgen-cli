@@ -204,6 +204,7 @@ durable completion에 저장해. 기존 기본 출력은 유지해.
 - [ADR-0045: 제공자 온보딩과 최소 대화 화면](docs/adr/0045-interactive-onboarding-and-thinking-display.md)
 - [ADR-0046: XGEN 이름 통일과 기존 저장 데이터 호환](docs/adr/0046-xgen-public-name-and-storage-compatibility.md)
 - [ADR-0034: npm granular token 게시와 provenance 분리](docs/adr/0034-npm-token-publishing-policy.md)
+- [ADR-0095: npm trusted publishing(OIDC) 게시](docs/adr/0095-npm-trusted-publishing.md)
 
 ## 개발 및 검증
 
