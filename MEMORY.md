@@ -15,6 +15,14 @@
 
 ## 책임과 개발 범위
 
+2026-11-28 구현·로컬 검증: [Provider 거절 이유 표시](docs/adr/0093-provider-rejection-display.md) (A안, 화면 전용).
+4xx 본문을 최대 16 KiB 읽어 type/code/message를 정리해 headless `provider:`·대화형 `Provider said:`·model check에 보인다.
+Key·Bearer·긴 token은 지우고 300자에서 자른다. Journal·planning context·model 요청은 그대로다(모델 요청 비교 8/8 일치).
+가짜 key 실측: 설계 사례 2곳(DeepSeek·OpenAI)과 설계에 쓰지 않은 9곳에서 모두 이유가 보였다. 처음에는 Mistral(FastAPI `detail`)이 비었고,
+OpenAI가 가려서 돌려준 key의 앞부분도 남아 있었다. 둘 다 고쳤다. Compatibility probe의 401/403은 `authentication_rejected`로 바뀌었다.
+남은 것: agy 거절은 대상이 아니고, resume 뒤에는 이유가 다시 보이지 않는다. Journal에 남기는 B안은 필요할 때 따로 정한다.
+책임: xgen CLI(provider 연결 계층·표시).
+
 2026-11-28 배포 완료: [rc.9](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.9) 게시. 버전 PR #162(d5bea9c)는
 rc.8 이후 #152~#161(agy Rust transport, `xgen tools enrich`와 사용량 저장, agy 자동 업데이트 차단, Run 중 후속 지시)을 담는다.
 Main CI 7개, Release run 46141667086의 19개 job(설치 검증 10개 포함)이 재실행 없이 통과했다(약 42분).

@@ -36,6 +36,7 @@ pub use manifest::MAX_HOST_MODEL_TURNS;
 pub use model_profile::*;
 pub use run_layout::StateDirectoryPermissions;
 pub use usage::{CostEstimate, TokenPrices, UsageReport, UsdPerMillion, inspect_local_usage};
+pub use xgen_provider_openai::ProviderRejection;
 
 #[doc(hidden)]
 pub use environment::compatible_environment;

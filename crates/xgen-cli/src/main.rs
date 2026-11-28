@@ -14,10 +14,11 @@ use xgen_cli::{
     OsModelCredentialStore, PublicRunError, RequestOptions, ResolvedModelEndpoint,
     check_openai_compatibility, check_openai_model, discard_local_model_call,
     discard_local_model_call_at_head, inspect_local_model_call, list_openai_models,
-    new_credential_reference, prepare_local_process_session,
+    new_credential_reference, prepare_local_process_session, provider_rejection_hint,
     resume_local_with_model_resolver_and_progress,
     resume_local_with_process_session_and_model_resolver_progress,
     run_interactive_with_process_session_progress, run_local_with_progress,
+    take_model_check_rejection,
 };
 use xgen_provider_openai::{
     BearerCredential, OpenAiCompatibilityCheckFailure, ParameterStyle, ResponseFormat, ThinkingMode,
@@ -2581,6 +2582,9 @@ fn print_state_directory_details(error: &PublicRunError) {
 fn present_model_command_error(command: &str, error: ModelCliError) -> ExitCode {
     eprintln!("XGEN model {command}: FAIL");
     eprintln!("  reason={}", error.code());
+    if matches!(error, ModelCliError::Check(_)) {
+        print_model_check_rejection();
+    }
     eprintln!("  recovery: {}", error.recovery_hint());
     ExitCode::from(error.exit_code())
 }
@@ -2594,11 +2598,18 @@ fn present_model_configuration_error(error: ModelCliError) -> ExitCode {
 fn present_model_check_error(error: ModelCheckError) -> ExitCode {
     eprintln!("XGEN model check: FAIL");
     eprintln!("  reason={}", error.code());
+    print_model_check_rejection();
     eprintln!(
         "  recovery: {}",
         ModelCliError::Check(error).recovery_hint()
     );
     ExitCode::from(error.exit_code())
+}
+
+fn print_model_check_rejection() {
+    if let Some(rejection) = take_model_check_rejection() {
+        eprintln!("  provider: {rejection}");
+    }
 }
 
 fn print_licenses() -> ExitCode {
@@ -2701,8 +2712,16 @@ fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
             }
             ExitCode::from(10)
         }
-        Ok(LocalCommandResult::Rejected { run_id, reason }) => {
+        Ok(LocalCommandResult::Rejected {
+            run_id,
+            reason,
+            provider,
+        }) => {
             eprintln!("XGEN_REJECTED run_id={run_id} reason={}", reason.code());
+            if let Some(rejection) = &provider {
+                eprintln!("  provider: {rejection}");
+                eprintln!("  recovery: {}", provider_rejection_hint(rejection));
+            }
             print_committed_changes(&run_id);
             if let Some(code) = reason.failure_code() {
                 eprintln!("XGEN_STEP_FAILURE run_id={run_id} code={code}");
