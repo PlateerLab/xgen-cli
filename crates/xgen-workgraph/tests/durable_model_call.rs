@@ -907,3 +907,94 @@ fn stale_head_requires_stale_rejection_and_other_rejections_require_immediate_he
         Err(TransitionError::ModelCallSettlementHeadMismatch)
     ));
 }
+
+#[test]
+fn user_instructions_are_taken_only_between_calls_of_an_unfinished_loop() {
+    let instruction = |text: &str| RunEventBody::UserInstructionAdded {
+        text: text.to_owned(),
+    };
+    let created = append(
+        None,
+        "run-created",
+        RunEventBody::RunCreated {
+            goal: "finish a durable model-owned task".to_owned(),
+        },
+    );
+    assert!(matches!(
+        try_append(Some(&created), "too-early", instruction("first")),
+        Err(TransitionError::AgentLoopNotConfigured)
+    ));
+    let configured = configure_calls(&configured_state(4), 4);
+    assert!(
+        !serde_json::to_string(&configured)
+            .unwrap()
+            .contains("userInstructions"),
+        "a Run without instructions keeps its projection bytes"
+    );
+    let steered = append(Some(&configured), "instruction-1", instruction("first"));
+    assert_eq!(
+        steered.agent_loop.as_ref().unwrap().user_instructions,
+        ["first"]
+    );
+    for text in [
+        " \n".to_owned(),
+        "x".repeat(xgen_workgraph::MAX_USER_INSTRUCTION_BYTES + 1),
+    ] {
+        assert!(matches!(
+            try_append(Some(&steered), "invalid", instruction(&text)),
+            Err(TransitionError::InvalidUserInstruction)
+        ));
+    }
+    let call = reservation(&steered, 1, 1, 'c');
+    let reserved = reserve(&steered, &call, "call-reserved");
+    assert!(matches!(
+        try_append(Some(&reserved), "during-call", instruction("second")),
+        Err(TransitionError::ModelCallActive)
+    ));
+
+    let mut full = steered.clone();
+    for index in 2..=xgen_workgraph::MAX_USER_INSTRUCTIONS {
+        full = append(
+            Some(&full),
+            &format!("instruction-{index}"),
+            instruction(&format!("instruction {index}")),
+        );
+    }
+    assert!(matches!(
+        try_append(Some(&full), "over-limit", instruction("one more")),
+        Err(TransitionError::InvalidUserInstruction)
+    ));
+
+    let planned = append(
+        Some(&steered),
+        "legacy-step",
+        RunEventBody::StepPlanned {
+            step_id: "completed-step".to_owned(),
+            objective: "provide a receipt-completed graph".to_owned(),
+            depends_on: Vec::new(),
+        },
+    );
+    let mut completed = planned;
+    let step = completed.steps.get_mut("completed-step").unwrap();
+    step.status = StepStatus::Completed;
+    step.execution_receipt_id = Some("receipt-completed-step".to_owned());
+    step.execution_receipt_digest = Some(digest('e'));
+    let call = reservation(&completed, 1, 1, 'c');
+    let reserved = reserve(&completed, &call, "completion-call-reserved");
+    let proposal_digest = digest('p');
+    let finished = append(
+        Some(&reserved),
+        "completion-candidate",
+        RunEventBody::CompletionCandidateRecorded {
+            response_kind: xgen_workgraph::ResponseKind::TaskCompletion,
+            decision: model_decision(&call, &proposal_digest),
+            candidate_id: "completion-candidate-1".to_owned(),
+            summary_digest: digest('s'),
+            completion_output_record_digest: None,
+        },
+    );
+    assert!(matches!(
+        try_append(Some(&finished), "after-completion", instruction("late")),
+        Err(TransitionError::CompletionCandidateAlreadyRecorded)
+    ));
+}

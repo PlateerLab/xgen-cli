@@ -14,8 +14,8 @@ use xgen_adapter_filesystem::{
     WorkspaceRoot,
 };
 use xgen_cli::{
-    ApprovalDecision, ApprovalPort, ApprovalPortFailure, DriverOutcome, PlannedRouteFailure,
-    PlannedRoutePort, RunDriver,
+    ApprovalDecision, ApprovalPort, ApprovalPortFailure, DriverOutcome, FollowUpInbox,
+    PlannedRouteFailure, PlannedRoutePort, RunDriver,
 };
 use xgen_domain::{
     Architecture, CapabilityDefinitionBody, CapabilityInstanceBody, CapabilityRef, DataBoundary,
@@ -1482,6 +1482,231 @@ fn sqlite_driver_completes_read_only_plan_with_core_bound_artifact_and_replays()
         "a successful test process without the selected child test is not sufficient"
     );
     assert_persisted_files_exclude(directory.path(), &[RAW_PATH, CANONICAL_PATH]);
+}
+
+/// A planner that types a follow-up instruction while its `steer_on_call`-th call is in flight.
+struct SteeringPlanner {
+    inner: ScriptedPlanner,
+    inbox: FollowUpInbox,
+    steer_on_call: usize,
+}
+
+const STEERING_TEXT: &str = "Answer in Korean from now on.";
+
+impl PlannerPort for SteeringPlanner {
+    fn planner_id(&self) -> &str {
+        self.inner.planner_id()
+    }
+
+    fn request_profile_digest(&self) -> &str {
+        self.inner.request_profile_digest()
+    }
+
+    fn plan(
+        &mut self,
+        request: &PlannerCallRequest<'_>,
+    ) -> Result<PlanProposal, PlannerPortFailure> {
+        let proposal = self.inner.plan(request);
+        if self.inner.calls.get() == self.steer_on_call {
+            self.inbox.push(STEERING_TEXT.to_owned());
+        }
+        proposal
+    }
+}
+
+const STEERING_RUN_ID: &str = "run-cli-driver-steering";
+
+#[test]
+#[allow(clippy::too_many_lines)] // Same fixture as the real filesystem Run above.
+fn instruction_typed_during_a_model_call_reaches_the_next_call_and_replays() {
+    let directory = tempdir().expect("temporary test directory should exist");
+    let workspace_path = directory.path().join("workspace");
+    fs::create_dir(&workspace_path).expect("workspace should create");
+    fs::write(workspace_path.join("README.md"), REAL_FILE_CONTENT)
+        .expect("workspace fixture should write");
+    let workspace = WorkspaceRoot::open_ambient(
+        &workspace_path,
+        WorkspaceId::new("fixture").expect("workspace ID should validate"),
+    )
+    .expect("workspace capability should open");
+    let resolver = workspace.resolver();
+
+    let definition = definition_fixture();
+    let mut instance = instance_fixture(&definition);
+    instance.binding = workspace.binding();
+    instance.features.cancellable = false;
+    assert!(instance.features.sync);
+    assert!(!instance.features.task);
+    assert!(!instance.features.cancellable);
+    assert!(!instance.features.idempotency_query);
+    let capability = CapabilityRef {
+        capability_id: definition.metadata.id.clone(),
+        contract_version: definition.metadata.contract_version.clone(),
+    };
+    let mut registry = CapabilityRegistry::new();
+    registry
+        .register_schema_validated_definition(definition)
+        .expect("definition should register");
+    registry
+        .register_schema_validated_instance(instance.clone())
+        .expect("root-bound instance should register");
+
+    let prepare_calls = Rc::new(Cell::new(0));
+    let execute_calls = Rc::new(Cell::new(0));
+    let verify_calls = Rc::new(Cell::new(0));
+    let adapter = workspace.read_text_adapter(ReadTextLimits::default());
+    let verifier = adapter.verifier();
+    let mut adapters = EffectAdapterRegistry::new();
+    adapters
+        .register(
+            &instance.binding,
+            CountingReadAdapter {
+                inner: adapter,
+                prepare_calls: Rc::clone(&prepare_calls),
+                execute_calls: Rc::clone(&execute_calls),
+            },
+        )
+        .expect("read adapter should register");
+    let mut verifiers = EffectVerifierRegistry::new();
+    verifiers
+        .register(
+            &instance.binding,
+            CountingReadVerifier {
+                inner: verifier,
+                calls: Rc::clone(&verify_calls),
+            },
+        )
+        .expect("read verifier should register");
+
+    let recipes = RecipeState(Rc::new(RefCell::new(BTreeMap::new())));
+    let mut materializer = MemoryRecipeMaterializer {
+        state: recipes.clone(),
+        next: 0,
+    };
+    let mut providers = MaterialProviderRegistry::new();
+    providers
+        .register("test-recipes", MemoryRecipeProvider(recipes))
+        .expect("material provider should register");
+    let planner_calls = Rc::new(Cell::new(0));
+    let planner_contexts = Rc::new(RefCell::new(Vec::new()));
+    let inbox = FollowUpInbox::new();
+    let mut planner = SteeringPlanner {
+        inbox: inbox.clone(),
+        steer_on_call: 1,
+        inner: ScriptedPlanner {
+            proposals: VecDeque::from([
+                PlanProposal::plan(vec![ProposedPlanStep::new(
+                    "read",
+                    "read one real workspace file",
+                    Vec::new(),
+                    capability.clone(),
+                    json!({"path": "README.md"}),
+                )]),
+                PlanProposal::completion_candidate("REAL-FILESYSTEM-COMPLETION"),
+            ]),
+            calls: Rc::clone(&planner_calls),
+            contexts: Rc::clone(&planner_contexts),
+            context_sizes: Rc::new(RefCell::new(Vec::new())),
+            context_digests: Rc::new(RefCell::new(Vec::new())),
+        },
+    };
+    let mut routes = ExactReadOnlyRoute {
+        capability,
+        instance_id: instance.instance_id.clone(),
+    };
+    let database = directory.path().join("steering.sqlite3");
+    let lease_path = directory.path().join("steering.lock");
+    let mut store = SqliteRunStore::open(&database).expect("SQLite should open");
+    store
+        .append(
+            ExpectedHead::Empty,
+            RunEvent {
+                event_id: "steering-seed".to_owned(),
+                run_id: STEERING_RUN_ID.to_owned(),
+                authority: "local:test".to_owned(),
+                authority_epoch: 1,
+                recorded_at: "2026-08-30T10:00:00Z".to_owned(),
+                body: RunEventBody::RunCreated {
+                    goal: "read a real local fixture".to_owned(),
+                },
+            },
+        )
+        .expect("Run should initialize");
+    let lease =
+        LocalRunLease::try_acquire(STEERING_RUN_ID, &lease_path).expect("Run lease should acquire");
+    let budget = AgentLoopBudget::new(2, 1, 1, MVP_CONTEXT_BUDGET_BYTES)
+        .expect("MVP context budget should validate");
+    let mut approvals = AllowExactRequest;
+    let mut events = DeterministicEvents;
+
+    let outcome = RunDriver::new(AgentLoop::new(budget.clone()), NonZeroU32::new(32).unwrap())
+        .with_follow_ups(inbox.clone())
+        .drive_until_pause(
+            &mut store,
+            &mut events,
+            &lease,
+            &registry,
+            &resolver,
+            &mut planner,
+            &mut materializer,
+            &mut providers,
+            &mut adapters,
+            &mut verifiers,
+            &mut routes,
+            &mut approvals,
+        )
+        .expect("steered Run should complete");
+    assert!(matches!(outcome, DriverOutcome::CompletionCandidate { .. }));
+    let contexts = planner_contexts.borrow();
+    assert_eq!(contexts.len(), 2);
+    // The call in flight answered the context it was given; the next one sees the instruction.
+    assert!(contexts[0].get("userInstructions").is_none());
+    assert_eq!(
+        contexts[1]["userInstructions"]["items"],
+        json!([STEERING_TEXT])
+    );
+    assert!(
+        contexts[1]["userInstructions"]["meaning"]
+            .as_str()
+            .is_some_and(|meaning| meaning.contains("later one wins"))
+    );
+    drop(contexts);
+    assert_eq!(inbox.take_delivered(), [STEERING_TEXT]);
+    assert!(inbox.pending().is_empty());
+    let state = store.load_current().unwrap().unwrap();
+    assert_eq!(
+        state.agent_loop.as_ref().unwrap().user_instructions,
+        [STEERING_TEXT]
+    );
+    let journal = String::from_utf8(store.export_jsonl().unwrap()).unwrap();
+    assert_eq!(journal.matches("user_instruction_added").count(), 1);
+    drop(store);
+    let reopened = SqliteRunStore::open(&database).expect("SQLite should reopen");
+    assert_eq!(reopened.load_current().unwrap().unwrap(), state);
+
+    // A completed Run takes no more instructions; they stay for the next goal.
+    let mut reopened = reopened;
+    inbox.push("too late".to_owned());
+    let replay = RunDriver::new(AgentLoop::new(budget), NonZeroU32::new(1).unwrap())
+        .with_follow_ups(inbox.clone())
+        .drive_until_pause(
+            &mut reopened,
+            &mut events,
+            &lease,
+            &registry,
+            &resolver,
+            &mut planner,
+            &mut materializer,
+            &mut providers,
+            &mut adapters,
+            &mut verifiers,
+            &mut routes,
+            &mut approvals,
+        )
+        .expect("completed Run should replay");
+    assert!(matches!(replay, DriverOutcome::CompletionCandidate { .. }));
+    assert_eq!(inbox.pending(), ["too late"]);
+    assert_eq!(planner_calls.get(), 2);
 }
 
 fn run_completion_restart_child() {

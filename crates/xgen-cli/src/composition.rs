@@ -64,7 +64,7 @@ use crate::allow_process::{
 };
 use crate::driver::{
     ApprovalDecision, ApprovalPort, ApprovalPortFailure, DriverOutcome, DriverProgress,
-    DriverProgressControl, PlannedRouteFailure, PlannedRoutePort, RunDriver,
+    DriverProgressControl, FollowUpInbox, PlannedRouteFailure, PlannedRoutePort, RunDriver,
 };
 use crate::graph_discovery::{self, DiscoveryCatalog};
 use crate::manifest::{ManifestBudget, RunManifest};
@@ -156,6 +156,8 @@ pub struct LocalRunRequest {
     pub conversation_responses: bool,
     /// Optional capability IDs; empty retains the full catalog. Saved for resume.
     pub capabilities: Vec<String>,
+    /// Instructions typed while the Run executes (interactive sessions only, ADR-0092).
+    pub follow_ups: Option<FollowUpInbox>,
 }
 
 impl LocalRunRequest {
@@ -192,6 +194,7 @@ impl LocalRunRequest {
             completion_checks: None,
             conversation_responses: false,
             capabilities: Vec::new(),
+            follow_ups: None,
         }
     }
 }
@@ -215,6 +218,8 @@ pub struct LocalResumeRequest {
     pub allow_write: bool,
     pub allow_execute: bool,
     pub max_ticks: u32,
+    /// Instructions typed while the Run executes (interactive sessions only, ADR-0092).
+    pub follow_ups: Option<FollowUpInbox>,
 }
 
 /// Deferred provider settings resolved only when an incomplete Run needs model access.
@@ -1294,6 +1299,7 @@ where
         request.allow_write,
         request.allow_execute,
         request.max_ticks,
+        request.follow_ups,
         &mut on_progress,
     )
 }
@@ -1601,6 +1607,7 @@ where
         request.allow_write,
         request.allow_execute,
         request.max_ticks,
+        request.follow_ups,
         &mut on_progress,
     )
 }
@@ -1748,6 +1755,7 @@ fn continue_incomplete(
     allow_write: bool,
     allow_execute: bool,
     max_ticks: u32,
+    follow_ups: Option<FollowUpInbox>,
     on_progress: &mut impl FnMut(DriverProgress) -> DriverProgressControl,
 ) -> Result<LocalCommandResult, PublicRunError> {
     let command_process = process.map(ProcessTooling::with_fresh_terminal_sessions);
@@ -1999,10 +2007,13 @@ fn continue_incomplete(
             .with_planning_constraints(planning_constraints)
             .map_err(|_| PublicRunError::Internal)?;
     }
-    let driver = RunDriver::new(
+    let mut driver = RunDriver::new(
         loop_runtime,
         NonZeroU32::new(max_ticks).ok_or(PublicRunError::Configuration)?,
     );
+    if let Some(inbox) = follow_ups {
+        driver = driver.with_follow_ups(inbox);
+    }
     let Ok(outcome) = driver.drive_until_pause_with_model_egress_observed(
         store,
         &mut events,
@@ -4377,6 +4388,7 @@ mod tests {
             completion_checks: None,
             conversation_responses: false,
             capabilities: Vec::new(),
+            follow_ups: None,
         };
         assert_eq!(
             run_local(request).unwrap(),
@@ -4438,6 +4450,7 @@ mod tests {
             completion_checks: None,
             conversation_responses: false,
             capabilities: Vec::new(),
+            follow_ups: None,
         };
         assert!(matches!(
             run_local_with_process_session_progress(

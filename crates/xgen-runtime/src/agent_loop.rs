@@ -467,6 +467,10 @@ struct PlanningContextPayload {
     omitted_steps: usize,
     total_steps: usize,
     verified_completed_steps: usize,
+    /// Instructions the user added while the Run executed (ADR-0092). Absent until the first
+    /// one, so Runs without them keep their request bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_instructions: Option<UserInstructions>,
     /// Why the previous response was discarded, when it was (ADR-0064).
     #[serde(skip_serializing_if = "Option::is_none")]
     previous_response_rejection: Option<PreviousResponseRejection>,
@@ -476,6 +480,19 @@ struct PlanningContextPayload {
     journal_sequence: u64,
     journal_head_digest: String,
 }
+
+/// Instructions from the goal's author received during the Run, with a fixed reading (ADR-0092).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserInstructions {
+    meaning: &'static str,
+    items: Vec<String>,
+}
+
+const USER_INSTRUCTIONS_MEANING: &str = "The user who wrote goal added these instructions while \
+     this Run was executing, oldest first. They are part of the goal: follow them from now on. \
+     When one conflicts with goal or with an earlier instruction, the later one wins. Steps and \
+     toolOutputs that happened before an instruction stay as they are.";
 
 /// Journal-derived fact about the discarded previous response (ADR-0064).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -2167,6 +2184,56 @@ where
     Ok(store.append(ExpectedHead::from_state(state), event)?)
 }
 
+/// Append an instruction the user added while the Run executes (ADR-0092).
+///
+/// Call it only between durable steps, before the next model call is reserved. Returns
+/// `Ok(false)` without changing the Run when it cannot take an instruction now: it has no agent
+/// loop yet, a model call is in flight, a completion is already recorded, the text is empty or
+/// too large, or the per-Run limit is reached. The caller keeps such text for a later goal.
+///
+/// # Errors
+///
+/// Returns store, lease, or event metadata failures.
+pub fn add_user_instruction<S, F, L>(
+    store: &mut S,
+    events: &mut F,
+    lease: &L,
+    text: &str,
+) -> Result<bool, AgentLoopError>
+where
+    S: RunStore,
+    F: EventFactory,
+    L: RunLease,
+{
+    let state = store
+        .load_current()?
+        .ok_or(AgentLoopError::RunNotInitialized)?;
+    verify_lease(lease, &state)?;
+    let Some(loop_state) = state.agent_loop.as_ref() else {
+        return Ok(false);
+    };
+    if loop_state.completion_candidate.is_some()
+        || loop_state
+            .model_calls
+            .as_ref()
+            .is_some_and(|calls| calls.active_call.is_some())
+        || text.trim().is_empty()
+        || text.len() > xgen_workgraph::MAX_USER_INSTRUCTION_BYTES
+        || loop_state.user_instructions.len() >= xgen_workgraph::MAX_USER_INSTRUCTIONS
+    {
+        return Ok(false);
+    }
+    let event = create_event(
+        events,
+        &state,
+        RunEventBody::UserInstructionAdded {
+            text: text.to_owned(),
+        },
+    )?;
+    store.append(ExpectedHead::from_state(&state), event)?;
+    Ok(true)
+}
+
 fn verify_lease<L: RunLease>(lease: &L, state: &RunState) -> Result<(), AgentLoopError> {
     if lease.run_id() != state.run_id {
         return Err(AgentLoopError::LeaseRunMismatch);
@@ -2753,6 +2820,14 @@ fn build_context_ordered(
         planning_constraints: planning_constraints.to_vec(),
         total_steps: frontier.total_steps,
         verified_completed_steps: frontier.verified_completed_step_ids.len(),
+        user_instructions: state
+            .agent_loop
+            .as_ref()
+            .filter(|loop_state| !loop_state.user_instructions.is_empty())
+            .map(|loop_state| UserInstructions {
+                meaning: USER_INSTRUCTIONS_MEANING,
+                items: loop_state.user_instructions.clone(),
+            }),
         previous_response_rejection: state
             .agent_loop
             .as_ref()
@@ -2822,6 +2897,14 @@ fn planning_context_preflight(state: &RunState, registry: &CapabilityRegistry) -
         .checked_add(state.authority.len())
         .and_then(|total| total.checked_add(state.journal_head_digest.len()))
         .and_then(|total| total.checked_add(state.goal.len()))
+        .and_then(|total| {
+            state.agent_loop.as_ref().map_or(Some(total), |loop_state| {
+                loop_state
+                    .user_instructions
+                    .iter()
+                    .try_fold(total, |total, text| total.checked_add(text.len()))
+            })
+        })
         .is_some_and(|total| total <= MAX_PLANNING_HEADER_TEXT_BYTES)
         && registry.definition_count() <= MAX_PLANNING_CATALOG_DEFINITIONS
         && state.steps.len() <= MAX_PLANNING_SOURCE_STEPS
@@ -3684,6 +3767,7 @@ mod tests {
                 accepted_model_turns: 0,
                 model_calls: None,
                 completion_candidate: None,
+                user_instructions: Vec::new(),
             }),
         }
     }

@@ -1,5 +1,7 @@
+use std::collections::VecDeque;
 use std::fmt;
 use std::num::NonZeroU32;
+use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
 use xgen_domain::EffectClass;
@@ -11,7 +13,7 @@ use xgen_runtime::{
     EffectVerifierRegistry, EventFactory, InvocationAdmission, InvocationMaterialRecovery,
     MaterialProviderRegistry, MaterialRecoveryError, PlanMaterializer, PlanMaterializerFailure,
     PlannedAdmissionRequest, PlannerPort, PlannerPortFailure, ProposalRejection, RouteOutcome,
-    RouteRequest, RunLease, VerificationRunner, VerificationRunnerError,
+    RouteRequest, RunLease, VerificationRunner, VerificationRunnerError, add_user_instruction,
 };
 use xgen_workgraph::{
     CompletionCandidateState, CompletionOutputRecord, ContinuationAction, FrontierError,
@@ -152,6 +154,97 @@ pub const MAX_REJECTED_RESPONSE_RETRIES: u32 = 2;
 /// streak in the measured Runs never ended before ten more calls.
 pub const MAX_REPEATED_ACTION_RETRIES: u32 = 8;
 
+/// Instructions a user types while a Run executes, shared between the input thread and the
+/// driver (ADR-0092).
+///
+/// The driver takes them at the next model-call boundary and journals them, so a model call
+/// already in flight never sees a context that changed under it. Text the Run could not take
+/// stays here; the interactive session runs it as the next goal.
+#[derive(Debug, Clone, Default)]
+pub struct FollowUpInbox(Arc<Mutex<FollowUps>>);
+
+#[derive(Debug, Default)]
+struct FollowUps {
+    pending: VecDeque<String>,
+    delivered: Vec<String>,
+}
+
+impl FollowUpInbox {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn push(&self, text: String) {
+        if let Ok(mut inbox) = self.0.lock() {
+            inbox.pending.push_back(text);
+        }
+    }
+
+    /// Texts not yet journaled, oldest first.
+    #[must_use]
+    pub fn pending(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .map(|inbox| inbox.pending.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Remove and return every text not yet journaled.
+    #[must_use]
+    pub fn take_pending(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .map(|mut inbox| inbox.pending.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Remove and return texts journaled since the last call, for display.
+    #[must_use]
+    pub fn take_delivered(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .map(|mut inbox| std::mem::take(&mut inbox.delivered))
+            .unwrap_or_default()
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut inbox) = self.0.lock() {
+            inbox.pending.clear();
+        }
+    }
+
+    fn deliver<S, F, L>(
+        &self,
+        store: &mut S,
+        events: &mut F,
+        lease: &L,
+    ) -> Result<(), AgentLoopError>
+    where
+        S: RunStore,
+        F: EventFactory,
+        L: RunLease,
+    {
+        loop {
+            let Some(text) = self
+                .0
+                .lock()
+                .ok()
+                .and_then(|inbox| inbox.pending.front().cloned())
+            else {
+                return Ok(());
+            };
+            if !add_user_instruction(store, events, lease, &text)? {
+                return Ok(());
+            }
+            if let Ok(mut inbox) = self.0.lock() {
+                inbox.pending.pop_front();
+                inbox.delivered.push(text);
+            }
+        }
+    }
+}
+
 /// Provider-neutral bounded coordinator used by CLI composition roots and hermetic tests.
 #[derive(Debug, Clone)]
 pub struct RunDriver {
@@ -159,6 +252,7 @@ pub struct RunDriver {
     executor: DirectExecutor,
     verifier: VerificationRunner,
     max_ticks: NonZeroU32,
+    follow_ups: Option<FollowUpInbox>,
 }
 
 impl RunDriver {
@@ -169,12 +263,20 @@ impl RunDriver {
             executor: DirectExecutor::new(),
             verifier: VerificationRunner::new(),
             max_ticks,
+            follow_ups: None,
         }
     }
 
     #[must_use]
     pub const fn with_executor(mut self, executor: DirectExecutor) -> Self {
         self.executor = executor;
+        self
+    }
+
+    /// Journal instructions from `inbox` before each model call (ADR-0092).
+    #[must_use]
+    pub fn with_follow_ups(mut self, inbox: FollowUpInbox) -> Self {
+        self.follow_ups = Some(inbox);
         self
     }
 
@@ -332,6 +434,9 @@ impl RunDriver {
                 }
                 if observer(DriverProgress::ModelCallStarting) == DriverProgressControl::Cancel {
                     return Ok(DriverOutcome::Cancelled);
+                }
+                if let Some(inbox) = &self.follow_ups {
+                    inbox.deliver(store, events, lease)?;
                 }
             }
             let tick = self.agent_loop.tick(

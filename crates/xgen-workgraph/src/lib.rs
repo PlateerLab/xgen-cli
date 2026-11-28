@@ -45,6 +45,10 @@ pub enum RunEventBody {
         call_id: String,
         settlement: ModelCallSettlement,
     },
+    /// The user added an instruction while the Run was executing; the next planner call sees it.
+    UserInstructionAdded {
+        text: String,
+    },
     PlanAccepted {
         decision: ExpectedPlanningTurn,
         steps: Vec<AcceptedPlanStep>,
@@ -138,6 +142,7 @@ impl RunEventBody {
             Self::ModelCallReserved { .. } => "model_call_reserved",
             Self::ModelCallBecameUnknown { .. } => "model_call_became_unknown",
             Self::ModelCallSettled { .. } => "model_call_settled",
+            Self::UserInstructionAdded { .. } => "user_instruction_added",
             Self::PlanAccepted { .. } => "plan_accepted",
             Self::CompletionCandidateRecorded { .. } => "completion_candidate_recorded",
             Self::StepPlanned { .. } => "step_planned",
@@ -267,6 +272,10 @@ const MAX_TOOL_OUTPUT_TEXT_BYTES: usize = MAX_TOOL_OUTPUT_CANONICAL_BYTES;
 pub const COMPLETION_OUTPUT_FORMAT_VERSION: u32 = 1;
 /// Maximum UTF-8 bytes retained for one final completion summary.
 pub const MAX_COMPLETION_SUMMARY_BYTES: usize = 5_000;
+/// Bytes of one instruction added while a Run executes.
+pub const MAX_USER_INSTRUCTION_BYTES: usize = 8 * 1024;
+/// Instructions one Run accepts while it executes; later ones wait for the next goal.
+pub const MAX_USER_INSTRUCTIONS: usize = 16;
 
 /// Distinguishes an assistant answer from receipt-backed task completion.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2183,6 +2192,9 @@ pub struct AgentLoopState {
     pub model_calls: Option<ModelCallLifecycleState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_candidate: Option<CompletionCandidateState>,
+    /// Instructions the user added while the Run executed, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub user_instructions: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -3829,6 +3841,7 @@ fn apply_body(state: &mut RunState, body: &RunEventBody) -> Result<(), Transitio
             call_id,
             settlement,
         } => settle_model_call(state, call_id, *settlement)?,
+        RunEventBody::UserInstructionAdded { text } => add_user_instruction(state, text)?,
         RunEventBody::PlanAccepted { decision, steps } => {
             accept_plan(state, decision, steps)?;
         }
@@ -3885,6 +3898,7 @@ fn configure_agent_loop(
         accepted_model_turns: 0,
         model_calls: None,
         completion_candidate: None,
+        user_instructions: Vec::new(),
     });
     Ok(())
 }
@@ -3918,6 +3932,33 @@ fn configure_model_call_lifecycle(
         last_rejection: None,
     });
     validate_model_call_counters(loop_state)
+}
+
+/// Accept an instruction only between model calls of an unfinished agent loop, so a call in
+/// flight never answers a context that has changed under it.
+fn add_user_instruction(state: &mut RunState, text: &str) -> Result<(), TransitionError> {
+    let loop_state = state
+        .agent_loop
+        .as_mut()
+        .ok_or(TransitionError::AgentLoopNotConfigured)?;
+    if loop_state.completion_candidate.is_some() {
+        return Err(TransitionError::CompletionCandidateAlreadyRecorded);
+    }
+    if loop_state
+        .model_calls
+        .as_ref()
+        .is_some_and(|calls| calls.active_call.is_some())
+    {
+        return Err(TransitionError::ModelCallActive);
+    }
+    if text.trim().is_empty()
+        || text.len() > MAX_USER_INSTRUCTION_BYTES
+        || loop_state.user_instructions.len() >= MAX_USER_INSTRUCTIONS
+    {
+        return Err(TransitionError::InvalidUserInstruction);
+    }
+    loop_state.user_instructions.push(text.to_owned());
+    Ok(())
 }
 
 fn reserve_model_call(
@@ -4523,6 +4564,7 @@ fn apply_effect_lifecycle(
         | RunEventBody::ModelCallReserved { .. }
         | RunEventBody::ModelCallBecameUnknown { .. }
         | RunEventBody::ModelCallSettled { .. }
+        | RunEventBody::UserInstructionAdded { .. }
         | RunEventBody::PlanAccepted { .. }
         | RunEventBody::CompletionCandidateRecorded { .. }
         | RunEventBody::StepPlanned { .. }
@@ -5278,6 +5320,8 @@ pub enum TransitionError {
     AgentLoopAlreadyConfigured,
     #[error("agent loop is not configured")]
     AgentLoopNotConfigured,
+    #[error("user instruction is empty, too large, or over the per-Run limit")]
+    InvalidUserInstruction,
     #[error("model-call lifecycle is already configured")]
     ModelCallLifecycleAlreadyConfigured,
     #[error("model-call lifecycle is not configured")]

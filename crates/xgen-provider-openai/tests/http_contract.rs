@@ -409,6 +409,7 @@ fn completed_output_store() -> (OutputSnapshotStore, AgentLoopBudget, Value) {
                 last_rejection: None,
             }),
             completion_candidate: None,
+            user_instructions: Vec::new(),
         }),
     };
     (
