@@ -126,7 +126,7 @@ jobs:
           test -n "$package_version"
           test "$RELEASE_TAG" = "v$package_version"
 
-      - name: Require npm token publishing readiness
+      - name: Require npm trusted publishing readiness
         env:
           NPM_PUBLISH_ENABLED: ${{ vars.XGEN_NPM_PUBLISH_ENABLED }}
         shell: bash
@@ -831,7 +831,7 @@ jobs:
           }
 
   publish-npm:
-    name: Publish npm packages with token authentication and provenance
+    name: Publish npm packages with trusted publishing and provenance
     needs: publish
     runs-on: ubuntu-24.04
     permissions:
@@ -850,7 +850,22 @@ jobs:
         with:
           node-version: 24.20.0
           package-manager-cache: false
-          registry-url: https://registry.npmjs.org/
+
+      - name: Install pinned npm for OIDC publish and dist-tag
+        env:
+          NPM_VERSION: 11.21.3
+          NPM_INTEGRITY: sha512-5Cf+jE+XctbhH/zjOOqXC+ity7eec/Tkk4Ql38tf6w+1htp2wYPHmE4c1R1Es3DY227Ac14+SLrlYJwkBicbTg==
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$RUNNER_TEMP/npm-$NPM_VERSION.tgz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$tarball" \
+            "https://registry.npmjs.org/npm/-/npm-$NPM_VERSION.tgz"
+          actual="sha512-$(openssl dgst -sha512 -binary "$tarball" | base64 -w0)"
+          test "$actual" = "$NPM_INTEGRITY"
+          npm install --global --ignore-scripts --no-audit --no-fund "$tarball"
+          test "$(npm --version)" = "$NPM_VERSION"
 
       - name: Recheck immutable GitHub Release binding
         env:
@@ -931,12 +946,11 @@ jobs:
 
       - name: Publish platform packages then launcher
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$NODE_AUTH_TOKEN"
+          test "$(npm --version)" = 11.21.3
           node npm/scripts/publish.mjs \
             --directory release \
             --tag "$RELEASE_TAG"

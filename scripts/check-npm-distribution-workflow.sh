@@ -79,7 +79,6 @@ required_job_fragments = (
     "test \"$NPM_PUBLISH_ENABLED\" = \"true\"",
     "node-version: 24.20.0",
     "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
-    "registry-url: https://registry.npmjs.org/",
     "node npm/scripts/verify-release.mjs",
     "node npm/scripts/publish.mjs",
 )
@@ -94,28 +93,29 @@ if job.count("node npm/scripts/publish.mjs") != 1:
 if job.index("node npm/scripts/verify-release.mjs") > job.index("node npm/scripts/publish.mjs"):
     fail("npm release bundle verification must happen before publication")
 
-secret_expression = "${{ secrets.NPM_TOKEN }}"
-if text.count(secret_expression) != 1:
-    fail("NPM_TOKEN secret must be referenced exactly once")
+for forbidden in ("NPM_TOKEN", "NODE_AUTH_TOKEN", "_authToken", "registry-url:"):
+    if forbidden in text:
+        fail(f"npm publishing must use trusted publishing without token configuration: {forbidden}")
+npm_step_marker = "- name: Install pinned npm for OIDC publish and dist-tag"
 publish_step_marker = "- name: Publish platform packages then launcher"
-if publish_step_marker not in job:
-    fail("npm publish step is missing")
-publish_step = job[job.index(publish_step_marker) :]
+for marker in (npm_step_marker, publish_step_marker):
+    if marker not in job:
+        fail(f"publish-npm job is missing step: {marker}")
+npm_step = job[job.index(npm_step_marker) : job.index(publish_step_marker)]
 for fragment in (
-    f"NODE_AUTH_TOKEN: {secret_expression}",
-    'test -n "$NODE_AUTH_TOKEN"',
-    "node npm/scripts/publish.mjs",
+    "NPM_VERSION: 11.21.3",
+    "NPM_INTEGRITY: sha512-",
+    'test "$actual" = "$NPM_INTEGRITY"',
+    'test "$(npm --version)" = "$NPM_VERSION"',
 ):
-    if fragment not in publish_step:
-        fail(f"npm publish step is missing token isolation contract: {fragment}")
-if job[: job.index(publish_step_marker)].count("NODE_AUTH_TOKEN") != 0:
-    fail("npm token must not be exposed before the publish step")
-if job.count("NODE_AUTH_TOKEN") != 2:
-    fail("npm token must be limited to one env binding and one non-empty check")
-if job.index("node npm/scripts/verify-release.mjs") > job.index(secret_expression):
-    fail("npm token must not be exposed until after release bundle verification")
+    if fragment not in npm_step:
+        fail(f"pinned npm step is missing integrity contract: {fragment}")
+if 'test "$(npm --version)" = 11.21.3' not in job[job.index(publish_step_marker) :]:
+    fail("npm publish step must confirm the pinned npm version")
+if job.index("node npm/scripts/verify-release.mjs") > job.index(publish_step_marker):
+    fail("npm release bundle verification must happen before publication")
 
-gate_step = text.find("- name: Require npm token publishing readiness")
+gate_step = text.find("- name: Require npm trusted publishing readiness")
 build_job = text.find("\n  build:")
 if gate_step < 0 or build_job < 0 or gate_step > build_job:
     fail("npm readiness must fail closed in the release quality gate before native builds")

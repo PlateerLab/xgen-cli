@@ -1,4 +1,7 @@
-# npm granular token 게시와 provenance 운영
+# npm trusted publishing 게시와 provenance 운영
+
+게시 인증은 [ADR-0095](../adr/0095-npm-trusted-publishing.md)를 따른다. granular token 방식
+([ADR-0034](../adr/0034-npm-token-publishing-policy.md))은 rc.10까지 썼고 대체됐다.
 
 `@xgen-ai/cli`는 native XGEN를 npm으로 설치하기 위한 선택형 배포 계층이다. 직접 GitHub installer를 쓰는
 사용자는 Node.js가 필요 없고, npm 경로를 고른 사용자는 Node.js 22.14 이상이 필요하다. 두 경로는 같은
@@ -30,9 +33,9 @@ compile은 없다. Launcher는 현재 platform package가 없으면 종료한다
 1. 해당 계정 또는 npm organization이 `@xgen-ai` scope 여섯 package를 public으로 게시할 권한이 있는지
    확인한다. 권한이나 scope 확보 여부가 불명확하면 `@xgen-ai/cli`를 게시하지 말고 naming ADR을 먼저
    갱신한다.
-2. npm에서 package read/write 권한과 `bypass 2FA`가 있는 granular access token을 준비한다. 가능하면
-   `@xgen-ai` package 범위와 만료 시점을 제한한다. Token 값은 repository, release artifact, 문서와 명령
-   출력에 넣지 않고 GitHub Actions repository secret `NPM_TOKEN`에만 저장한다.
+2. (이미 존재하는 package는 건너뛴다) 최초 bootstrap 게시에만 2FA가 켜진 계정의 일회성 로그인이나
+   짧은 수명 token을 현재 process에만 쓴다. Token 값은 repository, release artifact, 문서와 명령 출력에
+   넣지 않는다.
 3. clean `main` checkout에서 bootstrap tarball을 만든다.
 
 ```bash
@@ -48,9 +51,13 @@ node npm/scripts/bootstrap.mjs --output-dir "$bootstrap_dir"
    순서로 `--access public --tag bootstrap` 게시한다. Token 값을 shell script나 npmrc에 literal로 쓰지
    않는다. Bootstrap에는 실행 파일과 `bin` entry가 없고 GitHub provenance가 없는 package-name 예약용
    version이다.
-6. GitHub repository secret `NPM_TOKEN`이 설정된 것을 확인한 뒤 repository variable
-   `XGEN_NPM_PUBLISH_ENABLED=true`를 설정한다. 이 값은 token의 scope, write 권한과 `bypass 2FA`를 사람이
-   확인했다는 fail-closed acknowledgement다.
+6. 여섯 package에 trusted publisher를 등록한다(2FA 필요, npm 11.15 이상).
+   `npm trust github "@xgen-ai/<package>" --file release.yml --repository PlateerLab/xgen-cli --allow-publish --yes`
+   를 package마다 실행하고, npmjs.com에서 launcher `@xgen-ai/cli` 설정에만 `Allow npm dist-tag`를 켠다.
+   새 설정은 2일 안에 첫 게시가 없으면 만료되므로 release tag 직전에 한다. 그 뒤 repository variable
+   `XGEN_NPM_PUBLISH_ENABLED=true`를 둔다. 이 값은 등록을 사람이 확인했다는 fail-closed acknowledgement다.
+   첫 OIDC 게시가 검증되면 package 설정을 "Require two-factor authentication and disallow tokens"로 바꾸고
+   이전 token과 repository secret을 폐기한다.
 7. RC3 게시와 검증이 끝나면 bootstrap version을 deprecated 처리한다. Package 자체는 unpublish하지
    않는다.
 
@@ -68,10 +75,9 @@ quality + 5-platform native build
   -> 5-platform public registry install smoke
 ```
 
-npm publish job은 GitHub-hosted Ubuntu runner와 Node.js 24.20.0/npm 11.19.0을 사용한다. Granular token은
-GitHub secret `NPM_TOKEN`에서 publish 단일 step의 `NODE_AUTH_TOKEN`으로만 주입되고, checkout·bundle
-검증과 다른 job에는 노출되지 않는다. `id-token: write`는 npm 인증이 아니라 `--provenance`의 GitHub OIDC
-증명에만 사용한다. Prerelease는 `next`, stable은 `latest` dist-tag로 게시한다. 모든 package에는 npm
+npm publish job은 GitHub-hosted Ubuntu runner와 Node.js 24.20.0을 쓰고, OIDC dist-tag를 지원하는
+npm 11.21.3을 고정 sha512로 확인한 뒤 설치한다. npm token은 workflow 어디에도 없다. `id-token: write`의
+GitHub OIDC가 npm trusted publishing 인증과 `--provenance` 증명에 함께 쓰인다. Prerelease는 `next`, stable은 `latest` dist-tag로 게시한다. 모든 package에는 npm
 provenance가 있어야 하며 registry metadata에서 SLSA provenance predicate가 확인되지 않으면 job이
 실패한다.
 
@@ -89,7 +95,7 @@ Platform package를 launcher보다 먼저 게시하므로 중간 실패가 가�
 tarball과 모두 같을 때만 skip한다. 하나라도 다르면 자동 수정, unpublish 또는 overwrite하지 않는다.
 
 - 동일 bytes인 일부 게시: 실패 job 재실행
-- Token 만료·scope·write 또는 `bypass 2FA` 오설정: secret을 바로잡은 뒤 실패 job 재실행
+- trusted publisher 미등록·만료·repository/workflow 이름 불일치, launcher dist-tag 권한 누락: npm 설정을 바로잡은 뒤 실패 job 재실행
 - registry bytes 또는 package name 소유권 불일치: 중단하고 새 version PR과 tag 사용
 - GitHub Release 전 실패: 원인을 main에서 수정하고 더 높은 version/tag 사용
 

@@ -29,11 +29,11 @@ binary를 감싸는 선택형 설치 채널이며 제품 runtime을 다시 구�
   `XGEN_MAIN_PROTECTION_ENABLED=true`를 둔다.
 - Bypass actor가 없음을 관리자가 확인한 뒤 Actions repository variable
   `XGEN_RELEASE_RULESET_NO_BYPASS=true`를 설정한다. Read-only ruleset API는 bypass 목록을 숨길 수 있다.
-- npm의 `@xgen-ai` scope에 여섯 package를 게시할 owner 권한을 확인한다. Package read/write와 `bypass 2FA`
-  권한이 있는 granular token을 repository secret `NPM_TOKEN`에 저장하고 source, artifact와 명령 출력에는
-  넣지 않는다. 실행 파일이 없는 bootstrap version을 같은 정책으로 먼저 게시한다. 전체 절차는
-  [npm granular token 게시와 provenance](npm-distribution.md)를 따른다.
-- token의 scope와 권한을 확인한 뒤 repository variable `XGEN_NPM_PUBLISH_ENABLED=true`를 둔다. 값이
+- npm의 `@xgen-ai` scope에 여섯 package를 게시할 owner 권한을 확인하고, 여섯 package 모두
+  `release.yml`을 trusted publisher로 등록한다(launcher만 `Allow npm dist-tag`). npm token은 쓰지 않는다.
+  전체 절차는 [npm trusted publishing 게시와 provenance](npm-distribution.md)와
+  [ADR-0095](../adr/0095-npm-trusted-publishing.md)를 따른다.
+- 등록을 확인한 뒤 repository variable `XGEN_NPM_PUBLISH_ENABLED=true`를 둔다. 값이
   없거나 exact `true`가 아니면 native build 전에 release가 fail-closed한다.
 - macOS notarization과 Windows Authenticode가 없는 build는 SemVer와 별개로 prototype이라고 명시하고
   OS 경고 가능성을 안내한다.
@@ -126,8 +126,8 @@ latest로 지정한다. 게시 직후에는 일반 release 조회로 exact tag, 
 
 Quality, build와 assemble job은 repository read 권한만 가진다. 모든 target과 assembly가 통과한 뒤
 GitHub publish job에만 `contents: write`, `id-token: write`, `attestations: write`를 부여한다. npm
-publish job은 GitHub Release 게시 뒤 별도로 `contents: read`, `id-token: write`만 받고, `NPM_TOKEN`은
-검증이 끝난 publish 단일 step에만 주입한다. 모든 checkout은 credential persistence를 끈다. 외부 GitHub
+publish job은 GitHub Release 게시 뒤 별도로 `contents: read`, `id-token: write`만 받고, npm token 없이
+OIDC trusted publishing으로 게시한다. 모든 checkout은 credential persistence를 끈다. 외부 GitHub
 Action은 mutable tag가 아니라 full commit SHA로 고정한다.
 
 ## 게시 artifact

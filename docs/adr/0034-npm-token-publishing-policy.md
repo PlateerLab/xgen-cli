@@ -1,6 +1,7 @@
 # ADR-0034: npm은 granular token으로 게시하고 provenance는 OIDC로 증명한다
 
-- 상태: Accepted (`@xgen` scope 이름은 [ADR-0051](0051-npm-package-scope-xgen-ai.md)가 대체)
+- 상태: Superseded by [ADR-0095](0095-npm-trusted-publishing.md) (2026-11-29, bypass-2FA token 직접 게시 종료 대응).
+  `@xgen` scope 이름은 [ADR-0051](0051-npm-package-scope-xgen-ai.md)가 대체
 - 날짜: 2026-09-02
 - 적용 범위: npm package bootstrap, GitHub Actions release, npm credential 운영
 - 대체 결정: ADR-0031의 npm Trusted Publisher와 계정 2FA 요구
