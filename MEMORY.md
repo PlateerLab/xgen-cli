@@ -15,6 +15,10 @@
 
 ## 책임과 개발 범위
 
+2026-11-28 실제 모델 검증: agy 재로그인 뒤 새 Rust transport를 Flash Low로 headless smoke 7/7 통과
+(호환성 검사, 읽기·요약2/2, 수정+unittest2/2, 승인 정지→별도 process 재개+offline replay). 각1~2회라 품질
+점수가 아니고 대화형·취소는 미검증이다. 결과는 [ADR-0090](docs/adr/0090-experimental-agy-provider.md)에 있다.
+
 2026-11-27 구현·로컬 검증: [빌드 간 모델 요청 비교](docs/development/model-request-diff.md).
 같은 대본 응답으로 두 binary를 돌려 모델 요청을 비교하고, 같은 빌드 두 번 실행의 차이를 noise로 가린 뒤
 남은 차이를 지문으로 묶는다. 과거 PR 5쌍(#124·#131 변경, #144·#146·#147 유지)에서 ADR 기대와 모두 같았다.

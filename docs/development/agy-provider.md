@@ -57,5 +57,6 @@ SSH 환경변수는 agy 자식에 전달하지 않는다. 부모 SSH 연결은 �
   지원하지 않으므로 agy setup에서 `--max-output-tokens`를 받지 않는다.
 - 사용량은 cache를 포함한 host 입력으로 변환한다. 누락 값과 실제 비용·내부 요청 수는 UNKNOWN이다.
 - agy 인증값·private rules/skills/MCP를 xgen으로 복사하지 않는다. 광범위한 customization 상속은 끈다.
-- 새 Rust transport의 실제 모델 smoke는 인증 필요로 보류됐다. 기존 Python 경로의 19/20은 별도 결과다.
+- 새 Rust transport의 실제 모델 smoke는 2026-11-28 headless 7/7 통과([ADR-0090](../adr/0090-experimental-agy-provider.md)).
+  기존 Python 경로의 19/20과는 별도 결과다. 대화형 경로는 실제 모델로 검증하지 않았다.
   macOS/Windows의 agy setup은 아직 지원하지 않는다.

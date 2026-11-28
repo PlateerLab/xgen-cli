@@ -1,7 +1,7 @@
 # ADR-0090: 실험용 agy 모델 transport
 
 - 날짜: 2026-11-23
-- 상태: 실험 기능 구현. 실제 모델로 새 Rust 경로 검증은 인증 복구 뒤 수행.
+- 상태: 실험 기능 구현. 새 Rust 경로의 실제 모델 smoke 7/7 통과(2026-11-28, Linux, headless).
 - 범위: 일반 모델 연결·프로필·중단·재개. 특정 과업의 답이나 도메인 규칙은 포함하지 않는다.
 
 ## 배경
@@ -82,7 +82,14 @@ usage는 기존 UNKNOWN 관찰로 보존한다. 실제 USD와 provider 내부 �
 조회해도 실패했고 모델 inference는 시작하지 않았다. 기존 19/20을 새 Rust transport 실측으로 재표기하지
 않는다. Delegate MCP diff 검토도 인증 오류로 이용하지 못해 직접 검토·회귀 검사를 수행했다.
 
-배포본은 rc.8을 유지한다. macOS/Windows 실행 지원·독립 diff 검토·새 Rust 경로의 실제 모델 smoke는
+2026-11-28 재로그인 뒤 같은 브랜치 빌드와 격리 설정 폴더로 실제 모델(Flash Low) smoke를 했다.
+`model check --compatibility` 통과(11초). headless 읽기·요약 2/2(13~15초, 호출2회, 입력 약10k token),
+파일 수정과 unittest 실행 2/2(28~31초, 테스트 실제 통과). 읽기 승인 없이 시작한 Run이
+`read_approval_required`로 멈춘 뒤 별도 process의 resume으로 완료했고 offline replay가 같은 답을 냈다
+(호출4회, 입력 약35k). Workspace에 agy 부산물 파일은 남지 않았다. 각 경우1~2회라 품질 점수가 아니며,
+대화형 TUI 경로·실제 모델 상태의 취소는 이 smoke에 포함하지 않았다.
+
+배포본은 rc.8을 유지한다. macOS/Windows 실행 지원·독립 diff 검토·대화형 경로의 실제 모델 검증은
 후속 검증 대상이다. Native 사전 차단과 숨은 request/billing 정보는 agy 경로의 별도 개선 과제다.
 
 최종 순차 검사: Rust808개 통과·4 ignored, Python178개 중122개 통과·56 skip, workspace clippy·fmt·
