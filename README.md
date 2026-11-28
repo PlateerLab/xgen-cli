@@ -29,8 +29,8 @@ Linux/macOS:
 installer=$(mktemp "${TMPDIR:-/tmp}/xgen-installer.XXXXXX")
 curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 \
   --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo "$installer" \
-  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.9/xgen-installer.sh
-sh "$installer" --version v0.1.0-rc.9
+  https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.10/xgen-installer.sh
+sh "$installer" --version v0.1.0-rc.10
 rm -f "$installer"
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -39,9 +39,9 @@ Windows PowerShell:
 
 ```powershell
 $installer = Join-Path ([System.IO.Path]::GetTempPath()) "xgen-installer-$([Guid]::NewGuid().ToString('N')).ps1"
-curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.9/xgen-installer.ps1"
+curl.exe -q --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSLo $installer "https://github.com/PlateerLab/xgen-cli/releases/download/v0.1.0-rc.10/xgen-installer.ps1"
 if ($LASTEXITCODE -ne 0) { throw "XGEN installer download failed" }
-& $installer -Version v0.1.0-rc.9
+& $installer -Version v0.1.0-rc.10
 Remove-Item -LiteralPath $installer
 $env:Path = "$env:LOCALAPPDATA\XGEN\bin;$env:Path"
 ```
