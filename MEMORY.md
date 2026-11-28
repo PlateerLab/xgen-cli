@@ -15,6 +15,13 @@
 
 ## 책임과 개발 범위
 
+2026-11-28 배포 완료: [rc.9](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.9) 게시. 버전 PR #162(d5bea9c)는
+rc.8 이후 #152~#161(agy Rust transport, `xgen tools enrich`와 사용량 저장, agy 자동 업데이트 차단, Run 중 후속 지시)을 담는다.
+Main CI 7개, Release run 46141667086의 19개 job(설치 검증 10개 포함)이 재실행 없이 통과했다(약 42분).
+GitHub Release는 17개 asset, prerelease, `immutable=true`. npm 여섯 package `next=0.1.0-rc.9`, launcher `latest=0.1.0-rc.9`.
+새 HOME·cache·prefix에서 version 없는 공개 npm 설치가 `xgen 0.1.0-rc.9`를 냈다. agy 연결은 Linux 실험 기능으로 포함된다.
+실제 모델 품질 평가는 이 배포 단계에서 따로 하지 않았다.
+
 2026-11-28 실제 모델 검증: agy 재로그인 뒤 새 Rust transport를 Flash Low로 headless smoke 7/7 통과
 (호환성 검사, 읽기·요약2/2, 수정+unittest2/2, 승인 정지→별도 process 재개+offline replay). 각1~2회라 품질
 점수가 아니고 대화형·취소는 미검증이다. 결과는 [ADR-0090](docs/adr/0090-experimental-agy-provider.md)에 있다.

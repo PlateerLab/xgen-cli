@@ -1,7 +1,7 @@
 # ADR-0088: 기본 preview 설치와 최초 모델 연결 복구
 
 - 날짜: 2026-11-19
-- 상태: 채택, rc.7 미게시 실패 뒤 rc.8 게시·공개 설치 검증 완료
+- 상태: 채택, rc.7 미게시 실패 뒤 rc.8 게시·공개 설치 검증 완료, rc.9 게시
 - 범위: 일반 배포·CLI 표시. Planner 입력·journal·권한·자동 재시도 계약은 바꾸지 않는다.
 
 ## 문제와 근거
@@ -98,3 +98,8 @@ Linux x86-64의 별도 새 HOME·npm cache·prefix에서 version 없는 공개 n
 installer·npm/native raw binary 일치·`gh attestation verify`도 통과했고 user profile은 변경하지 않았다.
 실제 모델 호출·사용자 작업 성공률 평가는 미실행이다. 이 결과를 Claude Code/Codex 수준의 일반 작업
 신뢰성 검증으로 해석하지 않는다.
+
+rc.9는 source `d5bea9c`(#162)에서 main CI 7개와 Release run 46141667086의 19개 job이 재실행 없이 통과했다.
+[GitHub rc.9](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.9)는 2026-11-28 12:16:07 UTC에
+17개 asset, prerelease, `immutable=true`로 게시됐고 npm 여섯 package는 `next=0.1.0-rc.9`, launcher는
+`latest=0.1.0-rc.9`이다.
