@@ -159,7 +159,8 @@ worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker
 - 모델이 보는 설명은 원본이다. 검색 후보·`describe`·`describe_view`는 원래 summary를 보여 주고, 생성 문장은 그래프 색인에만 들어간다. 빌드 뒤 tool metadata에 넣는 방식은 같은 문장으로도 hit@1이 떨어져(세 묶음 합 205 -> 182) 측정한 방식대로 빌드 입력에 붙인다.
 - 보강 기록(`xgen_summary_enrichment`: 언어, 모델, operation별 생성 문장, 원래 설명)은 artifact에 저장된다. `tools rebuild`는 원본 사본에 같은 문장을 다시 붙여 모델 호출 없이 다시 빌드한다. 다시 `enrich`하면 원본에서 새로 만든다.
 - 보강한 언어의 요청에는 검색어 언어 힌트를 넣지 않는다(판정한 조건 S). `documentation_script`는 원래 설명 기준으로 계산한다.
-- 로컬 JSON으로 import한 collection만 지원한다. HTTPS 명세는 `summary_enrichment_requires_local_sources`.
+- 로컬 JSON과 HTTPS로 import한 collection을 모두 지원한다. HTTPS 명세는 보강·rebuild 때 import와 같은 로더·네트워크 검사로 다시 받아 오고(worker 작업마다 한 번), 그 사이 사라진 operation의 문장은 건너뛴다. 보강 빌드 뒤 원본 빌드의 출처 정보(URL, snapshot manifest, tool별 `source_url`)로 되돌려 HTTP 계약·출처가 import 때와 같다. 로컬 JSON과 HTTPS를 섞은 collection은 rebuild와 같이 `collection_sources_unavailable`이다.
+- agy 프로필에서 agy가 실패 코드로 끝나면 stderr에 `XGEN_AGY code=agy_exit status=<코드> class=<rate_limited|authentication|network|no_stderr|other>`를 남긴다(agy 원문은 출력하지 않는다). 2026-11-28 실제 실행 2회에서 쉬다가 처음 부른 호출 8번이 모두 `unavailable`이었고 바로 다시 실행하면 성공했다. 보강은 첫 묶음에 실패가 있으면 10초 뒤 실패분을 다시 묻는다.
 - 출력: `enriched`/`failed`/`targets`, `model_calls`, `model_failures`(실패 분류별 횟수), provider가 알려 준 `prompt_tokens`·`completion_tokens`. 사용량은 Run 사용량 기록에 들어가지 않는다.
 - 근거: [언어 병목 비교 2](../../MEMORY.md). 새 공개 held-out에서 S가 운영 힌트(Q) 대비 hit@5 98 -> 104, hit@1 66 -> 76. 구현 확인: 같은 held-out을 실제 CLI(agy Flash Low)로 보강해 같은 검색어로 hit@5 95 -> 103, hit@1 59 -> 75(보강 전 값은 측정한 C와 같다). 측정 때 생성 문장을 그대로 넣은 worker 빌드는 측정 S와 앞 5개가 16/16 같았다.
 

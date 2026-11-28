@@ -43,7 +43,7 @@
 - CLI: 가짜 OpenAI 호환 서버로 strict schema 이름, 누락 언어만 요청, 사용량 합계, list 표시를 확인.
 - 실제 모델: 11-28 held-out 명세 4개를 agy Flash Low로 보강(287 operation, 실패 0, 15회 호출). 측정
   검색어로 hit@5 95 -> 103, hit@1 59 -> 75. 측정 때 생성 문장을 그대로 넣은 빌드는 측정 S와 앞 5개 16/16 일치.
-- 첫 실제 실행 1회는 모든 호출이 실패했고 원인을 확인하지 못했다. 이후 5회는 모두 성공했다. 실패 분류를
-  출력(`model_failures`)에 남기도록 했다.
-- HTTPS로 import한 collection은 지원하지 않는다. 사용량은 Run 사용량 기록에 넣지 않는다.
+- agy로 쉬다가 처음 부른 실행 2회에서 모든 호출이 `unavailable`이었고 바로 다시 실행하면 성공했다. 원인은
+  미확정이다. 실패 분류를 출력(`model_failures`)과 agy 종료 분류(`XGEN_AGY code=agy_exit`)로 남기고, 재시도 전 10초 쉰다.
+- HTTPS로 import한 collection도 지원한다(2026-11-28 후속). 보강할 때 import와 같은 로더로 다시 받아 오고, 출처 정보는 원본 빌드 값으로 되돌린다. 실제 Qdrant URL 1건에서 보강 전 결과가 측정 C와 같았다(hit@5 26). 사용량은 Run 사용량 기록에 넣지 않는다.
 - held-out은 모두 소진됐다. 다음 효과 측정은 새 held-out이 필요하다.

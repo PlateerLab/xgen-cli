@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("tool_graph_worker", ROOT / "crates/xgen-cli/src/tool_graph_worker.py")
@@ -175,8 +176,40 @@ class WorkerTests(unittest.TestCase):
             self.call("enrichment_plan", name="assets", languages=["xx"], completed={})
         with self.assertRaisesRegex(WORKER.WorkerError, "invalid_enrichment_answer"):
             self.call("enrichment_plan", name="assets", languages=["ko"], completed={"s9:get:/nope": {"ko": "가"}})
-        with self.assertRaisesRegex(WORKER.WorkerError, "summary_enrichment_requires_local_sources"):
-            WORKER.enrichment_operations(["https://example.com/openapi.json"], ["ko"])
+
+    def test_summary_enrichment_of_https_collections_keeps_source_identity(self):
+        # The network loader is replaced; import, enrichment and rebuild fetch through it.
+        import graph_tool_call.graphify.collection_artifact as collection
+        documents = {"https://specs.example/assets.json": asset_spec(),
+                     "https://specs.example/calendar.json": calendar_spec()}
+        fetched = []
+
+        def load(url, **_options):
+            fetched.append(url)
+            return json.loads(json.dumps(documents[url]))
+
+        with mock.patch.object(collection, "_discover_spec_urls", lambda url, **_options: [url]), \
+                mock.patch.object(collection, "_load_spec", load):
+            self.call("import", name="remote", sources=list(documents))
+            before = WORKER.load(self.root, "remote")["artifact"]
+            stored = self.enrich("remote", ["ko"], lambda batch: {key: {"ko": "원격 항목 보기"} for key in batch["keys"]})
+            self.assertEqual((stored["enriched"], stored["failed"], stored["targets"]), (4, 0, 4))
+            after = WORKER.load(self.root, "remote")["artifact"]
+            for key in ("source_url", "spec_urls", "xgen_http_sources", "xgen_source_inputs"):
+                self.assertEqual(after["metadata"][key], before["metadata"][key])
+            self.assertEqual({name: tool["metadata"]["source_url"] for name, tool in after["tools"].items()},
+                             {name: tool["metadata"]["source_url"] for name, tool in before["tools"].items()})
+            self.assertEqual(set(after["tools"]), set(before["tools"]))
+            hit = self.call("search", name="remote", query="원격 항목 보기", top_k=1)["candidates"][0]
+            self.assertNotIn("원격", hit["description"])
+            # A refetched document that lost an operation keeps the remaining texts.
+            del documents["https://specs.example/calendar.json"]["paths"]["/events"]
+            self.rewrite("remote", lambda saved: saved.update(backend_version="0.0.1"))
+            self.assertTrue(self.call("rebuild", name="remote")["rebuilt"])
+            rebuilt = WORKER.load(self.root, "remote")["artifact"]
+            self.assertEqual(len(rebuilt["tools"]), 3)
+            self.assertEqual(len(rebuilt["metadata"]["xgen_summary_enrichment"]["entries"]), 4)
+        self.assertTrue(all(url.startswith("https://") for url in fetched))
 
     def test_rebuild_keeps_summary_enrichment(self):
         self.install()

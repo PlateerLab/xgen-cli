@@ -201,7 +201,7 @@ Launcher의 `latest`/`next`는 rc.8이며 실제 모델 품질 평가는 인증 
 
 순서: 공통 계약·검증 계획 → 내부 도구 검색 → API 조회 실행·연결 UX → 브라우저·SEV → API·화면 그래프 통합 → 역할별 모델·STT → 배포·기본값 결정.
 
-공통 계약·검색과 `xgen.http/read`의 GET 실행·연결 저장을 구현했다. 모델용 명세 조회와 호스트 실행 계약을 분리해 전달 gate를 통과했다. 실제 모델 query/선택 baseline은 완료했고, 정답 기준 audit·production planner 재생(2026-10-08 완료)과 scope 설명 분리는 끝났고, 남은 우선순위였던 교차 언어 recall은 2026-11-28 명세 summary 보강(S) 채택 판정으로 이어졌다(아래 언어 병목 비교 2). S는 `xgen tools enrich`(ADR-0091)로 구현했고, 남은 것은 모델 없는 대안(엔진의 description 색인) 측정과 HTTPS collection 지원이다. graph-tool-call 검색/정규화 개선은 해당 저장소의 별도 과제로 진행한다. 원격 원본 보존·연결 UX·HTTP 지원 확대와 브라우저·SEV 연결도 남았다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
+공통 계약·검색과 `xgen.http/read`의 GET 실행·연결 저장을 구현했다. 모델용 명세 조회와 호스트 실행 계약을 분리해 전달 gate를 통과했다. 실제 모델 query/선택 baseline은 완료했고, 정답 기준 audit·production planner 재생(2026-10-08 완료)과 scope 설명 분리는 끝났고, 남은 우선순위였던 교차 언어 recall은 2026-11-28 명세 summary 보강(S) 채택 판정으로 이어졌다(아래 언어 병목 비교 2). S는 `xgen tools enrich`(ADR-0091)로 구현했고 HTTPS collection도 지원한다(11-28 후속). 남은 것은 모델 없는 대안(엔진의 description 색인) 측정, 보강 사용량의 Run 기록 연결, agy 첫 호출 실패 원인 확인(`XGEN_AGY code=agy_exit` 분류로 관찰)이다. graph-tool-call 검색/정규화 개선은 해당 저장소의 별도 과제로 진행한다. 원격 원본 보존·연결 UX·HTTP 지원 확대와 브라우저·SEV 연결도 남았다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
 
 ## 도구별 개선과 비용 추적 방식
 

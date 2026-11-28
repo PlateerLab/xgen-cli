@@ -149,9 +149,11 @@ def build_artifact(inputs, labels, enrichment=None):
     from graph_tool_call.graphify import build_openapi_collection_artifact
     if enrichment is not None:
         originals = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
-        built = build_openapi_collection_artifact(enriched_inputs(inputs, enrichment), max_response_bytes=5_000_000)
+        documents = [document for document, _source in enrichment_documents(inputs)]
+        built = build_openapi_collection_artifact(enriched_inputs(documents, enrichment), max_response_bytes=5_000_000)
         if set(built["tools"]) != set(originals["tools"]):
             raise WorkerError("summary_enrichment_changed_tools")
+        restore_source_identity(built, originals)
         built["metadata"]["xgen_summary_enrichment"] = {
             **enrichment, "original_descriptions": {name: tool.get("description")
                                                     for name, tool in originals["tools"].items()}}
@@ -189,13 +191,38 @@ def original_description(artifact, name, fallback):
     return value if isinstance(value, str) else fallback
 
 
-def enrichment_operations(inputs, languages):
+def enrichment_documents(inputs):
+    """(document, source reference) per OpenAPI document, in graph-tool-call's own order.
+
+    Local JSON inputs are the retained copies. HTTPS inputs (including Swagger UI pages that
+    list several documents) are fetched with the same loader and network checks as import;
+    the loader is private API of the pinned graph-tool-call version.
+    """
+    from graph_tool_call.graphify.collection_artifact import _load_openapi_collection_sources
+    loaded = _load_openapi_collection_sources(inputs, allow_private_hosts=False, max_response_bytes=5_000_000)
+    return [(item.spec, item.source) for item in loaded]
+
+
+def restore_source_identity(built, originals):
+    """The enriched graph is built from fetched documents; keep the import's source references
+    (URLs, snapshot manifest) so HTTP contracts and provenance match the original build."""
+    for key in ("source_url", "spec_urls", "source_snapshot_manifest"):
+        if key in originals["metadata"]:
+            built["metadata"][key] = copy.deepcopy(originals["metadata"][key])
+    if "source_snapshot_manifest" in originals:
+        built["source_snapshot_manifest"] = copy.deepcopy(originals["source_snapshot_manifest"])
+    for name, tool in built["tools"].items():
+        source = originals["tools"][name].get("metadata") or {}
+        for key in ("source_url", "source_label"):
+            if key in source:
+                tool.setdefault("metadata", {})[key] = source[key]
+
+
+def enrichment_operations(documents, languages):
     """(key, source index, method, path, missing languages, view) for every operation whose
     summary does not already use the script of each requested language."""
     rows = []
-    for source_index, document in enumerate(inputs, 1):
-        if not isinstance(document, dict):
-            raise WorkerError("summary_enrichment_requires_local_sources")
+    for source_index, document in enumerate(documents, 1):
         title = str((document.get("info") or {}).get("title") or "")
         for path, item in (document.get("paths") or {}).items():
             if not isinstance(item, dict):
@@ -224,7 +251,11 @@ def enrichment_operations(inputs, languages):
 def enriched_inputs(inputs, enrichment):
     documents = copy.deepcopy(inputs)
     for entry in enrichment["entries"]:
-        operation = documents[entry["source"] - 1]["paths"][entry["path"]][entry["method"]]
+        # A refetched HTTPS document may no longer have an operation; its text is skipped.
+        document = documents[entry["source"] - 1] if entry["source"] <= len(documents) else {}
+        operation = ((document.get("paths") or {}).get(entry["path"]) or {}).get(entry["method"])
+        if not isinstance(operation, dict):
+            continue
         summary = str(operation.get("summary") or "").strip()
         added = [entry["texts"][language] for language in enrichment["languages"] if language in entry["texts"]]
         operation["summary"] = " / ".join(([summary] if summary else []) + added)
@@ -243,11 +274,11 @@ def valid_enrichment_text(text, language):
             and summary_script(text) == ENRICHMENT_SCRIPTS[language])
 
 
-def enrichment_plan(inputs, languages, completed):
+def enrichment_plan(documents, languages, completed):
     """Model requests for operations not yet completed: one per group of up to 20 operations
     sharing the same missing languages, with a strict schema naming every key."""
     groups = {}
-    for row in enrichment_operations(inputs, languages):
+    for row in enrichment_operations(documents, languages):
         if row["key"] not in completed:
             groups.setdefault((row["title"], tuple(row["missing"])), []).append(row)
     batches = []
@@ -481,12 +512,13 @@ def dispatch(request):
         if not isinstance(completed, dict):
             raise WorkerError("invalid_enrichment_answer")
         inputs, labels = retained_inputs(envelope["artifact"])
-        targets = {row["key"]: row for row in enrichment_operations(inputs, languages)}
+        documents = [document for document, _source in enrichment_documents(inputs)]
+        targets = {row["key"]: row for row in enrichment_operations(documents, languages)}
         if any(key not in targets for key in completed):
             raise WorkerError("invalid_enrichment_answer")
         if operation == "enrichment_plan":
             return {"ok": True, **summarize(envelope), "targets": len(targets),
-                    "batches": enrichment_plan(inputs, languages, completed)}
+                    "batches": enrichment_plan(documents, languages, completed)}
         completed = enrichment_collect(request.get("answers", []), completed)
         if not request.get("store"):
             return {"ok": True, **summarize(envelope), "targets": len(targets), "completed": completed}

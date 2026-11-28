@@ -290,6 +290,7 @@ pub type EnrichmentAnswer = (Value, Option<u64>, Option<u64>);
 /// Rounds of model requests: the first pass and one retry of operations whose answer was
 /// missing or invalid, as measured (ADR-0091).
 const ENRICHMENT_ROUNDS: usize = 2;
+const ENRICHMENT_RETRY_PAUSE: Duration = Duration::from_secs(10);
 
 /// Add generated summaries to a collection with a host-bound JSON task.
 ///
@@ -343,7 +344,11 @@ where
     let mut failures = serde_json::Map::new();
     let (mut prompt_tokens, mut completion_tokens) = (Some(0_u64), Some(0_u64));
     let mut expected_digest = None;
-    for _ in 0..ENRICHMENT_ROUNDS {
+    for round in 0..ENRICHMENT_ROUNDS {
+        if round > 0 && !failures.is_empty() {
+            // Failed calls tend to cluster in time (provider or agy session hiccups).
+            thread::sleep(ENRICHMENT_RETRY_PAUSE);
+        }
         let mut plan = base.clone();
         plan["completed"] = completed.clone();
         let planned = invoke(&plan)?;
