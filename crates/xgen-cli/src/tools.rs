@@ -18,6 +18,8 @@ use serde_json::{Value, json};
 
 const WORKER: &str = include_str!("tool_graph_worker.py");
 const MAX_RESPONSE: u64 = 16 * 1024 * 1024;
+/// Summary-enrichment answers carry generated text for every operation; the worker allows 4 MiB.
+const MAX_REQUEST: usize = 4 * 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(120);
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
@@ -72,6 +74,19 @@ pub enum ToolsCommand {
     Remove {
         #[arg(long)]
         name: String,
+    },
+    /// Add generated operation summaries in other languages to a collection's search index.
+    /// Operation summaries, descriptions, tags and parameter names are sent to the model
+    /// profile; the planner keeps seeing the source summaries. Local JSON sources only.
+    Enrich {
+        #[arg(long)]
+        name: String,
+        /// Languages to add, comma separated: ko, en, ja, zh.
+        #[arg(long, value_delimiter = ',', required = true)]
+        languages: Vec<String>,
+        /// Saved model profile to use instead of the active one.
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Retrieve candidates and possible prerequisite producers; never executes them.
     Search {
@@ -146,6 +161,8 @@ pub fn run(command: ToolsCommand) -> ExitCode {
         ToolsCommand::Remove { name } => remove(&name),
         ToolsCommand::Import { name, source } => import(&name, source),
         ToolsCommand::Rebuild { name, all } => rebuild(name, all),
+        // The host binds a model profile first; see `enrich`.
+        ToolsCommand::Enrich { .. } => Err("summary_enrichment_requires_model"),
         command => request(command).and_then(|request| invoke(&request)),
     };
     match result {
@@ -206,6 +223,11 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
             json!({"operation": "rebuild", "name": name.ok_or("invalid_collection_name")?})
         }
         ToolsCommand::Remove { name } => json!({"operation": "remove", "name": name}),
+        ToolsCommand::Enrich {
+            name, languages, ..
+        } => {
+            json!({"operation": "enrichment_plan", "name": name, "languages": languages, "completed": {}})
+        }
         ToolsCommand::Search { name, query, top_k } => {
             if query.trim().is_empty() || query.len() > 4096 {
                 return Err("invalid_query");
@@ -260,6 +282,138 @@ fn request(command: ToolsCommand) -> Result<Value, &'static str> {
         }
     }
     Ok(value)
+}
+
+/// One summary-enrichment model answer: the JSON value and the provider-reported token usage.
+pub type EnrichmentAnswer = (Value, Option<u64>, Option<u64>);
+
+/// Rounds of model requests: the first pass and one retry of operations whose answer was
+/// missing or invalid, as measured (ADR-0091).
+const ENRICHMENT_ROUNDS: usize = 2;
+
+/// Add generated summaries to a collection with a host-bound JSON task.
+///
+/// The worker plans the requests and validates every answer (language script, length); this
+/// function only carries prompts to `complete` and answers back, then stores the result once.
+#[must_use]
+pub fn enrich<F>(name: &str, languages: Vec<String>, model: &str, complete: F) -> ExitCode
+where
+    F: FnMut(&str, &str, &Value) -> Result<EnrichmentAnswer, &'static str>,
+{
+    if ctrlc::set_handler(|| INTERRUPTED.store(true, Ordering::Relaxed)).is_err() {
+        eprintln!(
+            "{}",
+            json!({"ok": false, "error": "interrupt_handler_unavailable"})
+        );
+        return ExitCode::FAILURE;
+    }
+    let result = enrich_collection(name, languages, model, complete);
+    match result {
+        Ok(response) => {
+            println!("{response}");
+            if response.get("ok") == Some(&Value::Bool(true)) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(code) => {
+            eprintln!("{}", json!({"ok": false, "error": code}));
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn enrich_collection<F>(
+    name: &str,
+    languages: Vec<String>,
+    model: &str,
+    mut complete: F,
+) -> Result<Value, &'static str>
+where
+    F: FnMut(&str, &str, &Value) -> Result<EnrichmentAnswer, &'static str>,
+{
+    let base = request(ToolsCommand::Enrich {
+        name: name.to_owned(),
+        languages,
+        profile: None,
+    })?;
+    let mut completed = json!({});
+    let mut calls = 0_u64;
+    let mut failures = serde_json::Map::new();
+    let (mut prompt_tokens, mut completion_tokens) = (Some(0_u64), Some(0_u64));
+    let mut expected_digest = None;
+    for _ in 0..ENRICHMENT_ROUNDS {
+        let mut plan = base.clone();
+        plan["completed"] = completed.clone();
+        let planned = invoke(&plan)?;
+        if planned.get("ok") != Some(&Value::Bool(true)) {
+            return Ok(planned);
+        }
+        let digest = planned.get("artifact_digest").cloned();
+        if expected_digest.get_or_insert_with(|| digest.clone()) != &digest {
+            return Err("collection_snapshot_changed");
+        }
+        let batches = planned["batches"]
+            .as_array()
+            .ok_or("invalid_worker_response")?;
+        if batches.is_empty() {
+            break;
+        }
+        let mut answers = Vec::with_capacity(batches.len());
+        for batch in batches {
+            if INTERRUPTED.load(Ordering::Relaxed) {
+                return Err("interrupted");
+            }
+            let (Some(system), Some(user)) = (batch["system"].as_str(), batch["user"].as_str())
+            else {
+                return Err("invalid_worker_response");
+            };
+            calls += 1;
+            match complete(system, user, &batch["schema"]) {
+                Ok((value, prompt, completion)) => {
+                    prompt_tokens = prompt_tokens.zip(prompt).map(|(sum, value)| sum + value);
+                    completion_tokens = completion_tokens
+                        .zip(completion)
+                        .map(|(sum, value)| sum + value);
+                    answers.push(json!({"keys": batch["keys"], "languages": batch["languages"], "value": value}));
+                }
+                Err(code) => {
+                    let count = failures.get(code).and_then(Value::as_u64).unwrap_or(0);
+                    failures.insert(code.to_owned(), json!(count + 1));
+                }
+            }
+        }
+        let mut collect = base.clone();
+        collect["operation"] = json!("enrichment_apply");
+        collect["completed"] = completed;
+        collect["answers"] = json!(answers);
+        collect["expected_digest"] = expected_digest.clone().flatten().unwrap_or(Value::Null);
+        let collected = invoke(&collect)?;
+        if collected.get("ok") != Some(&Value::Bool(true)) {
+            return Ok(collected);
+        }
+        completed = collected["completed"].clone();
+    }
+    if completed.as_object().is_none_or(serde_json::Map::is_empty) {
+        return Ok(json!({"ok": false, "error": "summary_enrichment_failed",
+                         "model_calls": calls, "model_failures": failures}));
+    }
+    let mut store = base;
+    store["operation"] = json!("enrichment_apply");
+    store["completed"] = completed;
+    store["answers"] = json!([]);
+    store["store"] = json!(true);
+    store["model"] = json!(model);
+    store["expected_digest"] = expected_digest.flatten().unwrap_or(Value::Null);
+    let mut stored = invoke(&store)?;
+    if stored.get("ok") == Some(&Value::Bool(true)) {
+        stored["model_calls"] = json!(calls);
+        stored["model_failures"] = json!(failures);
+        stored["prompt_tokens"] = json!(prompt_tokens);
+        stored["completion_tokens"] = json!(completion_tokens);
+    }
+    Ok(stored)
 }
 
 /// A connection whose collection file was deleted by hand would attach its base URL and
@@ -396,7 +550,7 @@ fn invoke_worker(
     timeout: Duration,
 ) -> Result<Value, &'static str> {
     let encoded = request.to_string().into_bytes();
-    if encoded.len() > 65536 {
+    if encoded.len() > MAX_REQUEST {
         return Err("request_size_limit");
     }
     command

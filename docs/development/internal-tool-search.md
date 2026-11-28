@@ -9,6 +9,7 @@ xgen tools import --name inventory --source ./openapi.json
 xgen tools search --name inventory "read asset detail"
 xgen tools describe --name inventory getAssetDetail
 xgen tools list
+xgen tools enrich --name inventory --languages ko,en  # 다른 언어 summary를 모델로 만들어 검색 색인에 추가
 xgen tools rebuild --all            # backend 버전을 올린 뒤 기존 collection 다시 빌드
 xgen tools remove --name inventory  # collection과 연결·저장된 인증을 함께 삭제
 ```
@@ -17,7 +18,7 @@ xgen tools remove --name inventory  # collection과 연결·저장된 인증을 
 
 CLI가 바이너리에 포함한 Python worker를 stdin/stdout JSON으로 자동 호출한다. uv가 Python 3.12와 `graph-tool-call==0.47.0`을 관리한다. 별도 서버·포트·pip 설정은 없다. **현재 개발 버전은 PATH의 uv가 필요하고 최초 준비에는 네트워크가 필요하다.** uv 자체를 포함하는 OS별 배포는 후속 TODO다. uv 설정·프로젝트·`.env` 로딩과 Python 경로 주입을 차단하고 모델 API 키 등은 worker 환경에 넘기지 않는다.
 
-요청·출력·시간 제한: 요청 64 KiB, worker 응답 16 MiB, 전체 worker 실행 120초. 시간·출력 한도를 넘으면 process group 또는 Windows Job Object를 종료한다. 상세 upstream 오류·stderr는 표시하지 않고 오류 코드만 반환한다. 공개 HTTPS 주소라 해도 업무 API를 호출하는 기능은 없다. 처음 준비하는 패키지 다운로드는 이 제한 시간에 포함된다.
+요청·출력·시간 제한: 요청 4 MiB(summary 보강 응답 전달 때문, 이전 64 KiB), worker 응답 16 MiB, 전체 worker 실행 120초. 시간·출력 한도를 넘으면 process group 또는 Windows Job Object를 종료한다. 상세 upstream 오류·stderr는 표시하지 않고 오류 코드만 반환한다. 공개 HTTPS 주소라 해도 업무 API를 호출하는 기능은 없다. 처음 준비하는 패키지 다운로드는 이 제한 시간에 포함된다.
 
 ## 저장과 공통 도구 계약
 
@@ -148,6 +149,19 @@ worker 요청에 호스트가 manifest의 `expected_digest`를 넣는다. worker
 - 측정 범위: 단일 컬렉션 문구만 평가했다. 여러 컬렉션 중 일부만 표시하는 문구와 production planner 전체 프롬프트에서의 효과는 아직 측정하지 않았다.
 - production 재생(2026-10-08, 새 held-out 48건 x 2회 x 바이너리 2개): 사전 등록 유지 기준 1 불충족. 첫 검색의 실제 후보 앞 5개 정답 61 -> 59, 다른 기준(칸 하락 3 미만, 실패 28 -> 14, 첫 호출 토큰 +22)은 충족. 재설계 대상이다.
 - 같은 재생에서 graph-tool-call의 앞 5개가 top_k(5 vs 10·20)에 따라 34/96건 달라지는 것을 확인했다. standalone 평가는 top_k=5로 채점했으므로 planner가 실제로 받는 순위와 다를 수 있다.
+
+## 명세 summary 보강 — 2026-11-28 (ADR-0091)
+
+`xgen tools enrich --name <이름> --languages ko,en [--profile <프로필>]`은 operation summary가 요청한 언어의 문자 체계로 쓰이지 않은 operation마다, 그 언어로 짧은 summary를 모델로 만들어 원래 summary 뒤에 ` / `로 붙인 명세로 그래프를 다시 빌드한다. 기본 동작은 바뀌지 않는다. 명령을 실행할 때만 모델을 부른다.
+
+- 모델로 보내는 것: operation의 method·path·operationId·summary·description 앞 240자·tags·parameter 이름 10개와 API 제목. 활성 모델 프로필(또는 `--profile`)로 보낸다. 사내 명세는 로컬 모델 프로필로 실행한다. agy 프로필도 JSON 작업 마감 문구로 지원한다.
+- 요청은 같은 누락 언어 조합끼리 20개씩 묶고, schema 출력 프로필에는 모든 key를 required로 둔 strict schema를 보낸다. 응답은 worker가 검증한다. 언어마다 문자 체계가 맞고 200자 이하여야 하며, 실패한 operation은 한 번 더 묻는다.
+- 모델이 보는 설명은 원본이다. 검색 후보·`describe`·`describe_view`는 원래 summary를 보여 주고, 생성 문장은 그래프 색인에만 들어간다. 빌드 뒤 tool metadata에 넣는 방식은 같은 문장으로도 hit@1이 떨어져(세 묶음 합 205 -> 182) 측정한 방식대로 빌드 입력에 붙인다.
+- 보강 기록(`xgen_summary_enrichment`: 언어, 모델, operation별 생성 문장, 원래 설명)은 artifact에 저장된다. `tools rebuild`는 원본 사본에 같은 문장을 다시 붙여 모델 호출 없이 다시 빌드한다. 다시 `enrich`하면 원본에서 새로 만든다.
+- 보강한 언어의 요청에는 검색어 언어 힌트를 넣지 않는다(판정한 조건 S). `documentation_script`는 원래 설명 기준으로 계산한다.
+- 로컬 JSON으로 import한 collection만 지원한다. HTTPS 명세는 `summary_enrichment_requires_local_sources`.
+- 출력: `enriched`/`failed`/`targets`, `model_calls`, `model_failures`(실패 분류별 횟수), provider가 알려 준 `prompt_tokens`·`completion_tokens`. 사용량은 Run 사용량 기록에 들어가지 않는다.
+- 근거: [언어 병목 비교 2](../../MEMORY.md). 새 공개 held-out에서 S가 운영 힌트(Q) 대비 hit@5 98 -> 104, hit@1 66 -> 76. 구현 확인: 같은 held-out을 실제 CLI(agy Flash Low)로 보강해 같은 검색어로 hit@5 95 -> 103, hit@1 59 -> 75(보강 전 값은 측정한 C와 같다). 측정 때 생성 문장을 그대로 넣은 worker 빌드는 측정 S와 앞 5개가 16/16 같았다.
 
 ## 후속: HTTP 조회 실행
 

@@ -665,6 +665,58 @@ impl OpenAiPlannerConfig {
     }
 
     fn chat_request<'a>(&'a self, system: &'a str, user: &'a str) -> ChatCompletionRequest<'a> {
+        let response_format = match self.response_format {
+            ResponseFormat::JsonSchema | ResponseFormat::JsonSchemaAtomicJson => {
+                ResponseFormatRequest {
+                    response_type: "json_schema",
+                    json_schema: Some(JsonSchemaResponse {
+                        name: "xgeny_plan_proposal_v1",
+                        strict: true,
+                        schema: &self.proposal_schema,
+                    }),
+                }
+            }
+            ResponseFormat::JsonObject => ResponseFormatRequest {
+                response_type: "json_object",
+                json_schema: None,
+            },
+        };
+        self.chat_request_with_format(system, user, response_format)
+    }
+
+    /// Same request semantics as the planner with a host-chosen output schema.
+    fn task_request<'a>(
+        &'a self,
+        system: &'a str,
+        user: &'a str,
+        schema_name: &'static str,
+        schema: &'a Value,
+    ) -> ChatCompletionRequest<'a> {
+        let response_format = match self.response_format {
+            ResponseFormat::JsonSchema | ResponseFormat::JsonSchemaAtomicJson => {
+                ResponseFormatRequest {
+                    response_type: "json_schema",
+                    json_schema: Some(JsonSchemaResponse {
+                        name: schema_name,
+                        strict: true,
+                        schema,
+                    }),
+                }
+            }
+            ResponseFormat::JsonObject => ResponseFormatRequest {
+                response_type: "json_object",
+                json_schema: None,
+            },
+        };
+        self.chat_request_with_format(system, user, response_format)
+    }
+
+    fn chat_request_with_format<'a>(
+        &'a self,
+        system: &'a str,
+        user: &'a str,
+        response_format: ResponseFormatRequest<'a>,
+    ) -> ChatCompletionRequest<'a> {
         let (max_tokens, max_completion_tokens) = self.output_token_limits();
         ChatCompletionRequest {
             model: &self.model,
@@ -684,22 +736,7 @@ impl OpenAiPlannerConfig {
             max_completion_tokens,
             stream: false,
             n: 1,
-            response_format: match self.response_format {
-                ResponseFormat::JsonSchema | ResponseFormat::JsonSchemaAtomicJson => {
-                    ResponseFormatRequest {
-                        response_type: "json_schema",
-                        json_schema: Some(JsonSchemaResponse {
-                            name: "xgeny_plan_proposal_v1",
-                            strict: true,
-                            schema: &self.proposal_schema,
-                        }),
-                    }
-                }
-                ResponseFormat::JsonObject => ResponseFormatRequest {
-                    response_type: "json_object",
-                    json_schema: None,
-                },
-            },
+            response_format,
             thinking: self.thinking_request(),
             chat_template_kwargs: self.chat_template_request(),
             reasoning_effort: self.reasoning_effort(),
@@ -1052,6 +1089,157 @@ impl OpenAiCompatibilityChecker {
             .map_err(map_compatibility_transport_failure)?;
         decode_compatibility_response(&response, &self.config.model, self.config.max_json_depth)
     }
+}
+
+/// One host-defined JSON task over Chat Completions, outside any Run.
+///
+/// It reuses the planner's endpoint, transport security, request options and response envelope
+/// checks, but sends the caller's prompts and output schema. The host validates the returned
+/// value; this type only guarantees one complete, unique JSON object from the expected model.
+pub struct OpenAiJsonTask {
+    config: OpenAiPlannerConfig,
+    credential: Option<BearerCredential>,
+    transport: Box<dyn Transport + Send>,
+}
+
+/// Parsed JSON task answer with the token usage the provider reported, when it did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsonTaskOutput {
+    pub value: Value,
+    pub prompt_tokens: Option<u64>,
+    pub completion_tokens: Option<u64>,
+}
+
+impl OpenAiJsonTask {
+    /// Build a task client with the planner's exact transport policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a credential would cross plaintext HTTP or plaintext HTTP is not
+    /// addressed to a literal loopback IP.
+    pub fn new(
+        config: OpenAiPlannerConfig,
+        credential: Option<BearerCredential>,
+    ) -> Result<Self, OpenAiPlannerConfigError> {
+        validate_transport_security(&config.endpoint, credential.as_ref())?;
+        let transport = UreqTransport::new(config.timeout);
+        Ok(Self {
+            config,
+            credential,
+            transport: Box::new(transport),
+        })
+    }
+
+    /// Send tasks through an explicitly bound host transport.
+    #[must_use]
+    pub fn with_external_transport<F>(config: OpenAiPlannerConfig, send: F) -> Self
+    where
+        F: FnMut(&[u8], usize) -> Result<Vec<u8>, PlannerPortFailure> + Send + 'static,
+    {
+        Self {
+            config,
+            credential: None,
+            transport: Box::new(ExternalTransport(send)),
+        }
+    }
+
+    /// Send one non-streaming request and return the answer's JSON object.
+    ///
+    /// `schema` is sent as a strict `json_schema` when the profile uses schema output and is
+    /// otherwise only described by the prompts (`json_object`).
+    ///
+    /// # Errors
+    ///
+    /// Returns only a fixed redacted failure class. Provider response bodies are never exposed.
+    pub fn complete(
+        &mut self,
+        system: &str,
+        user: &str,
+        schema_name: &'static str,
+        schema: &Value,
+    ) -> Result<JsonTaskOutput, OpenAiCompatibilityCheckFailure> {
+        let body = serde_json::to_vec(&self.config.task_request(system, user, schema_name, schema))
+            .map_err(|_| OpenAiCompatibilityCheckFailure::InvalidResponse)?;
+        if body.len() > self.config.max_request_bytes {
+            return Err(OpenAiCompatibilityCheckFailure::RequestRejected);
+        }
+        let response = self
+            .transport
+            .send(TransportRequest {
+                endpoint: &self.config.endpoint,
+                authorization: self.credential.as_ref().map(|value| &value.0),
+                body: &body,
+                max_response_bytes: self.config.max_response_bytes,
+            })
+            .map_err(map_compatibility_transport_failure)?;
+        decode_json_task_response(&response, &self.config.model, self.config.max_json_depth)
+    }
+}
+
+impl fmt::Debug for OpenAiJsonTask {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OpenAiJsonTask")
+            .field("config", &self.config)
+            .field(
+                "credential",
+                &self.credential.as_ref().map(|_| "<redacted>"),
+            )
+            .field("transport", &"<redacted>")
+            .finish()
+    }
+}
+
+fn decode_json_task_response(
+    body: &[u8],
+    expected_model: &str,
+    max_json_depth: usize,
+) -> Result<JsonTaskOutput, OpenAiCompatibilityCheckFailure> {
+    let envelope = parse_unique_json(body, max_json_depth)
+        .map_err(|_| OpenAiCompatibilityCheckFailure::InvalidResponse)?;
+    let usage = envelope.get("usage").cloned();
+    let response: ChatCompletionResponse = serde_json::from_value(envelope)
+        .map_err(|_| OpenAiCompatibilityCheckFailure::InvalidResponse)?;
+    if response.model != expected_model {
+        return Err(OpenAiCompatibilityCheckFailure::InvalidResponse);
+    }
+    let [choice] = response.choices.as_slice() else {
+        return Err(OpenAiCompatibilityCheckFailure::InvalidResponse);
+    };
+    if choice.index != 0 || choice.message.role != "assistant" {
+        return Err(OpenAiCompatibilityCheckFailure::InvalidResponse);
+    }
+    if choice.finish_reason == "length" {
+        return Err(OpenAiCompatibilityCheckFailure::OutputTruncated);
+    }
+    if choice.finish_reason != "stop"
+        || choice.message.refusal.is_some()
+        || choice.message.tool_calls.is_some()
+        || choice.message.function_call.is_some()
+    {
+        return Err(OpenAiCompatibilityCheckFailure::InvalidResponse);
+    }
+    let content = choice
+        .message
+        .content
+        .as_deref()
+        .ok_or(OpenAiCompatibilityCheckFailure::InvalidResponse)?;
+    let value = parse_unique_json(content.as_bytes(), max_json_depth)
+        .map_err(|_| OpenAiCompatibilityCheckFailure::InvalidResponse)?;
+    if !value.is_object() {
+        return Err(OpenAiCompatibilityCheckFailure::InvalidResponse);
+    }
+    let tokens = |name: &str| {
+        usage
+            .as_ref()
+            .and_then(|usage| usage.get(name))
+            .and_then(Value::as_u64)
+    };
+    Ok(JsonTaskOutput {
+        value,
+        prompt_tokens: tokens("prompt_tokens"),
+        completion_tokens: tokens("completion_tokens"),
+    })
 }
 
 impl fmt::Debug for OpenAiCompatibilityChecker {
@@ -3744,6 +3932,70 @@ mod tests {
         let debug = format!("{checker:?}");
         assert!(!debug.contains("provider.example"));
         assert!(!debug.contains("compatibility-secret"));
+    }
+
+    #[test]
+    fn json_task_sends_the_host_schema_and_returns_the_object_with_usage() {
+        struct TaskTransport;
+        impl Transport for TaskTransport {
+            fn send(
+                &mut self,
+                request: TransportRequest<'_>,
+            ) -> Result<Vec<u8>, PlannerPortFailure> {
+                let body: Value = serde_json::from_slice(request.body).unwrap();
+                assert_eq!(body["messages"][0]["content"], "task system");
+                assert_eq!(body["messages"][1]["content"], "task user");
+                assert_eq!(body["response_format"]["type"], "json_schema");
+                assert_eq!(body["response_format"]["json_schema"]["name"], "task_v1");
+                assert_eq!(
+                    body["response_format"]["json_schema"]["schema"],
+                    json!({"type": "object"})
+                );
+                let mut envelope: Value =
+                    serde_json::from_slice(&response(r#"{"answer":"ok"}"#, "stop")).unwrap();
+                envelope["usage"] = json!({"prompt_tokens": 12, "completion_tokens": 3});
+                Ok(serde_json::to_vec(&envelope).unwrap())
+            }
+        }
+        let mut task = OpenAiJsonTask::new(config("https://provider.example/v1"), None).unwrap();
+        task.transport = Box::new(TaskTransport);
+        let output = task
+            .complete(
+                "task system",
+                "task user",
+                "task_v1",
+                &json!({"type": "object"}),
+            )
+            .unwrap();
+        assert_eq!(output.value, json!({"answer": "ok"}));
+        assert_eq!(
+            (output.prompt_tokens, output.completion_tokens),
+            (Some(12), Some(3))
+        );
+    }
+
+    #[test]
+    fn json_task_rejects_other_models_truncation_and_non_objects() {
+        let decode = |body: Vec<u8>| decode_json_task_response(&body, MODEL, 8);
+        assert!(decode(response(r#"{"a":1}"#, "stop")).is_ok());
+        assert_eq!(
+            decode(response(r#"{"a":1}"#, "length")),
+            Err(OpenAiCompatibilityCheckFailure::OutputTruncated)
+        );
+        assert_eq!(
+            decode(response("[1]", "stop")),
+            Err(OpenAiCompatibilityCheckFailure::InvalidResponse)
+        );
+        assert_eq!(
+            decode(response("not json", "stop")),
+            Err(OpenAiCompatibilityCheckFailure::InvalidResponse)
+        );
+        let mut other: Value = serde_json::from_slice(&response(r#"{"a":1}"#, "stop")).unwrap();
+        other["model"] = json!("other-model");
+        assert_eq!(
+            decode(serde_json::to_vec(&other).unwrap()),
+            Err(OpenAiCompatibilityCheckFailure::InvalidResponse)
+        );
     }
 
     #[test]

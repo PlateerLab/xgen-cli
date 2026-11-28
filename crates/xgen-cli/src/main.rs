@@ -19,7 +19,9 @@ use xgen_cli::{
     resume_local_with_process_session_and_model_resolver_progress,
     run_interactive_with_process_session_progress, run_local_with_progress,
 };
-use xgen_provider_openai::{BearerCredential, ParameterStyle, ResponseFormat, ThinkingMode};
+use xgen_provider_openai::{
+    BearerCredential, OpenAiCompatibilityCheckFailure, ParameterStyle, ResponseFormat, ThinkingMode,
+};
 use zeroize::Zeroizing;
 
 mod repl;
@@ -408,6 +410,14 @@ fn main() -> ExitCode {
         return ExitCode::from(PublicRunError::Internal.exit_code());
     }
     match cli.command {
+        Some(Command::Tools {
+            command:
+                tools::ToolsCommand::Enrich {
+                    name,
+                    languages,
+                    profile,
+                },
+        }) => tools_enrich(&name, languages, profile),
         Some(Command::Tools { command }) => tools::run(command),
         None => interactive_command(
             cli.debug,
@@ -2028,6 +2038,45 @@ fn model_remove(name: &str) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => present_model_command_error("remove", error),
     }
+}
+
+/// Bind the model profile for summary enrichment; the collection logic stays in `tools`.
+fn tools_enrich(name: &str, languages: Vec<String>, profile: Option<String>) -> ExitCode {
+    let resolved = match resolve_model(
+        None,
+        None,
+        None,
+        profile,
+        false,
+        RequestOptionArgs::default(),
+    ) {
+        Ok(resolved) => resolved,
+        Err(error) => return present_model_configuration_error(error),
+    };
+    let model = resolved.model.clone();
+    let mut task = match xgen_cli::json_task(ModelCheckRequest {
+        base_url: resolved.base_url,
+        model: resolved.model,
+        tokenizer: resolved.tokenizer,
+        credential: resolved.credential,
+        inference_limits: resolved.inference_limits,
+        request_options: resolved.request_options,
+    }) {
+        Ok(task) => task,
+        Err(error) => return present_model_check_error(error),
+    };
+    tools::enrich(name, languages, &model, |system, user, schema| {
+        task.complete(system, user, "xgen_summary_enrichment_v1", schema)
+            .map(|output| (output.value, output.prompt_tokens, output.completion_tokens))
+            .map_err(|failure| match failure {
+                OpenAiCompatibilityCheckFailure::Timeout => "timeout",
+                OpenAiCompatibilityCheckFailure::Unavailable => "unavailable",
+                OpenAiCompatibilityCheckFailure::InvalidResponse => "invalid_response",
+                OpenAiCompatibilityCheckFailure::ProviderLimit => "provider_limit",
+                OpenAiCompatibilityCheckFailure::OutputTruncated => "output_truncated",
+                OpenAiCompatibilityCheckFailure::RequestRejected => "request_rejected",
+            })
+    })
 }
 
 fn model_check(args: ModelCheckArgs) -> ExitCode {

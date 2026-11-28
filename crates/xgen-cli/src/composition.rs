@@ -40,8 +40,8 @@ use xgen_policy::{
 };
 use xgen_provider_openai::{
     BearerCredential, EvaluationProposalStepLimit, OpenAiCompatibilityCheckFailure,
-    OpenAiCompatibilityChecker, OpenAiModelCheckFailure, OpenAiModelChecker, OpenAiPlanner,
-    OpenAiPlannerConfig, OpenAiPlannerConfigError,
+    OpenAiCompatibilityChecker, OpenAiJsonTask, OpenAiModelCheckFailure, OpenAiModelChecker,
+    OpenAiPlanner, OpenAiPlannerConfig, OpenAiPlannerConfigError,
 };
 use xgen_runtime::{
     AgentLoop, AgentLoopQuiescence, AgentLoopTick, CapabilityRegistry, DirectExecutor,
@@ -505,6 +505,58 @@ pub fn check_openai_compatibility(request: ModelCheckRequest) -> Result<(), Mode
         .map_err(map_model_check_config)?
         .check()
         .map_err(map_compatibility_check_failure)
+}
+
+/// Build a host JSON task client for the selected model profile, outside any Run.
+///
+/// It uses the compatibility probe's request semantics (output budget, timeout, response format,
+/// thinking and parameter style). An agy profile uses its pinned CLI with a JSON-task closing.
+///
+/// # Errors
+///
+/// Returns stable redacted configuration classes.
+pub fn json_task(request: ModelCheckRequest) -> Result<OpenAiJsonTask, ModelCheckError> {
+    if crate::agy::is_agy(&request.base_url) {
+        if request.credential.is_some() {
+            return Err(ModelCheckError::InvalidCredential);
+        }
+        let config = planner_config(
+            &request.base_url,
+            DEFAULT_PLANNER_ID,
+            &request.model,
+            &request.tokenizer,
+            request.inference_limits,
+            request.request_options,
+            false,
+        )
+        .map_err(|_| ModelCheckError::Configuration)?;
+        let spec = crate::agy::Spec::parse(&request.base_url)
+            .map_err(|()| ModelCheckError::Configuration)?;
+        let mut transport =
+            crate::agy::Transport::new(spec, &request.model, request.inference_limits.timeout())
+                .map_err(|()| ModelCheckError::Configuration)?
+                .for_json_task();
+        return Ok(OpenAiJsonTask::with_external_transport(
+            config,
+            move |body, limit| transport.send(body, limit),
+        ));
+    }
+    let ModelCheckRequest {
+        base_url,
+        model,
+        tokenizer,
+        credential,
+        inference_limits,
+        request_options,
+    } = request;
+    let config = compatibility_probe_config(
+        &base_url,
+        &model,
+        &tokenizer,
+        inference_limits,
+        request_options,
+    )?;
+    OpenAiJsonTask::new(config, credential).map_err(map_model_check_config)
 }
 
 /// Build the compatibility probe with the exact non-secret request semantics of the production

@@ -1,4 +1,5 @@
-"""Pinned internal retrieval worker. No business API execution or model calls."""
+"""Pinned internal retrieval worker. No business API execution or model calls; the host
+sends summary-enrichment prompts and returns the answers for validation."""
 
 import collections
 import copy
@@ -16,6 +17,17 @@ import warnings
 VERSION = "0.47.0"
 LIMIT = 256 * 1024 * 1024
 COMPRESSED_LIMIT = 64 * 1024 * 1024
+REQUEST_LIMIT = 4 * 1024 * 1024
+# Summary enrichment (ADR-0091): generated summaries in other languages are appended to the
+# operation summary before the graph is built, as measured; the planner still sees originals.
+ENRICHMENT_SCRIPTS = {"ko": "Hangul", "en": "Latin", "ja": "Kana", "zh": "Han"}
+ENRICHMENT_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
+ENRICHMENT_BATCH = 20
+ENRICHMENT_TEXT_LIMIT = 200
+ENRICHMENT_SYSTEM = ("You add search-index summaries to OpenAPI operations. For every operation key, write a "
+                     "concise summary (at most 15 words) of what the operation does in each requested language, "
+                     "naming its resource and action. Use only the given fields. Return JSON: "
+                     '{"summaries": {"<key>": {"<language code>": "<summary>"}}}.')
 
 
 class WorkerError(Exception):
@@ -133,9 +145,19 @@ def load(root, name):
     return envelope
 
 
-def build_artifact(inputs, labels):
+def build_artifact(inputs, labels, enrichment=None):
     from graph_tool_call.graphify import build_openapi_collection_artifact
-    artifact = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
+    if enrichment is not None:
+        originals = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
+        built = build_openapi_collection_artifact(enriched_inputs(inputs, enrichment), max_response_bytes=5_000_000)
+        if set(built["tools"]) != set(originals["tools"]):
+            raise WorkerError("summary_enrichment_changed_tools")
+        built["metadata"]["xgen_summary_enrichment"] = {
+            **enrichment, "original_descriptions": {name: tool.get("description")
+                                                    for name, tool in originals["tools"].items()}}
+        artifact = built
+    else:
+        artifact = build_openapi_collection_artifact(inputs, max_response_bytes=5_000_000)
     artifact["metadata"]["xgen_http_sources"] = {f"inline:{index}": copy.deepcopy(value) for index, value in enumerate(inputs, 1)} if all(isinstance(value, dict) for value in inputs) else {}
     artifact["metadata"]["xgen_source_inputs"] = [
         {"kind": "https" if isinstance(value, str) else "json", "label": label,
@@ -143,6 +165,124 @@ def build_artifact(inputs, labels):
         for label, value in zip(labels, inputs)
     ]
     return artifact
+
+
+def enrichment_record(artifact):
+    record = (artifact.get("metadata") or {}).get("xgen_summary_enrichment")
+    return record if isinstance(record, dict) else None
+
+
+def enrichment_for_rebuild(artifact):
+    """The stored generated texts without the derived original descriptions."""
+    record = enrichment_record(artifact)
+    if record is None:
+        return None
+    return {key: record[key] for key in ("format_version", "languages", "model", "entries")}
+
+
+def original_description(artifact, name, fallback):
+    """Planner-visible description: the source summary, not the generated index text."""
+    record = enrichment_record(artifact)
+    if record is None:
+        return fallback
+    value = record["original_descriptions"].get(name)
+    return value if isinstance(value, str) else fallback
+
+
+def enrichment_operations(inputs, languages):
+    """(key, source index, method, path, missing languages, view) for every operation whose
+    summary does not already use the script of each requested language."""
+    rows = []
+    for source_index, document in enumerate(inputs, 1):
+        if not isinstance(document, dict):
+            raise WorkerError("summary_enrichment_requires_local_sources")
+        title = str((document.get("info") or {}).get("title") or "")
+        for path, item in (document.get("paths") or {}).items():
+            if not isinstance(item, dict):
+                continue
+            for method, operation in item.items():
+                if method not in ENRICHMENT_METHODS or not isinstance(operation, dict):
+                    continue
+                summary = str(operation.get("summary") or "").strip()
+                script = summary_script(summary) if summary else None
+                missing = [language for language in languages if ENRICHMENT_SCRIPTS[language] != script]
+                if not missing:
+                    continue
+                parameters = [parameter.get("name") for parameter in operation.get("parameters") or []
+                              if isinstance(parameter, dict) and isinstance(parameter.get("name"), str)]
+                view = {"method": method.upper(), "path": path, "operationId": operation.get("operationId"),
+                        "summary": operation.get("summary"),
+                        "description": str(operation.get("description") or "")[:240] or None,
+                        "tags": operation.get("tags"), "parameters": parameters[:10] or None}
+                view = {key: value for key, value in view.items() if value}
+                rows.append({"key": f"s{source_index}:{method}:{path}", "source": source_index,
+                             "method": method, "path": path, "missing": missing, "view": view,
+                             "title": title})
+    return rows
+
+
+def enriched_inputs(inputs, enrichment):
+    documents = copy.deepcopy(inputs)
+    for entry in enrichment["entries"]:
+        operation = documents[entry["source"] - 1]["paths"][entry["path"]][entry["method"]]
+        summary = str(operation.get("summary") or "").strip()
+        added = [entry["texts"][language] for language in enrichment["languages"] if language in entry["texts"]]
+        operation["summary"] = " / ".join(([summary] if summary else []) + added)
+    return documents
+
+
+def enrichment_languages(value):
+    if (not isinstance(value, list) or not 1 <= len(value) <= len(ENRICHMENT_SCRIPTS)
+            or len(set(value)) != len(value) or any(language not in ENRICHMENT_SCRIPTS for language in value)):
+        raise WorkerError("invalid_enrichment_languages")
+    return value
+
+
+def valid_enrichment_text(text, language):
+    return (isinstance(text, str) and 0 < len(text.strip()) <= ENRICHMENT_TEXT_LIMIT
+            and summary_script(text) == ENRICHMENT_SCRIPTS[language])
+
+
+def enrichment_plan(inputs, languages, completed):
+    """Model requests for operations not yet completed: one per group of up to 20 operations
+    sharing the same missing languages, with a strict schema naming every key."""
+    groups = {}
+    for row in enrichment_operations(inputs, languages):
+        if row["key"] not in completed:
+            groups.setdefault((row["title"], tuple(row["missing"])), []).append(row)
+    batches = []
+    for (title, missing), rows in groups.items():
+        for start in range(0, len(rows), ENRICHMENT_BATCH):
+            chunk = rows[start:start + ENRICHMENT_BATCH]
+            keys = [f"op{index}" for index in range(1, len(chunk) + 1)]
+            user = {"languages": list(missing), "api": title,
+                    "operations": [dict(row["view"], key=key) for key, row in zip(keys, chunk)]}
+            entry_schema = {"type": "object", "properties": {language: {"type": "string"} for language in missing},
+                            "required": list(missing), "additionalProperties": False}
+            schema = {"type": "object", "properties": {"summaries": {
+                "type": "object", "properties": {key: entry_schema for key in keys},
+                "required": keys, "additionalProperties": False}},
+                "required": ["summaries"], "additionalProperties": False}
+            batches.append({"system": ENRICHMENT_SYSTEM, "user": json.dumps(user, ensure_ascii=False),
+                            "schema": schema, "keys": {key: row["key"] for key, row in zip(keys, chunk)},
+                            "languages": list(missing)})
+    return batches
+
+
+def enrichment_collect(answers, completed):
+    """Keep only answers whose every requested language is present in the right script."""
+    completed = dict(completed)
+    for answer in answers:
+        if not isinstance(answer, dict) or not isinstance(answer.get("keys"), dict):
+            raise WorkerError("invalid_enrichment_answer")
+        languages = enrichment_languages(answer.get("languages"))
+        summaries = answer.get("value", {}).get("summaries") if isinstance(answer.get("value"), dict) else None
+        for local, key in answer["keys"].items():
+            entry = summaries.get(local) if isinstance(summaries, dict) else None
+            if isinstance(entry, dict) and all(valid_enrichment_text(entry.get(language), language)
+                                               for language in languages):
+                completed[key] = {language: entry[language].strip() for language in languages}
+    return completed
 
 
 def retained_inputs(artifact):
@@ -208,6 +348,14 @@ def summary_script(text):
 def documentation_script(artifact):
     """Dominant script of operation summaries in the pinned artifact, or None."""
     counts = collections.Counter()
+    record = enrichment_record(artifact)
+    if record is not None:
+        # Enriched summaries mix scripts; the documentation language is the source's.
+        for text in record["original_descriptions"].values():
+            script = summary_script(str(text or ""))
+            if script:
+                counts[script] += 1
+        return min(counts, key=lambda script: (-counts[script], script)) if counts else None
     for tool in artifact["tools"].values():
         openapi = (tool.get("metadata") or {}).get("openapi") or {}
         script = summary_script(str(openapi.get("summary") or tool.get("description") or ""))
@@ -236,8 +384,12 @@ def language_hints(root, request, snapshots):
         if envelope["artifact_digest"] != expected:
             raise WorkerError("collection_snapshot_changed")
         script = documentation_script(envelope["artifact"])
+        record = enrichment_record(envelope["artifact"])
+        covered = record is not None and request_script in {ENRICHMENT_SCRIPTS[language]
+                                                              for language in record["languages"]}
         result[name] = {"documentation_script": script,
-                        "script_differs": bool(request_script and script and request_script != script)}
+                        "script_differs": bool(request_script and script and request_script != script
+                                               and not covered)}
     return result
 
 
@@ -246,7 +398,10 @@ def summarize(envelope):
     return {"collection": envelope["collection"], "artifact_digest": envelope["artifact_digest"],
             "backend_version": VERSION, "tool_count": len(artifact["tools"]),
             "source_count": artifact["metadata"]["source_count"],
-            "execution_enabled": False}
+            "execution_enabled": False,
+            **({"summary_enrichment": {"languages": record["languages"], "model": record["model"],
+                                       "operations": len(record["entries"])}}
+               if (record := enrichment_record(artifact)) else {})}
 
 
 def listed(root, name):
@@ -310,7 +465,8 @@ def dispatch(request):
             # artifact records build times, so a needless rebuild would change the digest.
             return {"ok": True, **summarize(previous), "rebuilt": False}
         inputs, labels = retained_inputs(previous["artifact"])
-        envelope = store(root, name, build_artifact(inputs, labels), replaces=previous["artifact_digest"])
+        envelope = store(root, name, build_artifact(inputs, labels, enrichment_for_rebuild(previous["artifact"])),
+                         replaces=previous["artifact_digest"])
         return {"ok": True, **summarize(envelope), "rebuilt": True,
                 "previous": {"artifact_digest": previous["artifact_digest"],
                              "backend_version": previous.get("backend_version"),
@@ -319,6 +475,32 @@ def dispatch(request):
     envelope = load(root, name)
     if request.get("expected_digest") is not None and request["expected_digest"] != envelope["artifact_digest"]:
         raise WorkerError("collection_snapshot_changed")
+    if operation in ("enrichment_plan", "enrichment_apply"):
+        languages = enrichment_languages(request.get("languages"))
+        completed = request.get("completed", {})
+        if not isinstance(completed, dict):
+            raise WorkerError("invalid_enrichment_answer")
+        inputs, labels = retained_inputs(envelope["artifact"])
+        targets = {row["key"]: row for row in enrichment_operations(inputs, languages)}
+        if any(key not in targets for key in completed):
+            raise WorkerError("invalid_enrichment_answer")
+        if operation == "enrichment_plan":
+            return {"ok": True, **summarize(envelope), "targets": len(targets),
+                    "batches": enrichment_plan(inputs, languages, completed)}
+        completed = enrichment_collect(request.get("answers", []), completed)
+        if not request.get("store"):
+            return {"ok": True, **summarize(envelope), "targets": len(targets), "completed": completed}
+        model = request.get("model")
+        if not isinstance(model, str) or not 1 <= len(model) <= 256:
+            raise WorkerError("invalid_enrichment_answer")
+        entries = [{"source": targets[key]["source"], "method": targets[key]["method"],
+                    "path": targets[key]["path"], "texts": texts} for key, texts in sorted(completed.items())]
+        enrichment = {"format_version": 1, "languages": languages, "model": model, "entries": entries}
+        stored = store(root, name, build_artifact(inputs, labels, enrichment),
+                       replaces=envelope["artifact_digest"])
+        return {"ok": True, **summarize(stored), "targets": len(targets), "enriched": len(entries),
+                "failed": len(targets) - len(entries), "languages": languages,
+                "previous_artifact_digest": envelope["artifact_digest"]}
     if operation == "validate_read_operations":
         sources = envelope["artifact"].get("metadata", {}).get("xgen_http_sources", {})
         for selected in request["read_operations"]:
@@ -341,13 +523,15 @@ def dispatch(request):
         tool = graph.tools.get(request["tool"])
         if tool is None:
             raise WorkerError("tool_not_found")
-        contract = http_read_contract(envelope["artifact"], tool.to_dict(), request.get("http_policy"))
+        tool_view = tool.to_dict()
+        tool_view["description"] = original_description(envelope["artifact"], tool.name, tool_view.get("description"))
+        contract = http_read_contract(envelope["artifact"], tool_view, request.get("http_policy"))
         if operation == "execution_contract":
             return {"ok": True, **summarize(envelope), "tool_name": tool.name,
                     "http_read": contract, "contract_kind": "host_http_contract"}
         if operation == "describe_view":
-            return describe_view(envelope, tool.to_dict(), contract, request.get("parameter_offset", 0))
-        return {"ok": True, **summarize(envelope), "tool": tool.to_dict(), "http_read": contract,
+            return describe_view(envelope, tool_view, contract, request.get("parameter_offset", 0))
+        return {"ok": True, **summarize(envelope), "tool": tool_view, "http_read": contract,
                 "contract_kind": "discovery_candidate", "effect_class": "unclassified"}
     if operation == "search":
         query, top_k = request["query"], request["top_k"]
@@ -360,7 +544,9 @@ def dispatch(request):
         tools = {name: tool.to_dict() for name, tool in graph.tools.items()}
         expanded = expand_candidates_with_producers(names, tools, max_hops=1)
         return {"ok": True, **summarize(envelope),
-                "candidates": [{"tool": hit.tool.name, "description": hit.tool.description,
+                "candidates": [{"tool": hit.tool.name,
+                                "description": original_description(envelope["artifact"], hit.tool.name,
+                                                                    hit.tool.description),
                                 "score": hit.score} for hit in hits],
                 "possible_producers": [name for name in expanded if name not in names][:40],
                 "omitted_producers": max(0, len(set(expanded) - set(names)) - 40),
@@ -704,8 +890,8 @@ def http_read_report(envelope, tools, policy, offset, limit):
 def main():
     warnings.simplefilter("ignore")
     try:
-        raw = sys.stdin.buffer.read(65537)
-        if len(raw) > 65536:
+        raw = sys.stdin.buffer.read(REQUEST_LIMIT + 1)
+        if len(raw) > REQUEST_LIMIT:
             raise WorkerError("request_size_limit")
         response = dispatch(json.loads(raw, object_pairs_hook=unique_object, parse_constant=invalid_constant))
     except WorkerError as error:

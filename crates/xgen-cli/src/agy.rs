@@ -210,7 +210,10 @@ pub struct Transport {
     settings: PathBuf,
     model: String,
     timeout: Duration,
+    closing: &'static str,
 }
+const PROPOSAL_CLOSING: &str = "Return exactly one proposal JSON object. No Markdown fences or commentary. All actions remain proposals for the host. Never call your own tools or access the environment.";
+const TASK_CLOSING: &str = "Return exactly one JSON object as instructed. No Markdown fences or commentary. Never call your own tools or access the environment.";
 impl Transport {
     pub fn new(spec: Spec, model: &str, timeout: Duration) -> Result<Self, ()> {
         spec.verify()?;
@@ -246,7 +249,14 @@ impl Transport {
             settings: settings_path,
             model: model.to_owned(),
             timeout,
+            closing: PROPOSAL_CLOSING,
         })
+    }
+    /// Close prompts for a host JSON task (summary enrichment) instead of a plan proposal.
+    #[must_use]
+    pub fn for_json_task(mut self) -> Self {
+        self.closing = TASK_CLOSING;
+        self
     }
     fn unchanged(&self) -> Result<(), ()> {
         self.spec.verify()?;
@@ -372,7 +382,8 @@ impl Transport {
             .as_str()
             .ok_or(PlannerPortFailure::InvalidResponse)?;
         let prompt = format!(
-            "HOST SYSTEM INSTRUCTIONS:\n{system}\nHOST REQUEST AND OBSERVATIONS:\n{user}\nReturn exactly one proposal JSON object. No Markdown fences or commentary. All actions remain proposals for the host. Never call your own tools or access the environment."
+            "HOST SYSTEM INSTRUCTIONS:\n{system}\nHOST REQUEST AND OBSERVATIONS:\n{user}\n{}",
+            self.closing
         );
         if prompt.len() > prompt_limit() {
             return Err(PlannerPortFailure::RequestTooLarge);
