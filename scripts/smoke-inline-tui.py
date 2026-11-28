@@ -223,9 +223,10 @@ def main():
         enter()
         assert entered.wait(TIMEOUT), "model call did not begin"
         mark("model_entered")
-        send("queued after resize")
+        # ADR-0092: a line typed while the Run is in flight is added to that Run.
+        send("follow-up after resize")
         enter()
-        wait_for(lambda: "queued:" in capture(), "queued goal")
+        wait_for(lambda: "next step:" in capture(), "follow-up waiting for the next model call")
         for width, height in [(40, 18), (100, 30), (60, 18)]:
             resize(width, height, f"running-{width}x{height}")
         release.set()
@@ -236,15 +237,16 @@ def main():
         resize(80, 24, "approval-draft")
         assert "│ > y" in capture(), "approval draft lost on resize"
         enter()
-        wait_for(lambda: "QUEUED_DONE" in capture(history=True), "queued goal completion")
+        wait_for(lambda: "READ_DONE" in capture(history=True), "read completion")
         text = capture(history=True)
-        assert "READ_DONE" in text, "read did not complete"
-        assert len(requests) == 3, f"unexpected model request count: {len(requests)}"
+        assert "added to the run: follow-up after resize" in text, "follow-up was not shown as added"
+        assert len(requests) == 2, f"unexpected model request count: {len(requests)}"
         if args.results:
             assert (root / "created.txt").read_text() == change_text
         else:
             assert requests[1]["toolOutputs"][0]["output"]["content"] == "READ_FIXTURE\n"
-        assert "queued after resize" in requests[2]["goal"], "queued goal changed"
+        assert "userInstructions" not in requests[0], "instruction reached the call in flight"
+        assert requests[1]["userInstructions"]["items"] == ["follow-up after resize"], "follow-up changed"
         resize(55, 18, "heldout-after-completion")
         if args.results:
             assert "Ctrl+O:" in capture(history=True), "long results were not folded"
@@ -252,8 +254,9 @@ def main():
             assert "DIFF_ROW_30" not in capture(history=True), "change middle leaked into preview"
             send("unsent draft 한국어")
             tmux("send-keys", "-t", "fixture", "C-o")
-            wait_for(lambda: "Answer #3" in capture(), "latest result viewer")
-            tmux("send-keys", "-t", "fixture", "Left", "End")
+            # The follow-up joined the first Run, so its change is the latest result.
+            wait_for(lambda: "Changes #2" in capture(), "latest result viewer")
+            tmux("send-keys", "-t", "fixture", "End")
             wait_for(lambda: "DIFF_ROW_59" in capture(), "full change tail")
             tmux("send-keys", "-t", "fixture", "Home")
             tmux("send-keys", "-t", "fixture", "-N", "20", "Down")
@@ -268,19 +271,19 @@ def main():
             tmux("send-keys", "-t", "fixture", "Enter", "Escape")
             wait_for(lambda: "│ > unsent draft 한국어" in capture(), "draft restored after viewer")
             assert "ANSWER_ROW_20" not in capture(history=True), "viewer replaced terminal scrollback"
-            assert len(requests) == 3, "viewer input started another model call"
+            assert len(requests) == 2, "viewer input started another model call"
             tmux("send-keys", "-t", "fixture", "C-c")
             send("Inspect viewer background")
             enter()
             assert background_entered.wait(TIMEOUT), "background model call did not begin"
             send("preserved draft")
             tmux("send-keys", "-t", "fixture", "C-o")
-            wait_for(lambda: "Answer #3" in capture(), "viewer during a Run")
+            wait_for(lambda: "Changes #2" in capture(), "viewer during a Run")
             background_release.set()
             wait_for(lambda: "Approval pending" in capture(), "approval notice inside viewer")
             tmux("send-keys", "-t", "fixture", "Enter", "Left")
-            wait_for(lambda: "Changes #2" in capture(), "viewer navigation after ignored Enter")
-            assert len(requests) == 4, "viewer Enter approved a tool"
+            wait_for(lambda: "Answer #1" in capture(), "viewer navigation after ignored Enter")
+            assert len(requests) == 3, "viewer Enter approved a tool"
             tmux("send-keys", "-t", "fixture", "Escape")
             wait_for(lambda: "│ > preserved draft" in capture(), "pending draft on approval return")
             tmux("send-keys", "-t", "fixture", "C-c")
@@ -288,14 +291,14 @@ def main():
             enter()
             assert completion_entered.wait(TIMEOUT), "approved read did not finish"
             tmux("send-keys", "-t", "fixture", "C-o")
-            wait_for(lambda: "Answer #3" in capture(), "viewer before background result")
+            wait_for(lambda: "Changes #2" in capture(), "viewer before background result")
             completion_release.set()
             wait_for(lambda: "New output" in capture(), "deferred result notice")
             tmux("send-keys", "-t", "fixture", "Escape")
             wait_for(lambda: "BACKGROUND_DONE" in capture(history=True), "deferred result restored")
-            assert len(requests) == 5, "unexpected background model request count"
+            assert len(requests) == 4, "unexpected background model request count"
         tmux("send-keys", "-t", "fixture", "Up")
-        recalled = "│ > Inspect viewer background" if args.results else "│ > queued after resize"
+        recalled = "│ > Inspect viewer background" if args.results else "│ > follow-up after resize"
         wait_for(lambda: recalled in capture(), "history after resize")
         tmux("send-keys", "-t", "fixture", "C-c", "C-d")
         # The shell creates stty.txt before stty writes it; wait for the mode list itself.

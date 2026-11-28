@@ -116,6 +116,16 @@ Ctrl+C는 다음 안전한 durable 경계에서 멈춘다. Model request나 proc
 `user_cancelled`보다 `model_call_unknown`/`effect_outcome_unknown`이 우선하고 자동 재실행하지 않는다.
 Network/process call이 진행 중이면 configured timeout까지 기다릴 수 있다.
 
+## Run 중 후속 지시
+
+Run이 도는 동안 입력창에 쓰고 Enter를 누르면 그 Run에 지시를 더한다([ADR-0092](../adr/0092-follow-up-instructions-during-a-run.md)).
+
+- 다음 모델 호출 직전에 전달된다. 전달 전에는 입력창 위에 `next step: ...`, 전달되면 `↳ added to the run: ...`이 보인다.
+- 모델은 지시를 goal의 일부로 읽고, 충돌하면 나중 지시를 따른다. 이미 끝난 단계는 되돌리지 않는다.
+- `/`로 시작하는 줄은 명령이라 `queued: ...`로 기다렸다가 다음 `xgen> `에서 실행된다.
+- Run이 지시를 받지 못하고 끝나면 그 지시는 다음 목표로 먼저 실행된다. 승인 질문의 답으로는 쓰지 않는다.
+- Esc는 기다리는 지시와 명령을 비우고, Ctrl+C는 Run 취소와 함께 비운다. 한 줄 8 KiB, Run당 16개까지다.
+
 ## 긴 결과 보기
 
 일반 TUI는 완료된 답변과 `Changes`를 결과 블록으로 보관한다. 받은 시점의 창 폭으로 12행을 넘으면

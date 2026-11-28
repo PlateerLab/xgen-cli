@@ -24,6 +24,7 @@ prompt와 같은 흐름에 섞였다. Claude Code·Codex처럼 입력창은 화�
 4. pane 구성: 진행 줄(spinner `|/-\`) 또는 승인 질문, 대기 중인 목표, 입력 상자, 작업 디렉토리와 키 안내.
 5. 키
    - Enter: 보내기. Run 중이면 대기열에 넣고, 다음 `xgen> ` prompt에서 보낸다. 승인 질문에는 대기열을 쓰지 않는다.
+     (2026-11-28 ADR-0092로 변경: Run 중 줄은 그 Run의 후속 지시가 되고, `/` 명령과 Run이 받지 못한 지시만 대기열로 간다.)
    - Alt+Enter, Shift+Enter, Ctrl+J: 줄바꿈. 여러 줄 목표는 기존 `\` 이어 쓰기로 바꿔 보낸다.
    - Ctrl+C: Run 중이면 `Cancellation::request()`(기존 SIGINT 경로와 같음)와 대기열 비우기, 입력 중이면 입력 지우기,
      빈 입력이면 `Interrupted`. raw mode라 SIGINT는 오지 않는다.

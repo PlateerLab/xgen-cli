@@ -29,6 +29,7 @@ use crate::repl::{
     Cancellation, InputMessage, InterruptibleInput, MAX_REPL_LINE_BYTES, ReplOutput, ResultKind,
 };
 use crate::tui_results::{ResultHistory, ResultViewer, ViewerAction};
+use xgen_cli::FollowUpInbox;
 
 const MAX_HISTORY_ENTRIES: usize = 500;
 /// Keep keyboard/resize bursts from starving output and shutdown messages.
@@ -120,6 +121,7 @@ pub(crate) fn start(
     history: Option<PathBuf>,
     footer: String,
     folding: bool,
+    follow_ups: FollowUpInbox,
 ) -> io::Result<(InterruptibleInput, TuiOutput, TuiGuard)> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -137,7 +139,7 @@ pub(crate) fn start(
     let (lines, input) = mpsc::sync_channel(1);
     let frontend_cancellation = cancellation.clone();
     let thread = thread::spawn(move || {
-        let mut frontend = Frontend::new(frontend_cancellation, history, footer, lines);
+        let mut frontend = Frontend::new(frontend_cancellation, history, footer, lines, follow_ups);
         frontend.run(&receiver);
     });
     let request_sender = sender.clone();
@@ -168,8 +170,11 @@ struct Frontend {
     editor: LineEditor,
     /// The REPL is waiting for a line.
     requested: bool,
-    /// Goals typed while a Run was in flight, sent at the next goal prompt.
+    /// Lines left for the next goal prompt: commands typed while a Run was in flight, and
+    /// instructions the Run ended without taking.
     queue: VecDeque<String>,
+    /// Instructions typed while a Run is in flight, taken at its next model call (ADR-0092).
+    follow_ups: FollowUpInbox,
     /// The remaining lines of a multi-line submission, answered at `...>` prompts.
     continuation: VecDeque<String>,
     cancelling: bool,
@@ -237,6 +242,7 @@ impl Frontend {
         history_path: Option<PathBuf>,
         footer: String,
         lines: mpsc::SyncSender<InputMessage>,
+        follow_ups: FollowUpInbox,
     ) -> Self {
         let history = history_path
             .as_deref()
@@ -251,6 +257,7 @@ impl Frontend {
             editor: LineEditor::with_history(history),
             requested: false,
             queue: VecDeque::new(),
+            follow_ups,
             continuation: VecDeque::new(),
             cancelling: false,
             started: Instant::now(),
@@ -298,6 +305,15 @@ impl Frontend {
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
                 }
+            }
+            for text in self.follow_ups.take_delivered() {
+                finished.push(
+                    format!(
+                        "\x1b[2m↳ added to the run: {}\x1b[0m",
+                        text.replace('\n', " ")
+                    )
+                    .into_bytes(),
+                );
             }
             dirty |= !finished.is_empty();
             let event = event::poll(Duration::from_millis(25))
@@ -362,6 +378,12 @@ impl Frontend {
             return;
         }
         self.continuation.clear();
+        if prompt == GOAL_PROMPT {
+            // The Run is over; what it did not take becomes the next goals, in typed order.
+            for (index, text) in self.follow_ups.take_pending().into_iter().enumerate() {
+                self.queue.insert(index, text);
+            }
+        }
         if prompt == GOAL_PROMPT
             && let Some(goal) = self.queue.pop_front()
         {
@@ -423,8 +445,14 @@ impl Frontend {
                 let text = self.editor.take();
                 if self.requested {
                     self.submit(&text, finished);
-                } else if !text.trim().is_empty() {
+                } else if text.trim().starts_with('/') {
                     self.queue.push_back(text);
+                } else if !text.trim().is_empty() {
+                    self.editor.remember(&text);
+                    if let Some(path) = &self.history_path {
+                        append_history(path, &text);
+                    }
+                    self.follow_ups.push(text);
                 }
             }
             KeyCode::Char('a') if control => self.editor.home(),
@@ -443,6 +471,7 @@ impl Frontend {
             KeyCode::Down => self.editor.next(),
             KeyCode::Esc if !self.requested => {
                 self.queue.clear();
+                self.follow_ups.clear();
             }
             _ => return false,
         }
@@ -455,6 +484,7 @@ impl Frontend {
             self.cancellation.request();
             self.cancelling = true;
             self.queue.clear();
+            self.follow_ups.clear();
         } else if !self.editor.is_empty() {
             self.editor.take();
         } else {
@@ -604,6 +634,7 @@ impl Frontend {
             requested: self.requested,
             cancelling: self.cancelling,
             queue: &self.queue,
+            follow_ups: self.follow_ups.pending(),
             footer: &self.footer,
             has_results: self.results.latest().is_some(),
             spinner: SPINNER[usize::try_from(self.started.elapsed().as_millis() / 250)
@@ -1022,6 +1053,7 @@ struct PaneView<'a> {
     requested: bool,
     cancelling: bool,
     queue: &'a VecDeque<String>,
+    follow_ups: Vec<String>,
     footer: &'a str,
     has_results: bool,
     spinner: char,
@@ -1031,6 +1063,34 @@ struct Pane {
     rows: Vec<String>,
     caret_row: usize,
     caret_column: usize,
+}
+
+/// Instructions for the running Run first, then lines left for the next goal prompt.
+fn waiting_rows(view: &PaneView<'_>, slots: usize, width: usize) -> Vec<String> {
+    let waiting: Vec<(&str, &String)> = view
+        .follow_ups
+        .iter()
+        .map(|text| ("next step", text))
+        .chain(view.queue.iter().map(|text| ("queued", text)))
+        .collect();
+    let mut rows = Vec::new();
+    for (index, (label, text)) in waiting.iter().take(slots).enumerate() {
+        if index + 1 == slots && waiting.len() > slots {
+            rows.push(format!(
+                "\x1b[2m{}\x1b[0m",
+                fit(
+                    &format!("waiting: +{} more", waiting.len() - index),
+                    width - 1
+                )
+            ));
+            break;
+        }
+        rows.push(format!(
+            "\x1b[2m{}\x1b[0m",
+            fit(&format!("{label}: {}", text.replace('\n', " ")), width - 1)
+        ));
+    }
+    rows
 }
 
 /// The pinned pane: status, queued goals, the input box, and the footer.
@@ -1084,23 +1144,8 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
     let visible = MAX_INPUT_ROWS
         .min(lines.len())
         .min(height - rows.len() - 2 - usize::from(footer));
-    let queue_slots = height - rows.len() - 2 - visible - usize::from(footer);
-    for (index, goal) in view.queue.iter().take(queue_slots).enumerate() {
-        if index + 1 == queue_slots && view.queue.len() > queue_slots {
-            rows.push(format!(
-                "\x1b[2m{}\x1b[0m",
-                fit(
-                    &format!("queued: +{} more", view.queue.len() - index),
-                    width - 1
-                )
-            ));
-            break;
-        }
-        rows.push(format!(
-            "\x1b[2mqueued: {}\x1b[0m",
-            fit(&goal.replace('\n', " "), inner.saturating_sub(8))
-        ));
-    }
+    let slots = height - rows.len() - 2 - visible - usize::from(footer);
+    rows.extend(waiting_rows(view, slots, width));
     rows.push(format!("╭{}╮", "─".repeat(width - 2)));
     let first = caret_line.saturating_sub(visible - 1);
     let box_top = rows.len();
@@ -1113,7 +1158,7 @@ fn layout(view: &PaneView<'_>, editor: &LineEditor) -> Pane {
     let hint = if view.requested {
         "Enter send · Alt+Enter newline · Ctrl+C clear · Ctrl+D exit"
     } else {
-        "Enter queue · Esc drop queue · Ctrl+C cancel run"
+        "Enter add to run · Esc drop waiting · Ctrl+C cancel run"
     };
     let hint = if view.has_results {
         format!("Ctrl+O results · {hint}")
@@ -1320,6 +1365,7 @@ mod tests {
             requested: false,
             cancelling: false,
             queue: &queue,
+            follow_ups: Vec::new(),
             footer: "~/work · trust",
             has_results: false,
             spinner: '|',
@@ -1369,6 +1415,7 @@ mod tests {
                 requested: true,
                 cancelling,
                 queue: &queue,
+                follow_ups: vec!["change the plan".to_owned()],
                 footer: "fixture",
                 has_results: false,
                 spinner: '|',
@@ -1408,10 +1455,72 @@ mod tests {
     }
 
     #[test]
+    fn lines_typed_during_a_run_go_to_it_and_the_rest_wait_for_the_next_goal() {
+        let (lines, received) = mpsc::sync_channel(1);
+        let inbox = FollowUpInbox::new();
+        let mut frontend = Frontend::new(
+            Cancellation::default(),
+            None,
+            "fixture".to_owned(),
+            lines,
+            inbox.clone(),
+        );
+        let mut finished = Vec::new();
+        frontend.screen.push("Reading… · 2s".as_bytes());
+        let mut enter = |frontend: &mut Frontend, text: &str| {
+            frontend.editor.insert_str(text);
+            frontend.on_key(
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                &mut finished,
+            );
+        };
+        enter(&mut frontend, "use tabs instead");
+        enter(&mut frontend, "/model");
+        enter(&mut frontend, "and add a test");
+        assert_eq!(inbox.pending(), ["use tabs instead", "and add a test"]);
+        assert_eq!(frontend.queue, ["/model"]);
+        let rows = frontend
+            .pane((80, 20))
+            .rows
+            .iter()
+            .map(|row| strip_controls(row.as_bytes()))
+            .collect::<Vec<_>>();
+        assert_eq!(rows[1], "next step: use tabs instead");
+        assert_eq!(rows[3], "queued: /model");
+
+        // The Run ended without taking them: they run next, before the queued command.
+        frontend.screen.clear_tail();
+        frontend.screen.push(GOAL_PROMPT.as_bytes());
+        let mut finished = Vec::new();
+        frontend.on_request(&mut finished);
+        assert!(matches!(
+            received.try_recv(),
+            Ok(InputMessage::Line(line)) if line == "use tabs instead"
+        ));
+        assert_eq!(frontend.queue, ["and add a test", "/model"]);
+        assert!(inbox.pending().is_empty());
+
+        // Esc while running drops both kinds of waiting lines.
+        frontend.requested = false;
+        inbox.push("stale".to_owned());
+        frontend.on_key(
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &mut finished,
+        );
+        assert!(frontend.queue.is_empty());
+        assert!(inbox.pending().is_empty());
+    }
+
+    #[test]
     fn only_a_running_or_resizing_pane_is_repainted_on_a_timer() {
         let (lines, _received) = mpsc::sync_channel(1);
-        let mut frontend =
-            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        let mut frontend = Frontend::new(
+            Cancellation::default(),
+            None,
+            "fixture".to_owned(),
+            lines,
+            FollowUpInbox::new(),
+        );
         let mut finished = Vec::new();
         frontend.screen.push(GOAL_PROMPT.as_bytes());
         frontend.on_request(&mut finished);
@@ -1477,8 +1586,14 @@ mod tests {
     #[test]
     fn resizing_preserves_drafts_queued_goals_and_pending_approval_answers() {
         let (lines, received) = mpsc::sync_channel(1);
-        let mut frontend =
-            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        let inbox = FollowUpInbox::new();
+        let mut frontend = Frontend::new(
+            Cancellation::default(),
+            None,
+            "fixture".to_owned(),
+            lines,
+            inbox.clone(),
+        );
         let mut finished = Vec::new();
         frontend.editor.insert_str("다음 goal\nsecond line");
         assert!(frontend.on_event(Event::Resize(12, 4), &mut finished));
@@ -1487,7 +1602,8 @@ mod tests {
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
             &mut finished,
         );
-        assert_eq!(frontend.queue.front().unwrap(), "다음 goal\nsecond line");
+        // Typed while the Run is in flight, it waits for the Run's next model call.
+        assert_eq!(inbox.pending(), ["다음 goal\nsecond line"]);
 
         frontend.screen.push(b"Allow read? [y/a/N] ");
         frontend.on_request(&mut finished);
@@ -1495,13 +1611,17 @@ mod tests {
         frontend.on_event(Event::Resize(80, 24), &mut finished);
         assert_eq!(frontend.prompt(), "Allow read? [y/a/N] ");
         assert_eq!(frontend.editor.text, "y");
-        assert_eq!(frontend.queue.len(), 1);
+        assert_eq!(inbox.pending().len(), 1);
         frontend.on_key(
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
             &mut finished,
         );
         assert!(matches!(received.try_recv(), Ok(InputMessage::Line(line)) if line == "y"));
-        assert_eq!(frontend.queue.len(), 1);
+        assert_eq!(
+            inbox.pending().len(),
+            1,
+            "an approval never answers with a waiting line"
+        );
 
         frontend.screen.push(GOAL_PROMPT.as_bytes());
         frontend.on_request(&mut finished);
@@ -1514,8 +1634,13 @@ mod tests {
     #[test]
     fn viewer_keys_and_paste_never_submit_a_goal_or_an_approval() {
         let (lines, received) = mpsc::sync_channel(1);
-        let mut frontend =
-            Frontend::new(Cancellation::default(), None, "fixture".to_owned(), lines);
+        let mut frontend = Frontend::new(
+            Cancellation::default(),
+            None,
+            "fixture".to_owned(),
+            lines,
+            FollowUpInbox::new(),
+        );
         frontend
             .results
             .capture(ResultKind::Answer, vec![b"saved result".to_vec()], 80);

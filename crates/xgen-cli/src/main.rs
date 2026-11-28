@@ -584,6 +584,8 @@ struct InteractiveHost {
     /// ADR-0075: the user's and the project's instruction files, read once per session.
     instructions: Option<String>,
     instruction_sources: Vec<String>,
+    /// ADR-0092: lines typed while a Run executes, shared with the terminal frontend.
+    follow_ups: Option<xgen_cli::FollowUpInbox>,
 }
 
 impl InteractiveHost {
@@ -637,6 +639,7 @@ impl InteractiveHost {
             environment_note,
             instructions: xgen_cli::instruction_block(&instruction_files),
             instruction_sources,
+            follow_ups: None,
         })
     }
 
@@ -782,6 +785,7 @@ impl repl::ReplHost for InteractiveHost {
                 // here so the request describes the Run it actually starts.
                 conversation_responses: true,
                 capabilities: Vec::new(),
+                follow_ups: self.follow_ups.clone(),
             },
             &process_session,
             |run_id| {
@@ -826,6 +830,7 @@ impl repl::ReplHost for InteractiveHost {
             allow_write: grants.write,
             allow_execute: grants.execute,
             max_ticks: repl_max_ticks(self.max_model_turns),
+            follow_ups: self.follow_ups.clone(),
         };
         let mut resolution_error = None;
         let result = {
@@ -895,6 +900,10 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
         eprintln!("XGEN_ERROR code={}", PublicRunError::Configuration.code());
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };
+    let follow_ups = xgen_cli::FollowUpInbox::new();
+    if terminal {
+        host.follow_ups = Some(follow_ups.clone());
+    }
     let result = if terminal {
         // ADR-0074: a pane pinned to the bottom keeps the input editable while a Run is in flight.
         let footer = interactive_footer(trust);
@@ -903,6 +912,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
             xgen_cli::repl_history_path(),
             footer,
             !debug,
+            follow_ups,
         ) else {
             eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
             return ExitCode::from(PublicRunError::Internal.exit_code());
@@ -1319,6 +1329,7 @@ fn run_command(args: RunArgs, debug: bool) -> ExitCode {
         completion_checks,
         conversation_responses: args.conversation_responses,
         capabilities: args.capabilities,
+        follow_ups: None,
     };
     let started = |run_id: &str| eprintln!("XGEN_STARTED run_id={run_id}");
     present(run_local_with_progress(
@@ -1366,6 +1377,7 @@ fn resume_command(args: ResumeArgs, debug: bool) -> ExitCode {
         allow_write,
         allow_execute,
         max_ticks,
+        follow_ups: None,
     };
     let mut resolution_error = None;
     let result = if allow_remote_model_egress {

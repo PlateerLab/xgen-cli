@@ -1085,6 +1085,7 @@ fn projected_state(
                 last_rejection: None,
             }),
             completion_candidate: None,
+            user_instructions: Vec::new(),
         }),
     }
 }
