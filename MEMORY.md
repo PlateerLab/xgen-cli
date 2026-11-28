@@ -1,6 +1,6 @@
 # xgen CLI와 연계 도구 공동 개발 메모
 
-갱신: 2026-11-23 (KST)
+갱신: 2026-11-28 (KST)
 
 ## 사용자가 정한 방향
 
@@ -14,6 +14,11 @@
 - 모델 비용 선호(2026-11-23): 사용자는 저렴한 모델 사용을 요청했다. agy 개발 실험은 검증한 `gemini-3.8-flash-low`를 기본으로 유지한다. 전체 목록의 절대 최저가·구독 한도 효율 1위로 확인한 것은 아니다. 이 선택은 평가 설정이며 xgen 사용자 프로필의 기본 모델 변경과 구분한다.
 
 ## 책임과 개발 범위
+
+2026-11-27 구현·로컬 검증: [빌드 간 모델 요청 비교](docs/development/model-request-diff.md).
+같은 대본 응답으로 두 binary를 돌려 모델 요청을 비교하고, 같은 빌드 두 번 실행의 차이를 noise로 가린 뒤
+남은 차이를 지문으로 묶는다. 과거 PR 5쌍(#124·#131 변경, #144·#146·#147 유지)에서 ADR 기대와 모두 같았다.
+사례 4개 경로 안의 결과이고 CI에는 넣지 않았다. 모델 요청에 영향 가능한 PR은 로컬로 돌려 PR에 적는다.
 
 2026-11-23 실험 기능 구현: [agy provider](docs/development/agy-provider.md), [ADR-0090](docs/adr/0090-experimental-agy-provider.md).
 `model setup --provider agy`·대화형 선택·저장 프로필·run/resume에 Rust transport를 연결했다. 기본은
@@ -192,7 +197,7 @@ Launcher의 `latest`/`next`는 rc.8이며 실제 모델 품질 평가는 인증 
 
 순서: 공통 계약·검증 계획 → 내부 도구 검색 → API 조회 실행·연결 UX → 브라우저·SEV → API·화면 그래프 통합 → 역할별 모델·STT → 배포·기본값 결정.
 
-공통 계약·검색과 `xgen.http/read`의 GET 실행·연결 저장을 구현했다. 모델용 명세 조회와 호스트 실행 계약을 분리해 전달 gate를 통과했다. 실제 모델 query/선택 baseline은 완료했고, 다음 우선순위는 정답 기준 audit 후 production planner 재생과 graph-tool-call 검색 ablation이다. graph-tool-call 검색/정규화 개선은 해당 저장소의 별도 과제로 진행한다. 원격 원본 보존·연결 UX·HTTP 지원 확대와 브라우저·SEV 연결도 남았다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
+공통 계약·검색과 `xgen.http/read`의 GET 실행·연결 저장을 구현했다. 모델용 명세 조회와 호스트 실행 계약을 분리해 전달 gate를 통과했다. 실제 모델 query/선택 baseline은 완료했고, 정답 기준 audit·production planner 재생(2026-10-08 완료)과 scope 설명 분리는 끝났고, 남은 우선순위는 graph-tool-call 교차 언어 recall(held-out #5 hit@5 31/64, 영어 명세×한국어 요청 1/8)과 언어 힌트 hit@1 하락이다. graph-tool-call 검색/정규화 개선은 해당 저장소의 별도 과제로 진행한다. 원격 원본 보존·연결 UX·HTTP 지원 확대와 브라우저·SEV 연결도 남았다. 모든 항목은 일반화 가능한 기능으로 개발하고, 설계 사례와 별도로 보류한 검증 사례를 사용한다.
 
 ## 도구별 개선과 비용 추적 방식
 
@@ -213,7 +218,7 @@ Launcher의 `latest`/`next`는 rc.8이며 실제 모델 품질 평가는 인증 
 - graph-tool-call: 고정 검색어에서도 목표 endpoint 누락이 두 시스템에서 재현됐다. 범용 검색/색인·언어 처리와 원본에 없는 scope 설명 주입을 해당 저장소에서 개선·평가한다. xgen의 제한된 view와 별개로 업스트림의 색인 표현 계약도 검토 대상이다. ranking의 세부 원인과 개선 방식은 ablation 전이라 미확정이다.
 - graph-tool-call 검색 1차 ablation(2026-10-07): 의미 채널을 융합에서 빼면 순위 정밀도와 지연은 좋아지지만, 그 채널의 action/shape 별칭(list/목록 등)이 영어 요청 x 한국어 명세의 거의 유일한 교차언어 신호여서 held-out recall이 그대로이거나 떨어졌다(불채택). 주 누락 원인은 교차언어다. 후보: 수집한 명세의 문서 언어를 xgen 검색어 생성에 전달(xgen 측, 사전 등록 필요), 선택형 임베딩. keyword.py의 하드코딩 ko->en 사전과 벤치마크 특화 의도 규칙은 기술 부채이며 확장하지 않는다. 이번 held-out은 소진했으므로 다음 판정에는 새 held-out이 필요하다.
 - 검색어 언어 힌트(2026-10-07, 채택): 교차언어 누락은 planner 검색어 언어로 줄인다. 요청과 문서의 문자 체계가 다를 때만 힌트를 넣고, 예시 문장 없이 문자 체계 이름과 "요청 언어와 문서 언어 용어를 함께" 지시만 준다. 같은 언어 요청에 문장을 더하면 검색어가 흔들리고, 문서 예시를 보여주면 모델이 예시를 베끼며, 완전 번역은 영어 operationId 매칭을 잃는다. 세 번째 held-out 59 -> 73. 평가 기록: ~/.local/share/xgen/evaluations/language-hint-2026-10-08/PLAN.md (로컬, 사내 명세 포함). held-out 3개(10-08~10-10)는 모두 소진.
-- production planner 재생(2026-10-07 진행 중): 실제 `xgen run`의 실행 DB(run.sqlite3 tool_outputs: search request.query·candidates, describe tool / usage.sqlite3 토큰)에서 검색 행동을 꺼내 오프라인 하네스로 재채점한다. held-out #4(10-11, 공개 명세 3개)와 사전 등록은 ~/.local/share/xgen/evaluations/planner-replay-2026-10-11/. 실행당 약 14초, 입력 약 17K 토큰. DeepSeek 잔액이 부족하면 402가 xgen에서 `provider_rejected`·`transport_failed`로만 보이니 대량 실행 전 /user/balance를 먼저 본다.
+- production planner 재생(2026-10-07 시작, 10-08 완료·아래 결과): 실제 `xgen run`의 실행 DB(run.sqlite3 tool_outputs: search request.query·candidates, describe tool / usage.sqlite3 토큰)에서 검색 행동을 꺼내 오프라인 하네스로 재채점한다. held-out #4(10-11, 공개 명세 3개)와 사전 등록은 ~/.local/share/xgen/evaluations/planner-replay-2026-10-11/. 실행당 약 14초, 입력 약 17K 토큰. DeepSeek 잔액이 부족하면 402가 xgen에서 `provider_rejected`·`transport_failed`로만 보이니 대량 실행 전 /user/balance를 먼저 본다.
 - graph-tool-call scope 설명 주입(2026-10-08, 채택, 901cd9d, 0.47.0 배포): 0.46.0 ingest가 K8s를 상정해 깊은 path의 description에 `(cluster-wide)` 등을 붙여 planner에 거짓 설명을 보였다(42%). 검색 효과는 전부 BM25 토큰 경로였으므로 색인 전용으로 옮기면 순위가 바이트 단위로 같다. 이런 '보이는 텍스트 vs 색인 텍스트' 분리는 순위 무변경 확인으로 판정이 쉽다. 평가: ~/.local/share/xgen/evaluations/engine-scope-2026-10-12/PLAN.md, held-out #5(engine-heldout-2026-10-12)는 소진. #4도 10-08 planner 재생으로 소진, 미소진 held-out 없음.
 - production planner 재생 결과(2026-10-08): 단독 생성 검색어는 production 첫 검색어의 대리 지표로 쓸 만하다(오프라인 hit@5 차이 2~3/48). 언어 힌트는 production 유지 기준 1 불충족(61 -> 59)으로 재설계 대상. 핵심 함정: graph-tool-call `retrieve_with_scores`의 앞 순위가 top_k에 따라 바뀐다(top_k=5 vs 20의 앞 5개가 34/96 상이). planner는 topK 10·20을 쓰므로 엔진 평가는 같은 topK에서 앞 5개를 본다.
 - top_k 의존 순위 수정(2026-10-09, 채택, graph-tool-call b9f7b8a, 0.47.0 배포): 원인은 `_preserve_dominant_keyword_candidates`가 top_k번째 점수를 기준선으로 쓴 것 하나. 고정 앞 5개로 바꾸자 held-out #6 모델 검색어 88 -> 91, 불일치 55 -> 0. 보정을 없애면 떨어지므로(설계 480 -> 453) 보정 자체는 유효했다. 진단법: top_k를 쓰는 단계를 하나씩 고정해 불일치가 사라지는 단계를 찾는다. held-out #6(engine-heldout-2026-10-13)은 소진, 미소진 없음.

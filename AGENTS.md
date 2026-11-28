@@ -4,3 +4,4 @@
 - 사용자가 방향을 변경하거나 구현·검증 결과가 바뀌면 MEMORY.md를 갱신한다. 제안, 구현 완료, 실제 검증을 구분한다.
 - 연계 문제는 xgen CLI의 책임인지 도구 자체의 책임인지 확인하고, 해당 저장소의 별도 개선 과제도 함께 기록한다.
 - 전역 에이전트 규칙을 따른다. 인증 정보와 사내 시스템별 접근·구성 정보는 이 기록에 넣지 않는다.
+- 모델에 가는 요청(goal, planning context, system prompt, 도구 설명, provider 파라미터)에 영향이 있을 수 있는 변경은 PR 전에 `scripts/diff-model-requests.py`로 main 빌드와 비교하고 결과를 PR 본문에 적는다([사용법](docs/development/model-request-diff.md)).
