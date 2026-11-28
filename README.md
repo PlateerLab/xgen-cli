@@ -6,6 +6,9 @@
 **Developer Preview** 단계야. 모델에 따라 작업이 반복되거나 일부 수정만 끝낼 수 있어.
 실행 결과와 diff를 확인하고 쓰는 걸 권장해. HTTP 조회는 지원하며 HTTP 쓰기·범용 MCP 클라이언트는 후속 범위야.
 
+개발 소스에는 Linux용 [실험적 agy 연결](docs/development/agy-provider.md)도 있어.
+공식 CLI의 기존 로그인으로 Gemini 제안을 받고 xgen 도구를 실행하는 경로이며, 현재 rc.8 배포본에는 없어.
+
 ## 설치와 첫 모델 연결
 
 Node.js 22.14 이상이면 npm으로 설치해. 최초 stable 게시 전까지 기본 설치는 검증된 최신 preview를

@@ -813,6 +813,21 @@ impl OpenAiPlanner {
         }
     }
 
+    /// Reuse request generation and proposal validation with an explicitly bound host transport.
+    /// The caller must commit the transport identity and policy in the configuration endpoint.
+    #[must_use]
+    pub fn with_external_transport<F>(config: OpenAiPlannerConfig, send: F) -> Self
+    where
+        F: FnMut(&[u8], usize) -> Result<Vec<u8>, PlannerPortFailure> + Send + 'static,
+    {
+        Self {
+            config,
+            credential: None,
+            transport: Box::new(ExternalTransport(send)),
+            usage_observer: None,
+        }
+    }
+
     fn decode_proposal(&self, response: &[u8]) -> Result<PlanProposal, PlannerPortFailure> {
         let proposal = decode_chat_response_with_codec(
             response,
@@ -985,6 +1000,19 @@ impl OpenAiCompatibilityChecker {
             credential,
             transport: Box::new(transport),
         })
+    }
+
+    /// Check the same proposal contract using an explicitly bound host transport.
+    #[must_use]
+    pub fn with_external_transport<F>(config: OpenAiPlannerConfig, send: F) -> Self
+    where
+        F: FnMut(&[u8], usize) -> Result<Vec<u8>, PlannerPortFailure> + Send + 'static,
+    {
+        Self {
+            config,
+            credential: None,
+            transport: Box::new(ExternalTransport(send)),
+        }
     }
 
     /// Send one non-streaming request and validate the selected output dialect.
@@ -1306,6 +1334,16 @@ struct TransportRequest<'a> {
 
 trait Transport {
     fn send(&mut self, request: TransportRequest<'_>) -> Result<Vec<u8>, PlannerPortFailure>;
+}
+
+struct ExternalTransport<F>(F);
+impl<F> Transport for ExternalTransport<F>
+where
+    F: FnMut(&[u8], usize) -> Result<Vec<u8>, PlannerPortFailure>,
+{
+    fn send(&mut self, request: TransportRequest<'_>) -> Result<Vec<u8>, PlannerPortFailure> {
+        (self.0)(request.body, request.max_response_bytes)
+    }
 }
 
 struct ModelCatalogTransportRequest<'a> {
@@ -1903,7 +1941,11 @@ fn decode_dependency(dependency: DependencyDocument) -> Result<PlanDependency, P
     }
 }
 
-fn parse_unique_json(body: &[u8], max_depth: usize) -> Result<Value, PlannerPortFailure> {
+/// Decode bounded JSON while rejecting duplicate object keys.
+///
+/// # Errors
+/// Returns `InvalidResponse` for invalid, duplicate-key or over-depth JSON.
+pub fn parse_unique_json(body: &[u8], max_depth: usize) -> Result<Value, PlannerPortFailure> {
     if !json_depth_within(body, max_depth) {
         return Err(PlannerPortFailure::InvalidResponse);
     }

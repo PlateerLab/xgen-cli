@@ -1,0 +1,24 @@
+{
+  "model": null,
+  "tokenizer": null,
+  "response_format": "json_object",
+  "thinking": "default",
+  "max_output_tokens": 4096,
+  "request_timeout_seconds": 90,
+  "max_model_turns": 32,
+  "max_ticks": 512,
+  "max_input_tokens": null,
+  "trial_timeout_seconds": 600,
+  "spend_cap_nano_usd": 2000000000,
+  "seed": 20261120,
+  "repeats": 2,
+  "quote": {
+    "kind": "upper_bound",
+    "source": null,
+    "valid_from_utc": null,
+    "valid_until_utc": null,
+    "cached_micro_usd_per_million": null,
+    "input_micro_usd_per_million": null,
+    "output_micro_usd_per_million": null
+  }
+}

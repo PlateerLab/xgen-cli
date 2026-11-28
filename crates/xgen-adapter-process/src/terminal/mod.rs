@@ -12,6 +12,14 @@ use xgen_runtime::{
     AdapterReconciliationObservation, AdapterToolOutput, EffectAdapter, PreparedAdapterInvocation,
 };
 
+static HOST_CLEANUP: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// Register additional host-owned process cleanup, called by the signal watcher before exit.
+/// Runs on a normal watcher thread, not inside an asynchronous signal handler.
+pub fn register_host_exit_cleanup(cleanup: fn()) {
+    let _ = HOST_CLEANUP.set(cleanup);
+}
+
 /// Kill owned PTY sessions when the host ends on a signal, because destructors do not run then.
 ///
 /// Call before the host starts any other thread: later threads inherit the blocked mask, so only
@@ -36,6 +44,9 @@ pub fn install_host_exit_cleanup(interrupt: bool) -> std::io::Result<()> {
             .name("xgen-terminal-exit".to_owned())
             .spawn(move || {
                 if let Ok(signal) = signals.wait() {
+                    if let Some(cleanup) = HOST_CLEANUP.get() {
+                        cleanup();
+                    }
                     sessions::kill_owned_sessions();
                     std::process::exit(128 + signal as i32);
                 }

@@ -1,5 +1,7 @@
 #![doc = "Composition primitives for the local-first `XGEN` CLI."]
 
+#[doc(hidden)]
+pub mod agy;
 mod allow_file;
 mod allow_path;
 mod allow_process;

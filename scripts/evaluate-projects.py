@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise local-build coding workflows on frozen disposable language projects."""
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -52,7 +53,7 @@ def run(command, cwd, environment, timeout, script=None):
 
 
 def inspect(database):
-    with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as connection:
         state = json.loads(connection.execute("SELECT state_json FROM run_projection").fetchone()[0])
         events = [json.loads(row[0])["body"] for row in
                   connection.execute("SELECT event_json FROM run_events ORDER BY sequence")]
@@ -94,7 +95,7 @@ def build_goal(case, response_instruction=""):
 
 def observed_commands(database, outputs):
     """Join receipt-backed process outputs with their retained invocation recipes."""
-    with sqlite3.connect(f"file:{database.parent / 'materials.sqlite3'}?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(f"file:{database.parent / 'materials.sqlite3'}?mode=ro", uri=True)) as connection:
         recipes = [json.loads(row[0]) for row in connection.execute('SELECT record FROM material_recipe')]
     by_step = {recipe['stepId']: recipe for recipe in recipes
                if recipe['capability']['capabilityId'] == 'xgeny.process/execute'}

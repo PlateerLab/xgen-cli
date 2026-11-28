@@ -126,13 +126,13 @@ enum ProtocolCommand {
 
 #[derive(Debug, Subcommand)]
 enum ModelCommand {
-    /// Configure, verify, and activate one OpenAI-compatible model profile.
+    /// Configure, verify, and activate an API or experimental agy model profile.
     Setup(ModelSetupArgs),
     /// List non-secret model profiles.
     List,
     /// Select an existing active profile.
     Use(ModelNameArgs),
-    /// Check catalog access and exact model advertisement with one GET.
+    /// Check exact model advertisement through the selected provider catalog.
     Check(ModelCheckArgs),
     /// Delete a profile's secure credential while retaining non-secret settings.
     Logout(ModelOptionalNameArgs),
@@ -177,6 +177,9 @@ struct ModelSetupArgs {
     /// Provider preset; omitted interactive setup offers a selection.
     #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(provider_ids()))]
     provider: Option<String>,
+    /// Official agy executable for the experimental CLI provider (default: PATH discovery).
+    #[arg(long)]
+    agy_executable: Option<PathBuf>,
     /// Profile name to create or replace.
     #[arg(long, default_value = "default")]
     name: String,
@@ -392,8 +395,12 @@ struct RequestOptionArgs {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    xgen_adapter_process::register_host_exit_cleanup(xgen_cli::agy::kill_active);
     // Hosts of PTY sessions must clean them up on SIGTERM/SIGHUP too; the REPL keeps its own Ctrl-C.
-    let interrupt = matches!(cli.command, Some(Command::Run(_) | Command::Resume(_)));
+    let interrupt = matches!(
+        cli.command,
+        Some(Command::Run(_) | Command::Resume(_) | Command::Model { .. })
+    );
     if (interrupt || cli.command.is_none())
         && xgen_adapter_process::install_host_exit_cleanup(interrupt).is_err()
     {
@@ -1016,16 +1023,16 @@ fn provider_ids() -> Vec<&'static str> {
     PROVIDER_PRESETS
         .iter()
         .map(|preset| preset.id)
-        .chain(std::iter::once("custom"))
+        .chain(["agy", "custom"])
         .collect()
 }
 
 fn prompt_provider() -> Result<String, ModelCliError> {
     // The last entry is `custom`, so the numbering is the table's own order.
-    let offered = PROVIDER_PRESETS
-        .iter()
-        .map(|preset| preset.label)
-        .chain(std::iter::once("Other OpenAI-compatible endpoint"));
+    let offered = PROVIDER_PRESETS.iter().map(|preset| preset.label).chain([
+        "Antigravity CLI (experimental, existing login)",
+        "Other OpenAI-compatible endpoint",
+    ]);
     let menu: Vec<String> = std::iter::once("Choose a provider:".to_owned())
         .chain(
             offered
@@ -1034,8 +1041,12 @@ fn prompt_provider() -> Result<String, ModelCliError> {
         )
         .collect();
     eprintln!("{}", menu.join("\n"));
-    let custom = PROVIDER_PRESETS.len() + 1;
+    let custom = PROVIDER_PRESETS.len() + 2;
+    let agy = PROVIDER_PRESETS.len() + 1;
     let chosen = prompt_number("Provider number (q to cancel): ", custom)?;
+    if chosen == agy {
+        return Ok("agy".to_owned());
+    }
     if chosen == custom {
         return Ok("custom".to_owned());
     }
@@ -1127,9 +1138,10 @@ fn ensure_interactive_model() -> Result<(), ModelCliError> {
         ensure_interactive_credential(&profile)?;
         return Ok(());
     }
-    let (profile, stored) = try_model_setup(ModelSetupArgs {
+    let (profile, _stored) = try_model_setup(ModelSetupArgs {
         request_options: RequestOptionArgs::default(),
         provider: None,
+        agy_executable: None,
         name: "default".to_owned(),
         base_url: None,
         model: None,
@@ -1142,26 +1154,25 @@ fn ensure_interactive_model() -> Result<(), ModelCliError> {
     println!("XGEN model setup: PASS");
     println!("  profile: {}", profile.name());
     println!("  model: {}", profile.model());
-    println!(
-        "  authentication: {}",
-        if stored {
-            "secure_store"
-        } else {
-            "external_or_none"
-        }
-    );
+    println!("  authentication: {}", authentication_label(&profile));
     Ok(())
+}
+
+fn authentication_label(profile: &ModelProfile) -> &'static str {
+    if xgen_cli::agy::is_agy(profile.base_url()) {
+        "agy_login_experimental"
+    } else if profile.has_stored_credential() {
+        "secure_store"
+    } else {
+        "external_or_none"
+    }
 }
 
 fn repl_model_view(profile: &ModelProfile) -> repl::ModelView {
     repl::ModelView {
         profile: profile.name().to_owned(),
         model: profile.model().to_owned(),
-        authentication: if profile.has_stored_credential() {
-            "secure_store"
-        } else {
-            "external_or_none"
-        },
+        authentication: authentication_label(profile),
     }
 }
 
@@ -1435,11 +1446,21 @@ enum ModelCliError {
     CredentialRequiresHttps,
     InvalidInferenceLimits,
     InvalidRequestOptions,
+    AgyConfiguration,
+    AgyAuthentication,
+    AgyUnsupported,
 }
 
 impl ModelCliError {
     const fn recovery_hint(self) -> &'static str {
         match self {
+            Self::AgyUnsupported => "The experimental agy provider currently supports Linux only.",
+            Self::AgyAuthentication => {
+                "agy could not use its existing login. Launch agy locally to sign in, then retry xgen model setup --provider agy. Never paste authorization codes into chat."
+            }
+            Self::AgyConfiguration => {
+                "Experimental agy setup requires an installed executable and an existing local login. Run agy locally to sign in; no API key is needed. Use a separate profile name and omit HTTP/API and output-token options."
+            }
             Self::Check(error) => match error {
                 ModelCheckError::AuthenticationRejected | ModelCheckError::InvalidCredential => {
                     "For a saved key, run xgen model logout PROFILE, then xgen model setup --name PROFILE to enter a new key locally. Check xgen model list for profile names; never paste keys into chat."
@@ -1513,6 +1534,9 @@ impl ModelCliError {
         match self {
             Self::Profile(error) => error.code(),
             Self::Check(error) => error.code(),
+            Self::AgyConfiguration => "agy_configuration_invalid",
+            Self::AgyUnsupported => "agy_platform_unsupported",
+            Self::AgyAuthentication => "agy_authentication_required",
             Self::MissingConfiguration => "model_configuration_missing",
             Self::InvalidEnvironment => "environment_invalid",
             Self::InputUnavailable => "input_unavailable",
@@ -1528,7 +1552,8 @@ impl ModelCliError {
             Self::Profile(
                 ModelProfileError::CredentialNotFound
                 | ModelProfileError::CredentialStoreUnavailable,
-            ) => 77,
+            )
+            | Self::AgyAuthentication => 77,
             Self::Profile(
                 ModelProfileError::ProfileStoreUnavailable
                 | ModelProfileError::ProfileCommitUnknown,
@@ -1540,7 +1565,9 @@ impl ModelCliError {
             | Self::InvalidCredential
             | Self::CredentialRequiresHttps
             | Self::InvalidInferenceLimits
-            | Self::InvalidRequestOptions => 64,
+            | Self::InvalidRequestOptions
+            | Self::AgyConfiguration
+            | Self::AgyUnsupported => 64,
             Self::Check(error) => error.exit_code(),
         }
     }
@@ -1560,14 +1587,18 @@ impl From<ModelCheckError> for ModelCliError {
 
 fn model_setup(args: ModelSetupArgs) -> ExitCode {
     match try_model_setup(args) {
-        Ok((profile, stored)) => {
+        Ok((profile, _stored)) => {
             println!("XGEN model setup: PASS");
             println!("  profile: {}", profile.name());
             println!("  model: {}", profile.model());
             println!("  catalog: exact model advertised");
             println!(
                 "  chat completions: {}",
-                compatibility_label(profile.request_options())
+                if xgen_cli::agy::is_agy(profile.base_url()) {
+                    "not probed; use xgen model check --compatibility"
+                } else {
+                    compatibility_label(profile.request_options())
+                }
             );
             println!(
                 "  thinking: {}",
@@ -1577,19 +1608,19 @@ fn model_setup(args: ModelSetupArgs) -> ExitCode {
                 "  parameters: {}",
                 parameter_style_label(profile.request_options().parameter_style)
             );
-            println!(
-                "  inference limits: timeout={}s max_output_tokens={}",
-                profile.inference_limits().timeout().as_secs(),
-                profile.inference_limits().max_output_tokens()
-            );
-            println!(
-                "  authentication: {}",
-                if stored {
-                    "secure_store"
-                } else {
-                    "external_or_none"
-                }
-            );
+            if xgen_cli::agy::is_agy(profile.base_url()) {
+                println!(
+                    "  inference limits: timeout={}s stdout=128KiB stderr=32KiB; native token cap unavailable",
+                    profile.inference_limits().timeout().as_secs()
+                );
+            } else {
+                println!(
+                    "  inference limits: timeout={}s max_output_tokens={}",
+                    profile.inference_limits().timeout().as_secs(),
+                    profile.inference_limits().max_output_tokens()
+                );
+            }
+            println!("  authentication: {}", authentication_label(&profile));
             ExitCode::SUCCESS
         }
         Err(error) => present_model_command_error("setup", error),
@@ -1602,6 +1633,7 @@ fn try_model_setup(mut args: ModelSetupArgs) -> Result<(ModelProfile, bool), Mod
     let mut profiles = store.load()?;
     let existing = profiles.get(&args.name).cloned();
     let interactive = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    let explicit_url = args.base_url.is_some();
     let configured_url = args
         .base_url
         .take()
@@ -1616,6 +1648,20 @@ fn try_model_setup(mut args: ModelSetupArgs) -> Result<(ModelProfile, bool), Mod
         None if interactive && configured_url.is_none() => Some(prompt_provider()?),
         None => None,
     };
+    if provider.as_deref() == Some("agy")
+        || (provider.is_none()
+            && existing
+                .as_ref()
+                .is_some_and(|p| xgen_cli::agy::is_agy(p.base_url())))
+    {
+        if explicit_url {
+            return Err(ModelCliError::AgyConfiguration);
+        }
+        return try_agy_setup(args, &store, profiles);
+    }
+    if args.agy_executable.is_some() {
+        return Err(ModelCliError::AgyConfiguration);
+    }
     let preset = provider.as_deref().and_then(provider_preset);
     let base_url = configured_url
         .or_else(|| preset.as_ref().map(|preset| preset.base_url.to_owned()))
@@ -1755,6 +1801,100 @@ fn try_model_setup(mut args: ModelSetupArgs) -> Result<(ModelProfile, bool), Mod
     Ok((profile.clone(), profile.has_stored_credential()))
 }
 
+fn try_agy_setup(
+    args: ModelSetupArgs,
+    store: &ModelProfileStore,
+    mut profiles: xgen_cli::ModelProfiles,
+) -> Result<(ModelProfile, bool), ModelCliError> {
+    if !cfg!(target_os = "linux") {
+        return Err(ModelCliError::AgyUnsupported);
+    }
+    if args.max_output_tokens.is_some()
+        || args.token_stdin
+        || args.store_token
+        || args.tokenizer.is_some()
+        || args.request_options.response_format.is_some()
+        || args.request_options.thinking.is_some()
+        || args.request_options.parameter_style.is_some()
+        || profiles
+            .get(&args.name)
+            .is_some_and(ModelProfile::has_stored_credential)
+    {
+        return Err(ModelCliError::AgyConfiguration);
+    }
+    let executable = args
+        .agy_executable
+        .or_else(|| {
+            profiles
+                .get(&args.name)
+                .and_then(|p| xgen_cli::agy::Spec::parse(p.base_url()).ok())
+                .map(|spec| spec.executable().to_owned())
+        })
+        .or_else(|| {
+            std::env::var_os("PATH").and_then(|path| {
+                std::env::split_paths(&path)
+                    .map(|dir| dir.join(if cfg!(windows) { "agy.exe" } else { "agy" }))
+                    .find(|p| p.is_file())
+            })
+        })
+        .ok_or(ModelCliError::AgyConfiguration)?;
+    let spec =
+        xgen_cli::agy::Spec::create(&executable).map_err(|()| ModelCliError::AgyConfiguration)?;
+    let model = args
+        .model
+        .or_else(|| profiles.get(&args.name).map(|p| p.model().to_owned()))
+        .unwrap_or_else(|| xgen_cli::agy::DEFAULT_MODEL.to_owned());
+    let mut profile = ModelProfile::new(
+        &args.name,
+        spec.uri().map_err(|()| ModelCliError::AgyConfiguration)?,
+        &model,
+        &model,
+    )?;
+    let limits = InferenceLimits::new(
+        Duration::from_secs(
+            args.inference_timeout
+                .or_else(|| {
+                    profiles
+                        .get(&args.name)
+                        .map(|p| p.inference_limits().timeout().as_secs())
+                })
+                .unwrap_or(60),
+        ),
+        args.max_output_tokens
+            .or_else(|| {
+                profiles
+                    .get(&args.name)
+                    .map(|p| p.inference_limits().max_output_tokens())
+            })
+            .unwrap_or(4096),
+    )?;
+    profile.set_inference_limits(limits)?;
+    let models = xgen_cli::agy::Transport::new(spec, &model, limits.timeout())
+        .map_err(|()| ModelCliError::AgyConfiguration)?
+        .models()
+        .map_err(|error| {
+            if error == ModelCheckError::AuthenticationRejected {
+                ModelCliError::AgyAuthentication
+            } else {
+                ModelCliError::Check(error)
+            }
+        })?;
+    if !models.contains(&model) {
+        return Err(ModelCliError::Check(ModelCheckError::ModelNotAdvertised));
+    }
+    let _lock = store.try_lock()?;
+    if store.load()? != profiles {
+        return Err(ModelProfileError::ConcurrentModification.into());
+    }
+    profiles.upsert(profile.clone())?;
+    profiles.set_active(profile.name())?;
+    store.save(&mut profiles)?;
+    eprintln!(
+        "agy: experimental; native tools are rejected after observation, not prevented. Native token cap and USD cost are unknown."
+    );
+    Ok((profile, false))
+}
+
 fn model_list() -> ExitCode {
     let result = (|| -> Result<(), ModelCliError> {
         let profiles = ModelProfileStore::discover()?.load()?;
@@ -1768,6 +1908,16 @@ fn model_list() -> ExitCode {
             } else {
                 " "
             };
+            if xgen_cli::agy::is_agy(profile.base_url()) {
+                println!(
+                    "{marker} {} model={} provider=agy experimental=true timeout={}s stdout=128KiB authentication={}",
+                    profile.name(),
+                    profile.model(),
+                    profile.inference_limits().timeout().as_secs(),
+                    authentication_label(profile)
+                );
+                continue;
+            }
             println!(
                 "{marker} {} model={} tokenizer={} timeout={}s max_output_tokens={} response_format={} thinking={} parameter_style={} authentication={}",
                 profile.name(),
@@ -1817,7 +1967,7 @@ fn try_model_use(name: &str) -> Result<ModelProfile, ModelCliError> {
 }
 
 fn model_logout(name: Option<&str>) -> ExitCode {
-    let result = (|| -> Result<String, ModelCliError> {
+    let result = (|| -> Result<(String, bool), ModelCliError> {
         let store = ModelProfileStore::discover()?;
         let _lock = store.try_lock()?;
         let mut profiles = store.load()?;
@@ -1825,6 +1975,12 @@ fn model_logout(name: Option<&str>) -> ExitCode {
             .map(str::to_owned)
             .or_else(|| profiles.active_name().map(str::to_owned))
             .ok_or(ModelCliError::MissingConfiguration)?;
+        if profiles
+            .get(&selected)
+            .is_some_and(|p| xgen_cli::agy::is_agy(p.base_url()))
+        {
+            return Ok((selected, true));
+        }
         let reference = profiles
             .get(&selected)
             .ok_or(ModelProfileError::ProfileNotFound)?
@@ -1835,11 +1991,15 @@ fn model_logout(name: Option<&str>) -> ExitCode {
         }
         profiles.clear_credential(&selected)?;
         store.save(&mut profiles)?;
-        Ok(selected)
+        Ok((selected, false))
     })();
     match result {
-        Ok(name) => {
-            println!("XGEN model credential removed: {name}");
+        Ok((name, external)) => {
+            if external {
+                println!("XGEN model login managed by agy: {name}. Use agy /logout locally.");
+            } else {
+                println!("XGEN model credential removed: {name}");
+            }
             ExitCode::SUCCESS
         }
         Err(error) => present_model_command_error("logout", error),
@@ -1882,6 +2042,7 @@ fn model_check(args: ModelCheckArgs) -> ExitCode {
         Ok(resolved) => resolved,
         Err(error) => return present_model_command_error("check", error),
     };
+    let agy = xgen_cli::agy::is_agy(&resolved.base_url);
     let request = ModelCheckRequest {
         base_url: resolved.base_url.clone(),
         model: resolved.model.clone(),
@@ -1891,6 +2052,9 @@ fn model_check(args: ModelCheckArgs) -> ExitCode {
         request_options: resolved.request_options,
     };
     if let Err(error) = check_openai_model(request) {
+        if agy && error == ModelCheckError::AuthenticationRejected {
+            return present_model_command_error("check", ModelCliError::AgyAuthentication);
+        }
         return present_model_check_error(error);
     }
     if args.compatibility
@@ -1928,6 +2092,17 @@ fn resolve_model(
     request_options: RequestOptionArgs,
 ) -> Result<ResolvedModel, ModelCliError> {
     let profile = select_profile(profile_name)?;
+    if base_url.is_none()
+        && profile
+            .as_ref()
+            .is_some_and(|p| xgen_cli::agy::is_agy(p.base_url()))
+        && (token_stdin
+            || read_environment("XGEN_OPENAI_BASE_URL")?.is_some()
+            || read_environment("XGEN_OPENAI_MODEL")?.is_some()
+            || read_environment("XGEN_OPENAI_TOKENIZER")?.is_some())
+    {
+        return Err(ModelCliError::AgyConfiguration);
+    }
     let base_url = base_url
         .or(read_environment("XGEN_OPENAI_BASE_URL")?)
         .or_else(|| {
@@ -2563,7 +2738,7 @@ mod provider_preset_tests {
     fn the_picker_and_the_flag_agree_with_the_table() {
         let ids = provider_ids();
         let (presets, custom) = ids.split_at(PROVIDER_PRESETS.len());
-        assert_eq!(custom, ["custom"]);
+        assert_eq!(custom, ["agy", "custom"]);
         for (listed, preset) in presets.iter().zip(PROVIDER_PRESETS) {
             assert_eq!(*listed, preset.id);
             assert!(provider_preset(preset.id).is_some());

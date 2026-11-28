@@ -1,12 +1,34 @@
 # xgen CLI 도구·모델 통합 TODO
 
-갱신: 2026-10-06 (KST)
+갱신: 2026-11-23 (KST)
 
 이 파일은 공동 개발 작업 목록의 정본이다. 방향과 확인된 사실은 [MEMORY.md](../../MEMORY.md), SEV·브라우저 검토 근거는 [통합 검토](browser-tool-graph-sev-2026-10-06.md)를 참조한다. 모든 개발 항목은 일반 기능이다. 시스템별 명세·업무 규칙·인증 설정은 별도 입력으로 관리한다.
 
 문제의 책임 판정은 [MEMORY의 실패 원인·저장소 구분](../../MEMORY.md#실패-원인과-수정할-저장소의-구분)을 따른다. 통합 실패를 모두 xgen 수정 항목으로 넣지 않는다.
 
 목표: 사용자는 `xgen`에서 시스템을 한 번 연결하고 자연어로 요청한다. 내부에서는 API·화면 도구를 찾고, 필요한 모델을 호출하고, 실제 결과를 검증해 최종 응답을 제공한다.
+
+## CLI 경유 모델 연결 후보 — 2026-11-23
+
+- [x] **xgen 실험 기능 구현:** [Linux agy provider](agy-provider.md), [ADR-0090](../adr/0090-experimental-agy-provider.md). Setup/프로필/Run 재개·hash/policy drift·native 감지 후 중단·시간/bytes·취소/child 정리·usage 변환을 연결했다. 합성 CLI의 public 경로 검증 완료, 배포는 하지 않았다.
+- [ ] **새 Rust 경로 실제 검증:** 공식 agy 인증 복구 후 질문·쓰기/검증 승인·같은 Run 재개를 실행한다. 현재 catalog 단계에서 인증 필요로 중단. 기존 Python19/20을 새 경로의 결과로 대체하지 않는다.
+- [ ] **후속 검증:** 독립 diff 검토(delegate MCP 인증 오류)와 macOS/Windows 실행 지원. Native 사전 차단·숨은 retry/비용은 agy 별도 과제다.
+
+- [x] **실제 연결 smoke:** [agy Gemini 제안 → xgen 실행](../research/2026-11-22-agy-planner-probe.md). 질문·승인 쓰기·실패 복구 3종, CLI9회·xgen Receipt6개를 확인했다. 정식 provider나 품질 평가가 아니다.
+- [x] **개발용 평가 연결기·실측:** [고정 20회](../research/2026-11-23-agy-coding-baseline.md) 19/20 통과. 시간/bytes/호출 한도·strict JSON·pin 검사·UNKNOWN 보존 구현. native manage_task 관찰1회 중단, USD/내부 요청 횟수 미확인. 정식 provider 채택은 아니다.
+- [x] **Usage 후속:** [정규화·오프라인 재집계](../research/2026-11-23-agy-controls.md). Cache 제외 input을 host inclusive input으로 변환. 기존98회 중97회 usage 확인, 1회 미확인 유지. 격리 구성의 deny hook은 실제 적용되지 않아 사전 차단으로 채택하지 않았다.
+- [ ] **정식 채택 판단:** 새 Rust 경로의 실제 모델 검증과 독립 검토 뒤 결정한다. agy runtime 완전 제거·모든 도구/메모리 자동 이전·정확한 USD cap은 지원하지 않는다.
+
+## 웹 읽기 도구 후보 조사 — 2026-11-22
+
+- [x] **외부 도구 평가:** [Firecrawl Local 독립 실행](../research/2026-11-22-firecrawl-local-evaluation.md). Cloud off에서 정적·JS·공개 문서 추출, PDF 차단/로컬 추출 분리, process tree RSS·오류 의미를 확인했다. xgen 통합이나 기본 backend 채택이 아니다.
+- [ ] **xgen 설계 후보:** 별도 작업으로 웹 읽기 adapter의 원격 status/blocked/warning·출처 전달, public-only 경계, Cloud 명시 설정, 렌더링 자원·중단 정리와 배포 방식을 검토한다. 구현·계약 변경은 아직 시작하지 않았다.
+
+## 코딩 하네스 개선의 평가 기반 — 2026-11-20
+
+- [x] **xgen 평가:** [고정 코딩 기준선](coding-baseline.md)의 공개 CLI 실행기·5종 설계/보류 fixture·반복/완료/비용 집계 구현과 mock 계약 검증. Runtime·prompt 변경이나 실제 모델 품질 검증이 아니다.
+- [ ] **xgen 평가:** 로컬 모델 인증과 유효 quote를 준비하고 배포본의 실제 모델 기준선 실행. 현재 활성 모델 검사는 `authentication_rejected`로 종료했다.
+- [ ] **xgen 하네스:** 기준선 뒤 prompt·도구 설명 축소를 별도 실험. 변경 중에는 설계 과업만 사용하고, 고정 후보의 채택은 별도 보류 과업에서 판정한다.
 
 ## 0. 검토한 기반
 

@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 const PROFILE_FILE: &str = "model-profiles.json";
 const PROFILE_LOCK_FILE: &str = "model-profiles.lock";
 const PROFILE_FORMAT_VERSION: u32 = 1;
+const AGY_PROFILE_FORMAT_VERSION: u32 = 2;
 const MAX_PROFILE_FILE_BYTES: u64 = 256 * 1024;
 const MAX_PROFILES: usize = 64;
 const MAX_PROFILE_NAME_BYTES: usize = 64;
@@ -115,14 +116,23 @@ impl ModelProfile {
         model: impl Into<String>,
         tokenizer: impl Into<String>,
     ) -> Result<Self, ModelProfileError> {
+        let base_url = base_url.into();
+        let request_options = if crate::agy::is_agy(&base_url) {
+            RequestOptions {
+                response_format: ResponseFormat::JsonObject,
+                ..RequestOptions::default()
+            }
+        } else {
+            RequestOptions::default()
+        };
         let profile = Self {
             name: name.into(),
-            base_url: base_url.into(),
+            base_url,
             model: model.into(),
             tokenizer: tokenizer.into(),
             credential_ref: None,
             inference_limits: InferenceLimits::default(),
-            request_options: RequestOptions::default(),
+            request_options,
         };
         profile.validate()?;
         Ok(profile)
@@ -225,8 +235,18 @@ impl ModelProfile {
         {
             return Err(ModelProfileError::InvalidProfile);
         }
+        let endpoint =
+            crate::agy::endpoint(&self.base_url).map_err(|()| ModelProfileError::InvalidProfile)?;
+        if crate::agy::is_agy(&self.base_url)
+            && (self.credential_ref.is_some()
+                || self.request_options.response_format != ResponseFormat::JsonObject
+                || self.request_options.thinking != ThinkingMode::Default
+                || self.request_options.parameter_style != ParameterStyle::Compatible)
+        {
+            return Err(ModelProfileError::InvalidProfile);
+        }
         OpenAiPlannerConfig::new(
-            &self.base_url,
+            &endpoint,
             PROFILE_VALIDATION_PLANNER_ID,
             &self.model,
             &self.tokenizer,
@@ -708,7 +728,11 @@ struct StoredProfiles {
 impl StoredProfiles {
     fn from_profiles(profiles: &ModelProfiles) -> Self {
         Self {
-            format_version: PROFILE_FORMAT_VERSION,
+            format_version: if profiles.iter().any(|p| crate::agy::is_agy(p.base_url())) {
+                AGY_PROFILE_FORMAT_VERSION
+            } else {
+                PROFILE_FORMAT_VERSION
+            },
             active_profile: profiles.active.clone(),
             profiles: profiles
                 .profiles
@@ -719,7 +743,13 @@ impl StoredProfiles {
     }
 
     fn into_profiles(self) -> Result<ModelProfiles, ModelProfileError> {
-        if self.format_version != PROFILE_FORMAT_VERSION {
+        if ![PROFILE_FORMAT_VERSION, AGY_PROFILE_FORMAT_VERSION].contains(&self.format_version)
+            || (self.format_version == PROFILE_FORMAT_VERSION
+                && self
+                    .profiles
+                    .iter()
+                    .any(|p| crate::agy::is_agy(&p.base_url)))
+        {
             return Err(ModelProfileError::InvalidProfileFile);
         }
         let mut profiles = self
@@ -1424,5 +1454,24 @@ mod tests {
             credentials.get(&reference),
             Err(ModelProfileError::CredentialNotFound)
         );
+    }
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn agy_profiles_require_version_two_while_api_only_stores_stay_version_one() {
+        let mut profiles = ModelProfiles::empty();
+        profiles.upsert(profile("api")).unwrap();
+        assert_eq!(StoredProfiles::from_profiles(&profiles).format_version, 1);
+        let uri = format!("agy:///tmp/fixture?sha256={}", "0".repeat(64));
+        profiles
+            .upsert(ModelProfile::new("agy", uri, "fixture", "fixture").unwrap())
+            .unwrap();
+        let document = StoredProfiles::from_profiles(&profiles);
+        assert_eq!(document.format_version, 2);
+        assert!(document.into_profiles().is_ok());
+        let mut legacy = StoredProfiles::from_profiles(&profiles);
+        legacy.format_version = 1;
+        assert!(legacy.into_profiles().is_err());
+        profiles.remove("agy").unwrap();
+        assert_eq!(StoredProfiles::from_profiles(&profiles).format_version, 1);
     }
 }

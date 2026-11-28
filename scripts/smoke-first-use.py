@@ -88,11 +88,21 @@ def main():
                     # Both provider and model menus recover without restarting setup or refetching.
                     child = subprocess.Popen([str(binary), "model", "setup"], cwd=root, env=environment,
                                              stdin=slave, stdout=slave, stderr=slave)
-                    os.write(master, f"0\n6\n{endpoint}\ninvalid\n2\n".encode())
+                    import re
                     import select
                     import time
                     output = bytearray()
                     deadline = time.monotonic() + TIMEOUT
+                    # Pick the custom endpoint by its label so new menu entries do not shift it.
+                    while b"Provider number" not in output:
+                        assert child.poll() is None, output.decode(errors="replace")
+                        assert time.monotonic() < deadline, "provider menu timed out"
+                        if select.select([master], [], [], 0.1)[0]:
+                            output.extend(os.read(master, 65536))
+                    custom = re.search(rb"(\d+)\D{0,4}Other OpenAI-compatible endpoint", output)
+                    assert custom, output.decode(errors="replace")
+                    number = custom.group(1).decode()
+                    os.write(master, f"0\n{number}\n{endpoint}\ninvalid\n2\n".encode())
                     while child.poll() is None:
                         assert time.monotonic() < deadline, "interactive setup timed out"
                         if select.select([master], [], [], 0.1)[0]:

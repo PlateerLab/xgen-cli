@@ -1,0 +1,16 @@
+{
+  "model": "gemini-3.8-flash-low",
+  "repeats": 2,
+  "seed": 20261120,
+  "max_cli_calls": 200,
+  "max_cli_calls_per_trial": 16,
+  "request_timeout_seconds": 60,
+  "trial_timeout_seconds": 240,
+  "batch_timeout_seconds": 1800,
+  "max_model_turns": 16,
+  "max_ticks": 256,
+  "host_max_output_tokens": 4096,
+  "max_prompt_bytes": 100000,
+  "max_stdout_bytes": 131072,
+  "max_stderr_bytes": 32768
+}

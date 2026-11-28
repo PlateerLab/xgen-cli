@@ -1,0 +1,362 @@
+{
+  "date": "2026-11-22",
+  "record_kind": "live_connection_smoke_not_quality_benchmark",
+  "model": "gemini-3.8-flash-low",
+  "xgen_build_kind": "local-debug",
+  "xgen_binary_sha256": "ff0949b920859eca8e6c4dff1c1e7276ac6de42d1ea1697c43230b990190e571",
+  "agy_binary_sha256": "37873b8062391b6202a3d3199ec012abc9e53aab720d26cd65699441497d8c94",
+  "host_cases": [
+    {
+      "case": "question",
+      "first_exit": 0,
+      "approval_pause": false,
+      "final_exit": 0,
+      "seconds": 16.113131814985536,
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipts": 1,
+      "completed": true,
+      "capabilities_executed": [
+        "xgeny.fs/read-text"
+      ],
+      "oracle": true,
+      "accepted": true
+    },
+    {
+      "case": "approval",
+      "first_exit": 10,
+      "approval_pause": true,
+      "not_written_before_approval": true,
+      "final_exit": 0,
+      "seconds": 12.882790004019625,
+      "model_calls": 2,
+      "tool_effects": 1,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipts": 1,
+      "completed": true,
+      "capabilities_executed": [
+        "xgeny.fs/write-atomic"
+      ],
+      "oracle": true,
+      "accepted": true
+    },
+    {
+      "case": "edit-test",
+      "first_exit": 0,
+      "approval_pause": false,
+      "final_exit": 0,
+      "seconds": 36.63195128098596,
+      "model_calls": 5,
+      "tool_effects": 4,
+      "unknown_events": 0,
+      "duplicate_effect_starts": 0,
+      "receipts": 4,
+      "completed": true,
+      "capabilities_executed": [
+        "xgeny.process/execute",
+        "xgeny.fs/read-text",
+        "xgeny.fs/apply-patch",
+        "xgeny.process/execute"
+      ],
+      "failed_then_passed": true,
+      "oracle": true,
+      "accepted": true
+    }
+  ],
+  "bridge_cli_invocations": [
+    {
+      "index": 1,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.fs/read-text"
+      ],
+      "usage": {
+        "input_tokens": 7991,
+        "output_tokens": 341,
+        "thinking_tokens": 268,
+        "cache_read_tokens": 0,
+        "total_tokens": 8332
+      },
+      "elapsed_seconds": 9.03187351708766
+    },
+    {
+      "index": 2,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "completion_candidate",
+      "proposed_capabilities": [],
+      "usage": {
+        "input_tokens": 8475,
+        "output_tokens": 29,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 8504
+      },
+      "elapsed_seconds": 6.876616033958271
+    },
+    {
+      "index": 3,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.fs/write-atomic"
+      ],
+      "usage": {
+        "input_tokens": 8006,
+        "output_tokens": 85,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 8091
+      },
+      "elapsed_seconds": 6.635924953967333
+    },
+    {
+      "index": 4,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "completion_candidate",
+      "proposed_capabilities": [],
+      "usage": {
+        "input_tokens": 8505,
+        "output_tokens": 39,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 8544
+      },
+      "elapsed_seconds": 6.101187425083481
+    },
+    {
+      "index": 5,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.process/execute"
+      ],
+      "usage": {
+        "input_tokens": 8022,
+        "output_tokens": 111,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 8133
+      },
+      "elapsed_seconds": 6.615955571993254
+    },
+    {
+      "index": 6,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.fs/read-text"
+      ],
+      "usage": {
+        "input_tokens": 8598,
+        "output_tokens": 79,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 8677
+      },
+      "elapsed_seconds": 6.502441718010232
+    },
+    {
+      "index": 7,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.fs/apply-patch"
+      ],
+      "usage": {
+        "input_tokens": 9096,
+        "output_tokens": 177,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 9273
+      },
+      "elapsed_seconds": 7.298476109979674
+    },
+    {
+      "index": 8,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "plan",
+      "proposed_capabilities": [
+        "xgeny.process/execute"
+      ],
+      "usage": {
+        "input_tokens": 9677,
+        "output_tokens": 590,
+        "thinking_tokens": 471,
+        "cache_read_tokens": 0,
+        "total_tokens": 10267
+      },
+      "elapsed_seconds": 9.086250427993946
+    },
+    {
+      "index": 9,
+      "accepted": true,
+      "tool_steps": [],
+      "workspace_unchanged": true,
+      "exit_code": 0,
+      "proposal_kind": "completion_candidate",
+      "proposed_capabilities": [],
+      "usage": {
+        "input_tokens": 10305,
+        "output_tokens": 62,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 10367
+      },
+      "elapsed_seconds": 6.744938632939011
+    }
+  ],
+  "total_bridge_cli_invocations": 9,
+  "native_tool_events_in_bridge": 0,
+  "provider_internal_model_request_count": null,
+  "host_receipts_total": 6,
+  "host_unknown_events": 0,
+  "host_duplicate_effect_starts": 0,
+  "agent_workspace_unchanged": true,
+  "reported_bridge_usage": {
+    "input_tokens": 78675,
+    "output_tokens": 1513,
+    "thinking_tokens": 739,
+    "cache_read_tokens": 0,
+    "total_tokens": 80188
+  },
+  "usd_cost": null,
+  "diagnostics": [
+    {
+      "probe": "first",
+      "advertised_tools_count": 60,
+      "tool_event_count": 0,
+      "distinct_tool_steps": 0,
+      "observed_tool_names": [],
+      "status": "SUCCESS",
+      "single_json": false,
+      "structured_output_present": false,
+      "usage": {
+        "input_tokens": 6238,
+        "output_tokens": 1517,
+        "thinking_tokens": 1221,
+        "cache_read_tokens": 0,
+        "total_tokens": 7755
+      }
+    },
+    {
+      "probe": "second",
+      "advertised_tools_count": 60,
+      "tool_event_count": 4,
+      "distinct_tool_steps": 2,
+      "observed_tool_names": [
+        "manage_task"
+      ],
+      "status": "SUCCESS",
+      "single_json": false,
+      "structured_output_present": false,
+      "usage": {
+        "input_tokens": 4713,
+        "output_tokens": 107,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 4820
+      }
+    },
+    {
+      "probe": "third",
+      "advertised_tools_count": 60,
+      "tool_event_count": 0,
+      "distinct_tool_steps": 0,
+      "observed_tool_names": [],
+      "status": "SUCCESS",
+      "single_json": true,
+      "structured_output_present": false,
+      "usage": {
+        "input_tokens": 517,
+        "output_tokens": 20,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 537
+      }
+    },
+    {
+      "probe": "tool-probe",
+      "advertised_tools_count": 60,
+      "tool_event_count": 0,
+      "distinct_tool_steps": 0,
+      "observed_tool_names": [],
+      "status": "SUCCESS",
+      "single_json": false,
+      "structured_output_present": false,
+      "usage": {
+        "input_tokens": 516,
+        "output_tokens": 24,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_tokens": 540
+      }
+    }
+  ],
+  "effective_tools_model_self_report": [
+    "manage_task"
+  ],
+  "global_hook_file_present": false,
+  "transport_offline_audit": {
+    "all_retained_live_proposals_pass_strict_json": 9,
+    "duplicate_key_rejected": true,
+    "trailing_object_rejected": true,
+    "nonfinite_json_rejected": true,
+    "note": "After live collection, raw proposal forwarding and strict duplicate/nonfinite checks were tightened; all 9 retained proposals passed offline. No new live run claimed for this change."
+  },
+  "limitations": [
+    "Agy execution/runtime was not removed; this is not a raw model API.",
+    "Init advertises 60 tools even with the custom agent; effective tool exclusion is not proven from this list.",
+    "manage_task remained callable in a separate diagnostic and executed with a schema-option configuration.",
+    "No native tool event was observed during the 9 bridge invocations; this is not a guarantee across all inputs.",
+    "Memory and capabilities were supplied by xgen context; no bulk import of existing external tools, private memory, skills or connectors was tested.",
+    "Native output-token ceiling, provider internal retry/model-call count, raw billing and complete request-profile equivalence are unverified.",
+    "No full 20-trial baseline or Claude Code/Codex comparison was executed.",
+    "Initial bridge invocation used unsupported CLI flags; all three argument errors occurred before model I/O and were retained outside the successful results."
+  ],
+  "raw_artifact_sha256": {
+    "first.ndjson": "9776def19ab4f2a3ec28e1a094fc39e6c9fd126b6442fce1ac33ce9fc560316d",
+    "second.ndjson": "c02dc78bc70e3ab00bf6105ea41ea6be4f47a7bed2a9ff87c06be2c658d3535c",
+    "third.ndjson": "bd534c125ce297ea260372f0462c28f2230abff3948c39faa57321d28a98727a",
+    "tool-probe.ndjson": "1488d7a6fa09535d58396fd2a69bb781901841bbc6f67344ec43c18a8b29370b",
+    "host-results.json": "cdcbf0373d090f121f0c03a13d2d6c019c2c139dd9989dc21b7ddf08bb9b246d",
+    "bridge-calls.json": "9d7ec8484522f78274d813ca0af0469d6b7a85addb4b4ba2b69e2e62923b2805",
+    "agent-workspace-unchanged.json": "3da64b1001616bb61fa699ce5ec0956485a4cae98b08f1e7dea5dbe99f7efe4c",
+    "bridge-01.ndjson": "ca0aa45b2fc5672a67ae3138d513a74fdb8e2edc471d6c77cda848eec5531865",
+    "bridge-02.ndjson": "7fb93ec14ff11dfc2010bbea5d3ba0eda7b02b51c526fa4828b3de42389fad66",
+    "bridge-03.ndjson": "6863cd71c5c7aabfd28f68ae047b91763b2d65ef6fd51b6afc290e4061fd55af",
+    "bridge-04.ndjson": "a6be051b0e7bff9bf72d3812ede0c675779228f50ae232212afeb8d9fc28f9cf",
+    "bridge-05.ndjson": "0a39c75a12fd1c7297d4752128c34b54bb3f7f43be84c138b1e82c0ff43d7043",
+    "bridge-06.ndjson": "8c5349f79e30773fe0df592f6bb0043b6556e8894510a5f35f38338fa48bcc56",
+    "bridge-07.ndjson": "ecc6c8448f6bdcf6457b751ca963bcfcc4d9f24457c5853aea8aaf5863188019",
+    "bridge-08.ndjson": "0e49ff481fd2879c7fd62a783560a0b5fabdb4e05ba98ec24bdf20622c388b56",
+    "bridge-09.ndjson": "a6ab3032f0567411993c415876eaf3484cfe55bff9ca0a5169412f6f5ebee790"
+  }
+}
