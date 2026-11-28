@@ -25,6 +25,7 @@ use xgen_provider_openai::{
 };
 use zeroize::Zeroizing;
 
+mod background;
 mod repl;
 mod tui;
 mod tui_results;
@@ -662,6 +663,86 @@ impl InteractiveHost {
             .clone()
             .ok_or_else(|| repl::ReplFailure::new(PublicRunError::Internal.code()))
     }
+
+    fn launch_snapshot(&mut self) -> Result<InteractiveLaunch, repl::ReplFailure> {
+        Ok(InteractiveLaunch {
+            workspace: self.workspace.clone(),
+            process_session: self.process_session()?,
+            environment_note: self.environment_note.clone(),
+            instructions: self.instructions.clone(),
+            max_model_turns: self.max_model_turns,
+        })
+    }
+}
+
+/// What starting an interactive Run needs, detached from the session so a background thread can
+/// start one too (ADR-0094).
+#[derive(Clone)]
+struct InteractiveLaunch {
+    workspace: PathBuf,
+    process_session: LocalProcessSession,
+    environment_note: Option<String>,
+    instructions: Option<String>,
+    max_model_turns: u32,
+}
+
+fn start_interactive_run(
+    launch: &InteractiveLaunch,
+    goal: String,
+    grants: repl::InvocationGrants,
+    follow_ups: Option<xgen_cli::FollowUpInbox>,
+    started: &mut dyn FnMut(&str),
+    progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
+    activity: &mut dyn FnMut(xgen_cli::StepActivity),
+) -> Result<LocalCommandResult, repl::ReplFailure> {
+    let model = resolve_model(None, None, None, None, false, RequestOptionArgs::default())
+        .map_err(|error| repl::ReplFailure::new(error.code()))?;
+    // The short environment note goes first so a long instruction block is what gets cut.
+    let parts = [&launch.environment_note, &launch.instructions]
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let goal = xgen_cli::append_within(goal, &parts, xgen_cli::MAX_GOAL_BYTES);
+    let started_run = RefCell::new(None);
+    let reported = Cell::new(0);
+    run_interactive_with_process_session_progress(
+        LocalRunRequest {
+            goal,
+            workspace: launch.workspace.clone(),
+            base_url: model.base_url,
+            planner_id: "xgeny.cli.openai".to_owned(),
+            model: model.model,
+            tokenizer: model.tokenizer,
+            credential: model.credential,
+            inference_limits: model.inference_limits,
+            request_options: model.request_options,
+            allow_files: Vec::new(),
+            allow_dirs: vec![".".to_owned()],
+            allow_executables: Vec::new(),
+            allow_remote_model_egress: grants.model,
+            allow_read: grants.read,
+            bearer_env_for: std::collections::BTreeMap::new(),
+            allow_write: grants.write,
+            allow_execute: grants.execute,
+            max_ticks: repl_max_ticks(launch.max_model_turns),
+            max_model_turns: Some(launch.max_model_turns),
+            final_response_schema: None,
+            completion_checks: None,
+            // The interactive driver admits this contract regardless; said
+            // here so the request describes the Run it actually starts.
+            conversation_responses: true,
+            capabilities: Vec::new(),
+            follow_ups,
+        },
+        &launch.process_session,
+        |run_id| {
+            started_run.replace(Some(run_id.to_owned()));
+            started(run_id);
+        },
+        with_activity(&started_run, &reported, progress, activity),
+    )
+    .map_err(repl::ReplFailure::from_run_error)
 }
 
 /// Forward what each finished Step did once its effect commits, read back from the verified
@@ -747,57 +828,42 @@ impl repl::ReplHost for InteractiveHost {
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
         activity: &mut dyn FnMut(xgen_cli::StepActivity),
     ) -> Result<LocalCommandResult, repl::ReplFailure> {
-        let model = resolve_model(None, None, None, None, false, RequestOptionArgs::default())
-            .map_err(|error| repl::ReplFailure::new(error.code()))?;
-        let process_session = self.process_session()?;
-        // The short environment note goes first so a long instruction block is what gets cut.
-        let parts = [&self.environment_note, &self.instructions]
-            .into_iter()
-            .flatten()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        let goal = xgen_cli::append_within(goal, &parts, xgen_cli::MAX_GOAL_BYTES);
-        let started_run = RefCell::new(None);
-        let reported = Cell::new(0);
-        run_interactive_with_process_session_progress(
-            LocalRunRequest {
-                goal,
-                workspace: self.workspace.clone(),
-                base_url: model.base_url,
-                planner_id: "xgeny.cli.openai".to_owned(),
-                model: model.model,
-                tokenizer: model.tokenizer,
-                credential: model.credential,
-                inference_limits: model.inference_limits,
-                request_options: model.request_options,
-                allow_files: Vec::new(),
-                allow_dirs: vec![".".to_owned()],
-                allow_executables: Vec::new(),
-                allow_remote_model_egress: grants.model,
-                allow_read: grants.read,
-                bearer_env_for: std::collections::BTreeMap::new(),
-                allow_write: grants.write,
-                allow_execute: grants.execute,
-                max_ticks: repl_max_ticks(self.max_model_turns),
-                max_model_turns: Some(self.max_model_turns),
-                final_response_schema: None,
-                completion_checks: None,
-                // The interactive driver admits this contract regardless; said
-                // here so the request describes the Run it actually starts.
-                conversation_responses: true,
-                capabilities: Vec::new(),
-                follow_ups: self.follow_ups.clone(),
-            },
-            &process_session,
-            |run_id| {
-                started_run.replace(Some(run_id.to_owned()));
-                if self.detailed_progress {
+        let launch = self.launch_snapshot()?;
+        let detailed = self.detailed_progress;
+        start_interactive_run(
+            &launch,
+            goal,
+            grants,
+            self.follow_ups.clone(),
+            &mut |run_id| {
+                if detailed {
                     eprintln!("XGEN_STARTED run_id={run_id}");
                 }
             },
-            with_activity(&started_run, &reported, progress, activity),
+            progress,
+            activity,
         )
-        .map_err(repl::ReplFailure::from_run_error)
+    }
+
+    fn background_launcher(&mut self) -> Option<std::sync::Arc<background::Launch>> {
+        // A background Run never writes to stderr: the terminal frontend owns the screen.
+        let launch = self.launch_snapshot().ok()?;
+        Some(std::sync::Arc::new(
+            move |goal,
+                  grants,
+                  started: &mut dyn FnMut(&str),
+                  progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl| {
+                start_interactive_run(
+                    &launch,
+                    goal,
+                    grants,
+                    None,
+                    started,
+                    progress,
+                    &mut |_activity| {},
+                )
+            },
+        ))
     }
 
     fn resume(
@@ -902,6 +968,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
         return ExitCode::from(PublicRunError::Configuration.exit_code());
     };
     let follow_ups = xgen_cli::FollowUpInbox::new();
+    let background = background::BackgroundRuns::default();
     if terminal {
         host.follow_ups = Some(follow_ups.clone());
     }
@@ -914,6 +981,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
             footer,
             !debug,
             follow_ups,
+            background.clone(),
         ) else {
             eprintln!("XGEN_ERROR code={}", PublicRunError::Internal.code());
             return ExitCode::from(PublicRunError::Internal.exit_code());
@@ -925,6 +993,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
             &cancellation,
             !debug,
             trust,
+            &background,
         )
     } else {
         let mut input = repl::InterruptibleInput::stdin(cancellation.clone());
@@ -936,6 +1005,7 @@ fn interactive_command(debug: bool, max_model_turns: u32, trust: bool) -> ExitCo
             &cancellation,
             false,
             trust,
+            &background,
         )
     };
     match result {

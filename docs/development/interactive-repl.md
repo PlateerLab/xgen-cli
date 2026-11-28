@@ -59,6 +59,10 @@ xgen> src를 탐색하고 \
 /permissions
 /permissions model|read|write|execute ask|allow|deny
 /resume [RUN_ID]
+/bg GOAL
+/runs
+/show ID
+/cancel ID
 /clear
 /exit
 ```
@@ -122,9 +126,26 @@ Run이 도는 동안 입력창에 쓰고 Enter를 누르면 그 Run에 지시를
 
 - 다음 모델 호출 직전에 전달된다. 전달 전에는 입력창 위에 `next step: ...`, 전달되면 `↳ added to the run: ...`이 보인다.
 - 모델은 지시를 goal의 일부로 읽고, 충돌하면 나중 지시를 따른다. 이미 끝난 단계는 되돌리지 않는다.
-- `/`로 시작하는 줄은 명령이라 `queued: ...`로 기다렸다가 다음 `xgen> `에서 실행된다.
+- `/`로 시작하는 줄은 명령이라 `queued: ...`로 기다렸다가 다음 `xgen> `에서 실행된다. `/bg`·`/runs`·`/show`·`/cancel`은 예외로 바로 실행된다.
 - Run이 지시를 받지 못하고 끝나면 그 지시는 다음 목표로 먼저 실행된다. 승인 질문의 답으로는 쓰지 않는다.
 - Esc는 기다리는 지시와 명령을 비우고, Ctrl+C는 Run 취소와 함께 비운다. 한 줄 8 KiB, Run당 16개까지다.
+
+## 백그라운드 Run
+
+`/bg GOAL`은 지금 Run과 별도인 Run을 백그라운드에서 시작한다([ADR-0094](../adr/0094-background-runs.md)).
+Run이 도는 중에도 입력창에서 바로 쓸 수 있다.
+
+- 이전 대화 맥락을 넘기지 않는 독립 Run이다. 지침 파일과 환경 안내는 일반 goal과 같이 붙는다.
+- 묻지 않는다. 세션이 이미 허용한 권한(`/permissions ... allow`, 승인 질문의 `a`, `--trust`)만 쓴다. 그 밖의
+  승인이 필요하면 멈추고 `[bg1] paused (read_approval_required) run-... · /resume run-...`처럼 알린다. 입력창이
+  비어 있을 때 `/bg`를 쓰면 모델 전송 동의만 그 자리에서 묻는다. Run 중에는 모델 권한이 `allow`여야 한다.
+- 끝나면 `[bg1] completed run-...: <답 첫 줄> · /show bg1`처럼 한 줄로 알린다. `/show bg1`(또는 Run ID)은 저장된
+  답 전체를, `/runs`는 목록과 상태·경과 시간을 보여 준다.
+- 동시에 3개까지 돈다. `/cancel bg1`은 다음 안전한 경계에서 멈추고, Ctrl+C는 앞 Run만 취소한다.
+- 같은 파일을 두 Run이 고치면 뒤에 쓰는 쪽의 쓰기가 `precondition_conflict`로 실패하고, 모델이 파일을 다시 읽어
+  이어 간다. 서로의 변경을 덮어쓰지 않는다.
+- 세션을 끝내면 도는 Run을 취소하고 최대 10초 기다린다. Durable 상태는 남아 `/resume`으로 이어 갈 수 있다.
+  목록 자체는 세션 메모리라 다음 세션에서는 Run ID로 `/resume`한다.
 
 ## 긴 결과 보기
 

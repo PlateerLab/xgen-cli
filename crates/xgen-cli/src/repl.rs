@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::background::{BackgroundRuns, Launch};
 use xgen_cli::{
     CommittedChange, DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason,
     RejectionReason, StepActivity, edit_lines, provider_rejection_hint,
@@ -16,6 +17,8 @@ use xgen_runtime::AgentLoopQuiescence;
 
 pub(crate) const MAX_REPL_LINE_BYTES: usize = 16 * 1024;
 const MAX_REPL_GOAL_BYTES: usize = 16 * 1024;
+/// How long leaving the session waits for background Runs to reach a safe boundary.
+const BACKGROUND_EXIT_WAIT: Duration = Duration::from_secs(10);
 
 /// Presentation boundaries supplied by the REPL, never inferred from model text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,7 +230,7 @@ impl ReplFailure {
         }
     }
 
-    const fn code(&self) -> &'static str {
+    pub(crate) const fn code(&self) -> &'static str {
         self.code
     }
 
@@ -281,6 +284,11 @@ pub(crate) trait ReplHost {
         progress: &mut dyn FnMut(DriverProgress) -> DriverProgressControl,
         activity: &mut dyn FnMut(StepActivity),
     ) -> Result<LocalCommandResult, ReplFailure>;
+
+    /// Starts independent Runs on other threads for `/bg` (ADR-0094); `None` disables it.
+    fn background_launcher(&mut self) -> Option<Arc<Launch>> {
+        None
+    }
 }
 
 #[derive(Clone, Default)]
@@ -455,6 +463,10 @@ enum ReplCommand {
     Permissions(Option<(PermissionKind, PermissionMode)>),
     AllowExecutable(String),
     Resume(Option<String>),
+    /// `/bg GOAL`: start an independent background Run (ADR-0094).
+    Background(String),
+    /// `/runs`, `/show ID`, `/cancel ID` over background Runs.
+    BackgroundQuery(String),
     Clear,
     Help,
     Exit,
@@ -506,7 +518,15 @@ pub(crate) fn run<R: BufRead, W: ReplOutput, H: ReplHost>(
     host: &mut H,
     cancellation: &Cancellation,
 ) -> io::Result<()> {
-    run_with_display(reader, output, host, cancellation, false, false)
+    run_with_display(
+        reader,
+        output,
+        host,
+        cancellation,
+        false,
+        false,
+        &BackgroundRuns::default(),
+    )
 }
 
 #[allow(clippy::too_many_lines)]
@@ -517,6 +537,7 @@ pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
     cancellation: &Cancellation,
     interactive_display: bool,
     trust: bool,
+    background: &BackgroundRuns,
 ) -> io::Result<()> {
     writeln!(output, "XGEN Developer Preview")?;
     writeln!(
@@ -553,8 +574,16 @@ pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
     let mut session_context = SessionContext::default();
     let mut outcome = SessionOutcome::Idle;
     let mut first_input_line = true;
+    background.set_launcher(host.background_launcher());
 
     loop {
+        // A background Run may use only what the session has granted so far.
+        background.set_grants(permissions.grants());
+        if !background.frontend() {
+            for notice in background.take_notices() {
+                writeln!(output, "{notice}")?;
+            }
+        }
         let entry = match read_entry(reader, output, &mut first_input_line) {
             Ok(entry) => entry,
             Err(InputFailure::TooLarge) => {
@@ -576,8 +605,52 @@ pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
                 writeln!(output, "^C")?;
             }
             ReplEntry::EndOfInput | ReplEntry::Command(ReplCommand::Exit) => {
+                let running = background.running();
+                if running > 0 {
+                    writeln!(
+                        output,
+                        "stopping {running} background Run(s); their durable state stays resumable"
+                    )?;
+                    background.cancel_all();
+                    background.wait_idle(BACKGROUND_EXIT_WAIT);
+                    if !background.frontend() {
+                        for notice in background.take_notices() {
+                            writeln!(output, "{notice}")?;
+                        }
+                    }
+                }
                 writeln!(output, "bye")?;
                 return Ok(());
+            }
+            ReplEntry::Command(ReplCommand::Background(goal)) => {
+                let mut grants = permissions.grants();
+                match permissions.model {
+                    PermissionMode::Allow => {}
+                    PermissionMode::Deny => {
+                        writeln!(output, "paused: model_egress_denied")?;
+                        continue;
+                    }
+                    PermissionMode::Ask => {
+                        if goal.is_empty() {
+                            writeln!(output, "error: background_goal_required (/bg GOAL)")?;
+                            continue;
+                        }
+                        let answer = prompt_approval(reader, output, PermissionKind::Model)?;
+                        if !answer.record(output, &mut permissions, PermissionKind::Model)? {
+                            writeln!(output, "cancelled before model egress")?;
+                            continue;
+                        }
+                        grants = grants.with(PermissionKind::Model);
+                    }
+                }
+                for line in background.spawn(&goal, grants) {
+                    writeln!(output, "{line}")?;
+                }
+            }
+            ReplEntry::Command(ReplCommand::BackgroundQuery(line)) => {
+                for line in background.command(&line).unwrap_or_default() {
+                    writeln!(output, "{line}")?;
+                }
             }
             ReplEntry::Command(ReplCommand::Help) => print_help(output)?,
             ReplEntry::Command(ReplCommand::Model(name)) => match name {
@@ -617,6 +690,7 @@ pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
                     "catalogued_executables: {}",
                     host.executable_ids().len()
                 )?;
+                writeln!(output, "background_runs: {} running", background.running())?;
                 print_permissions(output, permissions)?;
             }
             ReplEntry::Command(ReplCommand::Usage(requested)) => {
@@ -659,7 +733,10 @@ pub(crate) fn run_with_display<R: BufRead, W: ReplOutput, H: ReplHost>(
                     continue;
                 }
                 match host.allow_executable(&specification) {
-                    Ok(()) => print_executables(output, host.executable_ids())?,
+                    Ok(()) => {
+                        background.set_launcher(host.background_launcher());
+                        print_executables(output, host.executable_ids())?;
+                    }
                     Err(failure) => print_failure(output, &failure)?,
                 }
             }
@@ -1807,6 +1884,14 @@ fn parse_command(value: &str) -> Result<ReplCommand, InputFailure> {
                 .ok_or(InputFailure::InvalidCommand)?;
             Ok(ReplCommand::AllowExecutable(specification.to_owned()))
         }
+        ["/bg", ..] => Ok(ReplCommand::Background(
+            value
+                .strip_prefix("/bg")
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_owned(),
+        )),
+        ["/runs"] | ["/show" | "/cancel", _] => Ok(ReplCommand::BackgroundQuery(value.to_owned())),
         ["/resume"] => Ok(ReplCommand::Resume(None)),
         ["/resume", run_id] => Ok(ReplCommand::Resume(Some((*run_id).to_owned()))),
         ["/clear"] => Ok(ReplCommand::Clear),
@@ -1861,6 +1946,14 @@ fn print_help(output: &mut impl Write) -> io::Result<()> {
     writeln!(
         output,
         "/resume [RUN_ID]                 continue or replay a durable Run"
+    )?;
+    writeln!(
+        output,
+        "/bg GOAL                         start an independent Run in the background"
+    )?;
+    writeln!(
+        output,
+        "/runs · /show ID · /cancel ID    list, read or stop background Runs"
     )?;
     writeln!(
         output,
@@ -2258,6 +2351,53 @@ mod tests {
         }
     }
 
+    #[test]
+    fn background_run_proceeds_beside_foreground_goals_and_stops_on_exit() {
+        let (seen, goals) = mpsc::channel();
+        let seen = Mutex::new(seen);
+        let mut host = FakeHost::new([LocalCommandResult::Responded {
+            run_id: "run-foreground".to_owned(),
+            summary: "foreground answer".to_owned(),
+        }]);
+        host.launcher = Some(Arc::new(move |goal, grants, started, progress| {
+            seen.lock().unwrap().send((goal, grants)).unwrap();
+            started("run-slow");
+            // Runs until the session asks it to stop at a boundary.
+            while progress(DriverProgress::ModelCallStarting) == DriverProgressControl::Continue {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Ok(LocalCommandResult::Paused {
+                run_id: Some("run-slow".to_owned()),
+                reason: PauseReason::UserCancelled,
+            })
+        }));
+        let mut input = io::Cursor::new(
+            b"/bg\n/permissions model allow\n/bg slow job\n/runs\nforeground goal\n/status\n/exit\n"
+                .as_slice(),
+        );
+        let mut output = Vec::new();
+        run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        let (goal, grants) = goals.recv().unwrap();
+        assert_eq!(goal, "slow job");
+        assert!(grants.model && !grants.write);
+        assert!(
+            output.contains("error: background_goal_required (/bg GOAL)"),
+            "{output}"
+        );
+        assert!(
+            output.contains("[bg1] started in the background"),
+            "{output}"
+        );
+        assert!(output.contains("  bg1 running "), "{output}");
+        assert!(output.contains("foreground answer"), "{output}");
+        assert!(output.contains("background_runs: 1 running"), "{output}");
+        assert!(output.contains("stopping 1 background Run(s)"), "{output}");
+        assert!(output.contains("[bg1] cancelled run-slow"), "{output}");
+        assert_eq!(host.starts.len(), 1);
+        assert_eq!(host.starts[0].0, "foreground goal");
+    }
+
     struct FakeHost {
         results: VecDeque<Result<LocalCommandResult, ReplFailure>>,
         starts: Vec<(String, InvocationGrants)>,
@@ -2265,6 +2405,7 @@ mod tests {
         tools: Vec<String>,
         model: ModelView,
         changes: Vec<CommittedChange>,
+        launcher: Option<Arc<Launch>>,
     }
 
     impl FakeHost {
@@ -2280,6 +2421,7 @@ mod tests {
                     authentication: "external_or_none",
                 },
                 changes: Vec::new(),
+                launcher: None,
             }
         }
 
@@ -2302,6 +2444,10 @@ mod tests {
 
         fn executable_ids(&self) -> &[String] {
             &self.tools
+        }
+
+        fn background_launcher(&mut self) -> Option<Arc<Launch>> {
+            self.launcher.clone()
         }
 
         fn changes(&mut self, _run_id: &str) -> Result<Vec<CommittedChange>, ReplFailure> {
@@ -2548,6 +2694,7 @@ mod tests {
             &Cancellation::default(),
             true,
             false,
+            &BackgroundRuns::default(),
         )
         .unwrap();
         let output = String::from_utf8(output).unwrap();
@@ -2851,6 +2998,7 @@ mod tests {
             &Cancellation::default(),
             false,
             true,
+            &BackgroundRuns::default(),
         )
         .unwrap();
         assert!(host.starts.iter().all(|(_, grants)| *grants
@@ -3049,6 +3197,7 @@ mod tests {
             &Cancellation::default(),
             true,
             false,
+            &BackgroundRuns::default(),
         )
         .unwrap();
 

@@ -42,6 +42,25 @@ pub fn clear_cancellation() {
     CANCELLED.store(false, Ordering::SeqCst);
 }
 
+thread_local! {
+    static DETACHED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Exempt calls made on this thread from the session-wide Ctrl+C. A background Run (ADR-0094)
+/// stops through its own driver boundary instead, so cancelling the foreground Run does not
+/// kill its in-flight call.
+pub fn detach_from_session_cancellation() {
+    DETACHED.with(|detached| detached.set(true));
+}
+
+fn session_cancelled() -> bool {
+    applies_to_this_thread(CANCELLED.load(Ordering::SeqCst))
+}
+
+fn applies_to_this_thread(requested: bool) -> bool {
+    requested && !DETACHED.with(std::cell::Cell::get)
+}
+
 pub fn kill_active() {
     let children: Vec<_> = ACTIVE
         .lock()
@@ -511,7 +530,7 @@ fn run(
     timeout: Duration,
     model: Option<&str>,
 ) -> Result<Vec<u8>, PlannerPortFailure> {
-    if CANCELLED.load(Ordering::SeqCst) {
+    if session_cancelled() {
         return Err(PlannerPortFailure::Unavailable);
     }
     command
@@ -552,7 +571,7 @@ fn run(
     let (mut output, mut pending, mut errors) = (Vec::new(), Vec::new(), Vec::new());
     let mut status = None;
     loop {
-        if CANCELLED.load(Ordering::SeqCst) {
+        if session_cancelled() {
             return Err(PlannerPortFailure::Unavailable);
         }
         if started.elapsed() >= timeout {
@@ -711,6 +730,21 @@ mod tests {
                     && *value == Some(std::ffi::OsStr::new("true")))
         );
         assert!(envs.iter().all(|(key, _)| *key != "XGEN_OPENAI_API_KEY"));
+    }
+
+    #[test]
+    fn session_cancellation_skips_detached_background_threads() {
+        assert!(super::applies_to_this_thread(true));
+        assert!(!super::applies_to_this_thread(false));
+        let detached = std::thread::spawn(|| {
+            super::detach_from_session_cancellation();
+            super::applies_to_this_thread(true)
+        })
+        .join()
+        .unwrap();
+        assert!(!detached);
+        // Other threads, including this one, still follow the session.
+        assert!(super::applies_to_this_thread(true));
     }
 
     #[test]
