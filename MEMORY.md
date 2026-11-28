@@ -15,6 +15,14 @@
 
 ## 책임과 개발 범위
 
+2026-11-28 구현·로컬 검증: [백그라운드 Run](docs/adr/0094-background-runs.md) (`/bg GOAL`, `/runs`, `/show`, `/cancel`).
+대화형 세션에서 독립 Run을 별도 스레드로 돌린다. 세션이 허용한 권한만 쓰고, 새 승인이 필요하면 멈춰 `/resume`을 안내한다. 동시 3개까지 돌린다.
+Run 중 입력한 `/bg`도 바로 실행된다. Runtime·journal·모델 요청은 그대로다(모델 요청 비교 8/8 일치).
+agy 실측(Flash Low, tmux): 앞 Run과 병렬 완료, 기본 모드 paused 뒤 resume, 같은 파일 충돌(`precondition_conflict` 뒤 재시도로 두 줄 모두 남음)을 확인했다.
+Ctrl+C 분리는 수정본 2/2 완료, 대조 빌드 0/2였다. 원인은 agy 취소 플래그가 process 전역이었기 때문이고, 백그라운드 스레드만 thread-local로 분리해 고쳤다.
+상위 Router는 사용자 합의로 보류했다. 남은 것: 백그라운드 진행 표시, in-flight agy 즉시 취소, 세션 간 목록 유지.
+책임: xgen CLI(REPL/TUI, agy 연결의 취소 범위).
+
 2026-11-28 구현·로컬 검증: [Provider 거절 이유 표시](docs/adr/0093-provider-rejection-display.md) (A안, 화면 전용).
 4xx 본문을 최대 16 KiB 읽어 type/code/message를 정리해 headless `provider:`·대화형 `Provider said:`·model check에 보인다.
 Key·Bearer·긴 token은 지우고 300자에서 자른다. Journal·planning context·model 요청은 그대로다(모델 요청 비교 8/8 일치).
@@ -300,7 +308,7 @@ Launcher의 `latest`/`next`는 rc.8이며 실제 모델 품질 평가는 인증 
 - TUI 사용성(사용자 요청, 2026-11-03, 미구현): Claude Code `/model`처럼 화살표로 고르는 model 선택기. opencode는 TypeScript/Go라 그대로 못 가져온다. 같은 Rust인 OpenAI Codex CLI TUI(ratatui, Apache-2.0)가 참고·이식 후보 — 셀 단위 diff 렌더링이라 지우고 다시 그리는 깜빡임 구조 자체가 없다. 한 단계씩: 깜빡임 수정 → `/model` 선택기 → 렌더러 교체 여부는 ADR로 따로 판단.
 - 18초 응답(사용자 보고, 2026-11-03): 시간 전부가 한 번의 HTTP 호출 안이었다(usage elapsedMillis 18324, 출력 52 token). 같은 경로를 tmux TUI·`xgen run`으로 다시 재면 2~5초, 직접 호출 1.5~2초라 일회성 provider 지연으로 본다(원인 확정 아님).
 
-- xgen-cli 자체 개발 순서(2026-11-19, 사용자 승인): 미완료 #144 검증·정리 후 실행 중 후속 지시 반영을 다음 큰 작업으로 둔다. 독립 Run 병렬 실행·상위 Router는 이후 후보이며 아직 구현하지 않았다.
+- xgen-cli 자체 개발 순서(2026-11-19, 사용자 승인): 미완료 #144 검증·정리 후 실행 중 후속 지시 반영을 다음 큰 작업으로 둔다. 독립 Run 병렬 실행은 2026-11-28 `/bg`로 구현했다(ADR-0094). 상위 Router는 보류했다.
 - 실행 중 후속 지시(2026-11-28, ADR-0092, 구현·실제 모델 검증): 대화형 TUI에서 Run 중 Enter한 줄은 그 Run의 지시가 되어 다음 모델 호출 직전에 `user_instruction_added`로 journal에 남고 planning context `userInstructions{meaning,items}`로 보인다(없으면 요청 바이트 동일, 모델 요청 비교 8/8 일치). `/` 명령과 Run이 받지 못한 지시만 다음 목표 대기열로 간다. agy Flash Low 실측: 설계 2(파일 설명 범위 축소, 생성 파일 이름 변경)·보류 2(답 언어 변경, 도구 실행 중 12초 뒤 추가 요청) 모두 같은 Run에서 반영, main은 별도 Run으로 실행. 남은 후보: 독립 Run 병렬 실행·상위 Router, 승인 대기 중 지시의 즉시 반영.
 - #144 정리(구현·로컬 검증 완료): 최초 CI는 test의 빈 String 생성에 대한 Clippy1건에서 중단됐다. 최신 main을 병합해 수정했으며, 범위 밖 도구를 지시하는 안내와 필수 completion 검사 모순도 실제 실행에서 재현해 고쳤다. read/stat 승인·resume, 선택 write의 별도 승인, 숨긴 write 차단, HTTP 원문·요청 크기 검증을 진행한다. 독립 diff 검토 도구는 인증 오류로 이용하지 못했으며 직접 코드 검토와 회귀 검사를 수행한다.
 - #144 최종 로컬 검증: Rust798개(4 ignored), Python162개(9 skipped), Clippy·fmt·protocol·문서·workflow 검사 통과. 이전 rc.6의 미완료 HTTP Run을 새 바이너리로 재개해 catalog digest와 API 본문이 유지됨을 두 fixture에서 확인했다. 실제 모델 판단 품질·토큰 금액 절감은 미측정이다. 작업은 기존 `/home/son/projects/xgen-cli-wt/capability-scope`의 `codex/capability-scope`에서 진행했다.

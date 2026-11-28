@@ -25,6 +25,7 @@ use crossterm::event::{
 use crossterm::{cursor, queue, terminal};
 use unicode_width::UnicodeWidthChar as _;
 
+use crate::background::BackgroundRuns;
 use crate::repl::{
     Cancellation, InputMessage, InterruptibleInput, MAX_REPL_LINE_BYTES, ReplOutput, ResultKind,
 };
@@ -122,7 +123,9 @@ pub(crate) fn start(
     footer: String,
     folding: bool,
     follow_ups: FollowUpInbox,
+    background: BackgroundRuns,
 ) -> io::Result<(InterruptibleInput, TuiOutput, TuiGuard)> {
+    background.attach_frontend();
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     if let Err(error) = queue!(stdout, EnableBracketedPaste).and_then(|()| stdout.flush()) {
@@ -139,7 +142,8 @@ pub(crate) fn start(
     let (lines, input) = mpsc::sync_channel(1);
     let frontend_cancellation = cancellation.clone();
     let thread = thread::spawn(move || {
-        let mut frontend = Frontend::new(frontend_cancellation, history, footer, lines, follow_ups);
+        let mut frontend = Frontend::new(frontend_cancellation, history, footer, lines, follow_ups)
+            .with_background(background);
         frontend.run(&receiver);
     });
     let request_sender = sender.clone();
@@ -175,6 +179,8 @@ struct Frontend {
     queue: VecDeque<String>,
     /// Instructions typed while a Run is in flight, taken at its next model call (ADR-0092).
     follow_ups: FollowUpInbox,
+    /// Independent Runs started with `/bg`; their commands work while a Run is in flight.
+    background: BackgroundRuns,
     /// The remaining lines of a multi-line submission, answered at `...>` prompts.
     continuation: VecDeque<String>,
     cancelling: bool,
@@ -258,6 +264,7 @@ impl Frontend {
             requested: false,
             queue: VecDeque::new(),
             follow_ups,
+            background: BackgroundRuns::default(),
             continuation: VecDeque::new(),
             cancelling: false,
             started: Instant::now(),
@@ -271,6 +278,11 @@ impl Frontend {
             probed: None,
             last_resize: None,
         }
+    }
+
+    fn with_background(mut self, background: BackgroundRuns) -> Self {
+        self.background = background;
+        self
     }
 
     fn run(&mut self, receiver: &Receiver<Message>) {
@@ -314,6 +326,9 @@ impl Frontend {
                     )
                     .into_bytes(),
                 );
+            }
+            for notice in self.background.take_notices() {
+                finished.push(format!("\x1b[2m{notice}\x1b[0m").into_bytes());
             }
             dirty |= !finished.is_empty();
             let event = event::poll(Duration::from_millis(25))
@@ -445,6 +460,11 @@ impl Frontend {
                 let text = self.editor.take();
                 if self.requested {
                     self.submit(&text, finished);
+                } else if let Some(lines) = self.background_command(&text) {
+                    // Background Runs are independent of the one in flight: act now.
+                    self.editor.remember(&text);
+                    finished.push(echo_line(GOAL_PROMPT, &text));
+                    finished.extend(lines.into_iter().map(String::into_bytes));
                 } else if text.trim().starts_with('/') {
                     self.queue.push_back(text);
                 } else if !text.trim().is_empty() {
@@ -476,6 +496,17 @@ impl Frontend {
             _ => return false,
         }
         true
+    }
+
+    /// `/bg`, `/runs`, `/show` and `/cancel` typed while a Run is in flight. A background Run
+    /// started now cannot ask for model consent, so it needs the session's standing permission.
+    fn background_command(&self, text: &str) -> Option<Vec<String>> {
+        let text = text.trim();
+        if text == "/bg" || text.starts_with("/bg ") {
+            let goal = text.strip_prefix("/bg").unwrap_or_default();
+            return Some(self.background.spawn(goal, self.background.grants()));
+        }
+        self.background.command(text)
     }
 
     fn interrupt(&mut self) {
