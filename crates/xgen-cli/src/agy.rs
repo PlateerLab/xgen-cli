@@ -615,9 +615,18 @@ fn run(
                     if status.success() {
                         return Ok(output);
                     }
-                    if String::from_utf8_lossy(&errors).contains("Please sign in") {
+                    let errors = String::from_utf8_lossy(&errors);
+                    if errors.contains("Please sign in") {
                         return Err(PlannerPortFailure::ProviderRejected);
                     }
+                    // Only a fixed class leaves the process; agy's own text stays private.
+                    let class = exit_class(&errors);
+                    eprintln!(
+                        "XGEN_AGY code=agy_exit status={} class={class}",
+                        status
+                            .code()
+                            .map_or_else(|| "signal".to_owned(), |code| code.to_string())
+                    );
                     return Err(PlannerPortFailure::Unavailable);
                 }
                 std::thread::sleep(Duration::from_millis(10));
@@ -626,9 +635,66 @@ fn run(
     }
 }
 
+/// Coarse class of an unsuccessful agy exit, from its stderr.
+fn exit_class(errors: &str) -> &'static str {
+    let lowered = errors.to_ascii_lowercase();
+    let any = |needles: &[&str]| needles.iter().any(|needle| lowered.contains(needle));
+    if any(&[
+        "quota",
+        "rate limit",
+        "resource exhausted",
+        "resource_exhausted",
+        "429",
+        "too many requests",
+    ]) {
+        "rate_limited"
+    } else if any(&[
+        "unauthenticated",
+        "unauthorized",
+        "401",
+        "403",
+        "token",
+        "credential",
+        "login",
+    ]) {
+        "authentication"
+    } else if any(&[
+        "network",
+        "connect",
+        "dns",
+        "timed out",
+        "timeout",
+        "unreachable",
+        "503",
+        "502",
+        "unavailable",
+    ]) {
+        "network"
+    } else if lowered.trim().is_empty() {
+        "no_stderr"
+    } else {
+        "other"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exit_classes_are_fixed_and_never_echo_agy_text() {
+        assert_eq!(
+            exit_class("Error: RESOURCE_EXHAUSTED quota"),
+            "rate_limited"
+        );
+        assert_eq!(exit_class("failed to refresh token"), "authentication");
+        assert_eq!(
+            exit_class("dial tcp: connect: network is unreachable"),
+            "network"
+        );
+        assert_eq!(exit_class("  "), "no_stderr");
+        assert_eq!(exit_class("panic: something else"), "other");
+    }
+
     #[test]
     fn usage_adds_cache_once_and_never_fabricates_missing_counts() {
         for (input, cache, output) in [(278, 30214, 4), (2087, 7003, 109), (2789, 5234, 107)] {
