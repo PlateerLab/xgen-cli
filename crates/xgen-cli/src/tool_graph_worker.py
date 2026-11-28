@@ -179,7 +179,23 @@ def enrichment_for_rebuild(artifact):
     record = enrichment_record(artifact)
     if record is None:
         return None
-    return {key: record[key] for key in ("format_version", "languages", "model", "entries")}
+    return {key: record[key] for key in ("format_version", "languages", "model", "entries", "usage")
+            if key in record}
+
+
+def enrichment_usage(value):
+    """Host-measured cost of the model calls that produced a stored enrichment."""
+    def count(item, nullable=False):
+        return (nullable and item is None) or (type(item) is int and 0 <= item < 2 ** 53)
+    keys = {"model_calls", "model_failures", "prompt_tokens", "completion_tokens", "model_elapsed_millis"}
+    if (not isinstance(value, dict) or set(value) != keys or not count(value["model_calls"])
+            or not count(value["model_elapsed_millis"]) or not count(value["prompt_tokens"], True)
+            or not count(value["completion_tokens"], True) or not isinstance(value["model_failures"], dict)
+            or len(value["model_failures"]) > 16
+            or not all(isinstance(code, str) and 1 <= len(code) <= 64 and count(number)
+                       for code, number in value["model_failures"].items())):
+        raise WorkerError("invalid_enrichment_usage")
+    return value
 
 
 def original_description(artifact, name, fallback):
@@ -431,7 +447,8 @@ def summarize(envelope):
             "source_count": artifact["metadata"]["source_count"],
             "execution_enabled": False,
             **({"summary_enrichment": {"languages": record["languages"], "model": record["model"],
-                                       "operations": len(record["entries"])}}
+                                       "operations": len(record["entries"]),
+                                       **({"usage": record["usage"]} if "usage" in record else {})}}
                if (record := enrichment_record(artifact)) else {})}
 
 
@@ -527,7 +544,8 @@ def dispatch(request):
             raise WorkerError("invalid_enrichment_answer")
         entries = [{"source": targets[key]["source"], "method": targets[key]["method"],
                     "path": targets[key]["path"], "texts": texts} for key, texts in sorted(completed.items())]
-        enrichment = {"format_version": 1, "languages": languages, "model": model, "entries": entries}
+        enrichment = {"format_version": 1, "languages": languages, "model": model, "entries": entries,
+                      **({"usage": enrichment_usage(request["usage"])} if "usage" in request else {})}
         stored = store(root, name, build_artifact(inputs, labels, enrichment),
                        replaces=envelope["artifact_digest"])
         return {"ok": True, **summarize(stored), "targets": len(targets), "enriched": len(entries),

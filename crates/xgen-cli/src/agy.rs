@@ -310,28 +310,18 @@ impl Transport {
     }
     fn command(&self) -> Command {
         let mut command = Command::new(&self.executable);
-        command.current_dir(&self.workspace).env_clear();
-        for key in [
-            "PATH",
-            "HOME",
-            "LANG",
-            "LC_ALL",
-            "SYSTEMROOT",
-            "XDG_CONFIG_HOME",
-            "XDG_CACHE_HOME",
-            "XDG_DATA_HOME",
-            "XDG_RUNTIME_DIR",
-            "DBUS_SESSION_BUS_ADDRESS",
-        ] {
-            if let Some(value) = std::env::var_os(key) {
-                command.env(key, value);
-            }
-        }
+        command.current_dir(&self.workspace);
+        isolate_environment(&mut command);
         command.args(["--settings"]).arg(&self.settings);
         command
     }
-    pub fn models(&self) -> Result<Vec<String>, crate::ModelCheckError> {
+    /// `unchanged`, leaving a fixed diagnostic when the pinned layout no longer holds.
+    fn pinned(&self) -> Result<(), ()> {
         self.unchanged()
+            .inspect_err(|()| eprintln!("XGEN_AGY code=pin_changed"))
+    }
+    pub fn models(&self) -> Result<Vec<String>, crate::ModelCheckError> {
+        self.pinned()
             .map_err(|()| crate::ModelCheckError::Configuration)?;
         let mut command = self.command();
         command.arg("models");
@@ -340,7 +330,7 @@ impl Transport {
             PlannerPortFailure::Timeout => crate::ModelCheckError::Timeout,
             _ => crate::ModelCheckError::Unavailable,
         })?;
-        self.unchanged()
+        self.pinned()
             .map_err(|()| crate::ModelCheckError::Configuration)?;
         let text =
             std::str::from_utf8(&output).map_err(|_| crate::ModelCheckError::InvalidResponse)?;
@@ -369,7 +359,7 @@ impl Transport {
         body: &[u8],
         max_response_bytes: usize,
     ) -> Result<Vec<u8>, PlannerPortFailure> {
-        self.unchanged()
+        self.pinned()
             .map_err(|()| PlannerPortFailure::Unavailable)?;
         let request = parse_unique_json(body, 64)?;
         if request["model"].as_str() != Some(self.model.as_str()) {
@@ -403,7 +393,7 @@ impl Transport {
             .arg(format!("{}s", self.timeout.as_secs()))
             .args(["-p", &prompt]);
         let raw = run(command, self.timeout, Some(&self.model))?;
-        self.unchanged()
+        self.pinned()
             .map_err(|()| PlannerPortFailure::Unavailable)?;
         let events = decode_events(&raw)?;
         let finals: Vec<_> = events.iter().filter(|v| v["event"] == "result").collect();
@@ -635,6 +625,33 @@ fn run(
     }
 }
 
+/// Pass only the variables agy needs, and keep it from updating itself.
+///
+/// agy's background updater replaces the running executable, which here is the pinned copy:
+/// the next pin check then fails and every later call in the process is refused. Observed on
+/// the first call after agy's update-check interval (2026-11-28, 2/2 with and 0/2 without
+/// this variable; the value `1` does not disable it).
+fn isolate_environment(command: &mut Command) {
+    command.env_clear();
+    for key in [
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "SYSTEMROOT",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
+    command.env("AGY_CLI_DISABLE_AUTO_UPDATE", "true");
+}
+
 /// Coarse class of an unsuccessful agy exit, from its stderr.
 fn exit_class(errors: &str) -> &'static str {
     let lowered = errors.to_ascii_lowercase();
@@ -680,6 +697,22 @@ fn exit_class(errors: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn agy_runs_without_inherited_variables_or_self_update() {
+        let mut command = Command::new("agy");
+        isolate_environment(&mut command);
+        let envs: Vec<_> = command
+            .get_envs()
+            .filter(|(_, value)| value.is_some())
+            .collect();
+        assert!(
+            envs.iter()
+                .any(|(key, value)| *key == "AGY_CLI_DISABLE_AUTO_UPDATE"
+                    && *value == Some(std::ffi::OsStr::new("true")))
+        );
+        assert!(envs.iter().all(|(key, _)| *key != "XGEN_OPENAI_API_KEY"));
+    }
+
     #[test]
     fn exit_classes_are_fixed_and_never_echo_agy_text() {
         assert_eq!(

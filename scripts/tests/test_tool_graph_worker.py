@@ -106,7 +106,7 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(WORKER.summary_script("获取项目列表"), "Han")
         self.assertIsNone(WORKER.summary_script("123 / {}"))
 
-    def enrich(self, name, languages, answer):
+    def enrich(self, name, languages, answer, usage=None):
         """Run the host's plan -> answer -> store loop with `answer(batch) -> {local key: texts}`."""
         completed = {}
         for _ in range(2):
@@ -118,7 +118,7 @@ class WorkerTests(unittest.TestCase):
             completed = self.call("enrichment_apply", name=name, languages=languages, completed=completed,
                                   answers=answers)["completed"]
         return self.call("enrichment_apply", name=name, languages=languages, completed=completed,
-                         answers=[], store=True, model="fixture-model")
+                         answers=[], store=True, model="fixture-model", **({"usage": usage} if usage else {}))
 
     def test_summary_enrichment_bridges_languages_but_planner_sees_sources(self):
         korean = asset_spec()
@@ -213,7 +213,10 @@ class WorkerTests(unittest.TestCase):
 
     def test_rebuild_keeps_summary_enrichment(self):
         self.install()
-        self.enrich("assets", ["ko"], lambda batch: {key: {"ko": "자산 보기"} for key in batch["keys"]})
+        usage = {"model_calls": 3, "model_failures": {"unavailable": 1}, "prompt_tokens": None,
+                 "completion_tokens": None, "model_elapsed_millis": 4200}
+        self.enrich("assets", ["ko"], lambda batch: {key: {"ko": "자산 보기"} for key in batch["keys"]}, usage)
+        self.assertEqual(self.call("list")["collections"][0]["summary_enrichment"]["usage"], usage)
         before = WORKER.load(self.root, "assets")["artifact"]
         self.rewrite("assets", lambda saved: saved.update(backend_version="0.0.1"))
         self.assertTrue(self.call("rebuild", name="assets")["rebuilt"])
@@ -223,6 +226,20 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(after["metadata"]["xgen_http_sources"], before["metadata"]["xgen_http_sources"])
         found = self.call("search", name="assets", query="자산 보기", top_k=2)["candidates"]
         self.assertEqual(sorted(hit["description"] for hit in found), ["List assets in inventory", "Read asset detail"])
+        self.assertEqual(self.call("list")["collections"][0]["summary_enrichment"]["usage"], usage)
+
+    def test_summary_enrichment_usage_is_validated_and_optional(self):
+        self.install()
+        answer = lambda batch: {key: {"ko": "자산 보기"} for key in batch["keys"]}
+        valid = {"model_calls": 1, "model_failures": {}, "prompt_tokens": 10, "completion_tokens": 2,
+                 "model_elapsed_millis": 5}
+        for broken in ({**valid, "model_calls": -1}, {**valid, "prompt_tokens": "10"},
+                       {**valid, "model_failures": {"": 1}}, {**valid, "extra": 1},
+                       {key: value for key, value in valid.items() if key != "model_elapsed_millis"}):
+            with self.subTest(usage=broken), self.assertRaisesRegex(WORKER.WorkerError, "invalid_enrichment_usage"):
+                self.enrich("assets", ["ko"], answer, broken)
+        # Records stored before usage was kept stay readable and list without it.
+        self.assertNotIn("usage", self.enrich("assets", ["ko"], answer)["summary_enrichment"])
 
     def test_required_producers_and_source_identity(self):
         self.install()
@@ -471,6 +488,10 @@ class CliTests(unittest.TestCase):
             self.assertIn(hit["description"], ["List assets in inventory", "Read asset detail"])
             listed = call("list")["collections"][0]
             self.assertEqual(listed["summary_enrichment"]["operations"], 2)
+            usage = listed["summary_enrichment"]["usage"]
+            self.assertEqual((usage["model_calls"], usage["model_failures"], usage["prompt_tokens"],
+                              usage["completion_tokens"]), (1, {}, 100, 20))
+            self.assertEqual(usage["model_elapsed_millis"], result["model_elapsed_millis"])
 
     def test_agent_loop_with_actual_worker_on_held_out_list_requests(self):
         binary = os.environ["XGEN_TOOL_TEST_BINARY"]

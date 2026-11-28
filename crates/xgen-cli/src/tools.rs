@@ -343,6 +343,7 @@ where
     let mut calls = 0_u64;
     let mut failures = serde_json::Map::new();
     let (mut prompt_tokens, mut completion_tokens) = (Some(0_u64), Some(0_u64));
+    let mut model_time = Duration::ZERO;
     let mut expected_digest = None;
     for round in 0..ENRICHMENT_ROUNDS {
         if round > 0 && !failures.is_empty() {
@@ -375,7 +376,10 @@ where
                 return Err("invalid_worker_response");
             };
             calls += 1;
-            match complete(system, user, &batch["schema"]) {
+            let started = Instant::now();
+            let answer = complete(system, user, &batch["schema"]);
+            model_time += started.elapsed();
+            match answer {
                 Ok((value, prompt, completion)) => {
                     prompt_tokens = prompt_tokens.zip(prompt).map(|(sum, value)| sum + value);
                     completion_tokens = completion_tokens
@@ -400,9 +404,14 @@ where
         }
         completed = collected["completed"].clone();
     }
+    // Stored with the generated texts so `tools list` keeps showing what they cost.
+    let usage = json!({"model_calls": calls, "model_failures": failures,
+                       "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+                       "model_elapsed_millis": u64::try_from(model_time.as_millis()).unwrap_or(u64::MAX)});
     if completed.as_object().is_none_or(serde_json::Map::is_empty) {
-        return Ok(json!({"ok": false, "error": "summary_enrichment_failed",
-                         "model_calls": calls, "model_failures": failures}));
+        let mut failed = json!({"ok": false, "error": "summary_enrichment_failed"});
+        merge(&mut failed, &usage);
+        return Ok(failed);
     }
     let mut store = base;
     store["operation"] = json!("enrichment_apply");
@@ -411,14 +420,18 @@ where
     store["store"] = json!(true);
     store["model"] = json!(model);
     store["expected_digest"] = expected_digest.flatten().unwrap_or(Value::Null);
+    store["usage"] = usage.clone();
     let mut stored = invoke(&store)?;
     if stored.get("ok") == Some(&Value::Bool(true)) {
-        stored["model_calls"] = json!(calls);
-        stored["model_failures"] = json!(failures);
-        stored["prompt_tokens"] = json!(prompt_tokens);
-        stored["completion_tokens"] = json!(completion_tokens);
+        merge(&mut stored, &usage);
     }
     Ok(stored)
+}
+
+fn merge(target: &mut Value, fields: &Value) {
+    if let (Some(target), Some(fields)) = (target.as_object_mut(), fields.as_object()) {
+        target.extend(fields.clone());
+    }
 }
 
 /// A connection whose collection file was deleted by hand would attach its base URL and

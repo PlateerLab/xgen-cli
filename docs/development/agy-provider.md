@@ -49,6 +49,18 @@ SSH 환경변수는 agy 자식에 전달하지 않는다. 부모 SSH 연결은 �
 시작한다. 이전 미완료 Run은 기존 binary/profile 없이는 재개할 수 없다. 완료 Run의 offline replay는 가능하다.
 `model use`로 API 프로필로 돌아갈 수 있다. `model logout`은 agy의 공유 로그인을 삭제하지 않는다.
 
+## 자동 업데이트
+
+agy는 마지막 업데이트 확인 뒤 일정 시간(정확한 값은 모름, 18분 만에 다시 확인한 기록이 있다)이 지난 뒤 처음 실행될 때 백그라운드 업데이트 process를 띄워 실행 중인
+파일을 새 버전으로 바꾼다. xgen이 실행하는 파일은 private 임시 폴더의 고정 사본이라, 사본이 바뀌면 다음 고정값
+검사가 실패해 그 transport의 이후 호출이 모두 `unavailable`이 된다. 업데이트 확인 시각이 새로 기록되므로 바로
+다시 실행하면 성공한다. 2026-11-28 원래 agy 실행에서 사본 hash가 바뀌는 것을 2/2 재현했고, xgen은 agy 실행
+환경에 `AGY_CLI_DISABLE_AUTO_UPDATE=true`를 넣는다(값 `1`은 끄지 못했다). 업데이트 확인이 필요한 상태로 맞춘 뒤
+`tools enrich`를 돌리면 main 빌드는 6/6 호출 실패, 수정 빌드는 공개 명세 3개에서 72/72·69/69·51/51 성공했고 agy
+로그에 업데이트 시작이 없었다. 사용자 설치본(`~/.local/bin/agy` 등)의 업데이트는 직접 하고, 바뀐 hash는 setup으로
+다시 등록한다. 고정값이 바뀌면 stderr에 `XGEN_AGY code=pin_changed`를 남긴다. 이 변수는 모델 요청이나 agy가 받는
+입력을 바꾸지 않으므로 환경 계약 revision(`allowlisted-environment/v1`)과 기존 profile digest는 유지한다.
+
 ## 실험 범위
 
 - agy가 제안하고 xgen이 host 도구를 실행한다. agy의 내부 runtime과 자체 기록은 남는다.
