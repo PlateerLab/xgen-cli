@@ -266,10 +266,10 @@ struct RunArgs {
     /// Stable non-secret planner identity.
     #[arg(long, default_value = "xgeny.cli.openai")]
     planner_id: String,
-    /// Exact relative workspace file the model may read; repeat for more files.
+    /// Exact workspace file the model may read, relative or absolute inside the workspace; repeat for more files.
     #[arg(long = "allow-file")]
     allow_files: Vec<String>,
-    /// Relative workspace directory the model may inspect recursively; use '.' for the root.
+    /// Workspace directory the model may inspect recursively, relative or absolute inside the workspace; use '.' for the root.
     #[arg(long = "allow-dir")]
     allow_dirs: Vec<String>,
     /// Catalog one executable as `LOGICAL_ID=ABSOLUTE_PATH`; repeat for more executables.
@@ -1343,25 +1343,14 @@ fn run_command(args: RunArgs, debug: bool) -> ExitCode {
         None
     };
     let allow_executables = executable_catalog(args.allow_executables, args.allow_path_executables);
-    // The driver refuses this too, but only as the bare shared configuration
-    // code. Say which half is missing, before anything asks for a token.
     if args.allow_execute && allow_executables.is_empty() {
-        let error = PublicRunError::Configuration;
-        eprintln!("XGEN_ERROR code={}", error.code());
-        eprintln!("  configuration=executable_catalog");
-        let recovery = if args.allow_path_executables {
-            "--allow-execute approves executions from a catalog, and PATH \
-             discovery found no known developer executable. Catalog one with \
-             --allow-executable ID=ABSOLUTE_PATH."
-        } else {
-            "--allow-execute approves executions from a catalog, and none was \
-             supplied. Catalog one with --allow-executable ID=ABSOLUTE_PATH, \
-             or add --allow-path-executables for the developer executables \
-             found on PATH."
-        };
-        eprintln!("  recovery={recovery}");
-        return ExitCode::from(error.exit_code());
+        return present_missing_executable_catalog(args.allow_path_executables);
     }
+    let (allow_files, allow_dirs) =
+        match normalize_allow_path_args(&args.workspace, args.allow_files, args.allow_dirs) {
+            Ok(paths) => paths,
+            Err(error) => return present_allow_path_error(&error),
+        };
     let resolved = match resolve_model(
         args.base_url,
         args.model,
@@ -1383,8 +1372,8 @@ fn run_command(args: RunArgs, debug: bool) -> ExitCode {
         credential: resolved.credential,
         inference_limits: resolved.inference_limits,
         request_options: resolved.request_options,
-        allow_files: args.allow_files,
-        allow_dirs: args.allow_dirs,
+        allow_files,
+        allow_dirs,
         allow_executables,
         allow_remote_model_egress: args.allow_remote_model_egress,
         allow_read: args.allow_read,
@@ -1429,6 +1418,14 @@ fn resume_command(args: ResumeArgs, debug: bool) -> ExitCode {
         allow_execute,
         max_ticks,
     } = args;
+    let (allow_files, allow_dirs) = match normalize_allow_path_args(
+        workspace.as_deref().unwrap_or_else(|| Path::new(".")),
+        allow_files,
+        allow_dirs,
+    ) {
+        Ok(paths) => paths,
+        Err(error) => return present_allow_path_error(&error),
+    };
     let request = LocalResumeRequest {
         run_id,
         workspace,
@@ -2753,6 +2750,113 @@ fn print_committed_changes(run_id: &str) {
     }
 }
 
+/// The driver refuses `--allow-execute` without a catalog too, but only as the bare
+/// shared configuration code. Say which half is missing, before anything asks for a token.
+fn present_missing_executable_catalog(allow_path_executables: bool) -> ExitCode {
+    let error = PublicRunError::Configuration;
+    eprintln!("XGEN_ERROR code={}", error.code());
+    eprintln!("  configuration=executable_catalog");
+    let recovery = if allow_path_executables {
+        "--allow-execute approves executions from a catalog, and PATH \
+         discovery found no known developer executable. Catalog one with \
+         --allow-executable ID=ABSOLUTE_PATH."
+    } else {
+        "--allow-execute approves executions from a catalog, and none was \
+         supplied. Catalog one with --allow-executable ID=ABSOLUTE_PATH, \
+         or add --allow-path-executables for the developer executables \
+         found on PATH."
+    };
+    eprintln!("  recovery={recovery}");
+    ExitCode::from(error.exit_code())
+}
+
+/// One `--allow-file`/`--allow-dir` entry that cannot be expressed relative to the workspace.
+#[derive(Debug, PartialEq, Eq)]
+enum AllowPathError {
+    /// An absolute entry that resolves outside the workspace root.
+    OutsideWorkspace(String),
+    /// An absolute entry (or the workspace itself) that does not resolve, or has no UTF-8
+    /// relative spelling.
+    Unresolvable(String),
+}
+
+/// Rewrite absolute entries inside the workspace as the workspace-relative spelling the
+/// read catalog accepts, so `--allow-dir "$PWD/src"` means `--allow-dir src`.
+///
+/// Relative entries pass through unchanged; the catalog still validates them. The
+/// rewrite happens before the catalog digest exists, so a Run and its resume agree
+/// whichever spelling each used.
+fn normalize_allow_path_args(
+    workspace: &Path,
+    allow_files: Vec<String>,
+    allow_dirs: Vec<String>,
+) -> Result<(Vec<String>, Vec<String>), AllowPathError> {
+    if !allow_files
+        .iter()
+        .chain(&allow_dirs)
+        .any(|entry| Path::new(entry).is_absolute())
+    {
+        return Ok((allow_files, allow_dirs));
+    }
+    let root = std::fs::canonicalize(workspace)
+        .map_err(|_| AllowPathError::Unresolvable(workspace.display().to_string()))?;
+    let normalize = |entries: Vec<String>| {
+        entries
+            .into_iter()
+            .map(|entry| workspace_relative_entry(&root, entry))
+            .collect::<Result<Vec<_>, _>>()
+    };
+    Ok((normalize(allow_files)?, normalize(allow_dirs)?))
+}
+
+fn workspace_relative_entry(root: &Path, entry: String) -> Result<String, AllowPathError> {
+    if !Path::new(&entry).is_absolute() {
+        return Ok(entry);
+    }
+    let Ok(physical) = std::fs::canonicalize(&entry) else {
+        return Err(AllowPathError::Unresolvable(entry));
+    };
+    let Ok(relative) = physical.strip_prefix(root) else {
+        return Err(AllowPathError::OutsideWorkspace(entry));
+    };
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        match component.as_os_str().to_str() {
+            Some(part) => parts.push(part),
+            None => return Err(AllowPathError::Unresolvable(entry)),
+        }
+    }
+    Ok(if parts.is_empty() {
+        ".".to_owned()
+    } else {
+        parts.join("/")
+    })
+}
+
+fn present_allow_path_error(error: &AllowPathError) -> ExitCode {
+    let code = PublicRunError::Configuration;
+    let (configuration, entry, recovery) = match error {
+        AllowPathError::OutsideWorkspace(entry) => (
+            "allow_path_outside_workspace",
+            entry,
+            "--allow-file and --allow-dir name paths inside --workspace (default: the \
+             current directory). Run from the directory that contains this path, or pass \
+             that directory as --workspace.",
+        ),
+        AllowPathError::Unresolvable(entry) => (
+            "allow_path_unresolvable",
+            entry,
+            "An absolute --allow-file or --allow-dir path must exist inside --workspace. \
+             Check the path, or give it relative to the workspace, such as '.' or 'src'.",
+        ),
+    };
+    eprintln!("XGEN_ERROR code={}", code.code());
+    eprintln!("  configuration={configuration}");
+    eprintln!("  path={}", entry.escape_debug());
+    eprintln!("  recovery={recovery}");
+    ExitCode::from(code.exit_code())
+}
+
 fn present(result: Result<LocalCommandResult, PublicRunError>) -> ExitCode {
     match result {
         Ok(LocalCommandResult::Responded { run_id, summary }) => {
@@ -2965,5 +3069,70 @@ mod onboarding_tests {
         assert!(session_credential(endpoint).is_none());
         assert!(session_credential("https://second.example/v1").is_some());
         SESSION_CREDENTIAL.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+#[cfg(test)]
+mod allow_path_argument_tests {
+    use super::*;
+
+    fn text(path: &Path) -> String {
+        path.to_str().expect("UTF-8 temp path").to_owned()
+    }
+
+    #[test]
+    fn relative_entries_pass_through_untouched() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let result = normalize_allow_path_args(
+            workspace.path(),
+            vec!["src/lib.rs".to_owned()],
+            vec![".".to_owned(), "missing".to_owned()],
+        );
+        assert_eq!(
+            result,
+            Ok((
+                vec!["src/lib.rs".to_owned()],
+                vec![".".to_owned(), "missing".to_owned()]
+            ))
+        );
+    }
+
+    #[test]
+    fn absolute_entries_inside_the_workspace_become_relative() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        std::fs::create_dir_all(workspace.path().join("src/nested")).expect("dirs");
+        std::fs::write(workspace.path().join("src/nested/a.txt"), "a").expect("file");
+        let result = normalize_allow_path_args(
+            workspace.path(),
+            vec![text(&workspace.path().join("src/nested/a.txt"))],
+            vec![
+                text(workspace.path()),
+                text(&workspace.path().join("src")),
+                "docs".to_owned(),
+            ],
+        );
+        assert_eq!(
+            result,
+            Ok((
+                vec!["src/nested/a.txt".to_owned()],
+                vec![".".to_owned(), "src".to_owned(), "docs".to_owned()]
+            ))
+        );
+    }
+
+    #[test]
+    fn absolute_entries_outside_or_missing_are_named() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let outside = tempfile::tempdir().expect("outside");
+        let outside_entry = text(outside.path());
+        assert_eq!(
+            normalize_allow_path_args(workspace.path(), Vec::new(), vec![outside_entry.clone()]),
+            Err(AllowPathError::OutsideWorkspace(outside_entry))
+        );
+        let missing = text(&workspace.path().join("not-there"));
+        assert_eq!(
+            normalize_allow_path_args(workspace.path(), vec![missing.clone()], Vec::new()),
+            Err(AllowPathError::Unresolvable(missing))
+        );
     }
 }

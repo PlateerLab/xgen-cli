@@ -353,6 +353,10 @@ xgen run \
 허용하려면 `--allow-dir src --allow-dir tests`처럼 반복하고,
 directory 밖의 exact file만 `--allow-file Cargo.toml`로 추가한다. 미완료 재개에는 원래와 동일한
 `--allow-dir`/`--allow-file` 집합을 다시 제공해야 한다.
+경로는 workspace 기준 상대 경로가 기본이다. workspace 안의 절대 경로(`--allow-dir "$PWD/src"`)도
+받아 같은 상대 경로로 바꾸므로, 원래 Run과 재개가 서로 다른 표기를 써도 같은 집합이다. workspace 밖이거나
+존재하지 않는 절대 경로는 `configuration=allow_path_outside_workspace` 또는 `allow_path_unresolvable`과
+고치는 법을 출력하고 모델 호출 전에 멈춘다.
 
 Workspace mode에서는 test/build용 executable도 absolute path로 명시할 수 있다. 경로를 model에 보내지는 않으며
 logical ID만 planning constraint에 노출한다.
