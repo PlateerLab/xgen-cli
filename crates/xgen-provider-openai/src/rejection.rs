@@ -103,7 +103,7 @@ struct Fields {
 
 /// Find the error object across the common shapes: an `error` object (OpenAI-compatible APIs and
 /// Anthropic), a one-element list wrapping it (Google), a plain `error` string (Ollama) and a
-/// top-level `message` (vLLM), plus a FastAPI `detail` (Mistral and many self-hosted servers).
+/// top-level `message` (vLLM), plus a `FastAPI` `detail` (Mistral and many self-hosted servers).
 fn error_object(value: &Value) -> Option<Fields> {
     let value = match value {
         Value::Array(items) => items.first()?,
