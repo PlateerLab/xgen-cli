@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use xgen_cli::{
     CommittedChange, DriverProgress, DriverProgressControl, LocalCommandResult, PauseReason,
-    RejectionReason, StepActivity, edit_lines,
+    RejectionReason, StepActivity, edit_lines, provider_rejection_hint,
 };
 use xgen_runtime::AgentLoopQuiescence;
 
@@ -889,7 +889,11 @@ fn handle_result<R: BufRead, W: ReplOutput, H: ReplHost>(
                 tally.committed_steps = tally.committed_steps.saturating_add(leg.committed_steps);
                 tally.elapsed = tally.elapsed.saturating_add(leg.elapsed);
             }
-            Ok(LocalCommandResult::Rejected { run_id, reason }) => {
+            Ok(LocalCommandResult::Rejected {
+                run_id,
+                reason,
+                provider,
+            }) => {
                 cancellation.clear();
                 let model_rejected = matches!(reason, RejectionReason::ModelRejected(_));
                 *active_run = model_rejected.then(|| run_id.clone());
@@ -901,6 +905,12 @@ fn handle_result<R: BufRead, W: ReplOutput, H: ReplHost>(
                 writeln!(output, "rejected: run_id={run_id} reason={}", reason.code())?;
                 if let Some(code) = reason.failure_code() {
                     writeln!(output, "A step failed: {code}.")?;
+                }
+                if let Some(rejection) = &provider {
+                    write!(output, "Provider said: ")?;
+                    write_terminal_text(output, &rejection.to_string())?;
+                    writeln!(output)?;
+                    writeln!(output, "{}", provider_rejection_hint(rejection))?;
                 }
                 if model_rejected {
                     writeln!(
@@ -2159,6 +2169,7 @@ mod tests {
                 LocalCommandResult::Rejected {
                     run_id: "run-rejected".to_owned(),
                     reason: RejectionReason::ModelRejected(reason),
+                    provider: None,
                 },
                 LocalCommandResult::Completed {
                     run_id: "run-rejected".to_owned(),
@@ -2194,6 +2205,7 @@ mod tests {
                 reason: RejectionReason::ModelRejected(
                     xgen_workgraph::ModelCallRejectionReason::PlannerInvalidResponse,
                 ),
+                provider: None,
             },
             LocalCommandResult::Responded {
                 run_id: "run-new".to_owned(),
@@ -2207,6 +2219,43 @@ mod tests {
         run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
         assert!(host.resumes.is_empty());
         assert_eq!(host.starts[1].0, "fresh request");
+    }
+
+    #[test]
+    fn provider_refusal_shows_what_the_provider_said_and_a_matching_hint() {
+        for (status, body, expected, hint) in [
+            (
+                401,
+                r#"{"error":{"message":"Authentication Fails (no such key)","type":"authentication_error"}}"#,
+                "Provider said: HTTP 401 authentication_error: Authentication Fails (no such key)",
+                "refused the API key",
+            ),
+            (
+                400,
+                r#"{"error":{"message":"Unsupported parameter: 'reasoning_effort'","type":"invalid_request_error","code":"unsupported_parameter"}}"#,
+                "Provider said: HTTP 400 invalid_request_error/unsupported_parameter: Unsupported parameter: 'reasoning_effort'",
+                "xgen model check --compatibility",
+            ),
+        ] {
+            let mut host = FakeHost::new([LocalCommandResult::Rejected {
+                run_id: "run-refused".to_owned(),
+                reason: RejectionReason::ModelRejected(
+                    xgen_workgraph::ModelCallRejectionReason::ProviderRejected,
+                ),
+                provider: Some(xgen_cli::ProviderRejection::from_response(
+                    status,
+                    body.as_bytes(),
+                    None,
+                )),
+            }]);
+            let mut input = io::Cursor::new(b"/permissions model allow\nrequest\n/exit\n");
+            let mut output = Vec::new();
+            run(&mut input, &mut output, &mut host, &Cancellation::default()).unwrap();
+            let output = String::from_utf8(output).unwrap();
+            assert!(output.contains(expected), "{output}");
+            assert!(output.contains(hint), "{output}");
+            assert!(output.contains("Continue this Run: /resume run-refused"));
+        }
     }
 
     struct FakeHost {

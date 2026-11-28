@@ -523,13 +523,14 @@ profile 저장소를 격리하려면 `XGEN_CONFIG_HOME`을 따로 설정한다. 
 | `provider_output_truncated` | Probe나 planner 응답이 출력 token 예산에서 잘렸다. Reasoning을 많이 쓰는 model은 최종 JSON 전에 예산을 소진할 수 있으므로 model의 thinking 설정이나 profile의 출력 예산을 조정한다. Rate limit이 아니므로 재시도로 해결되지 않는다. |
 | `proposal_rejected.*` | 뒤의 class가 Core가 제안을 거부한 이유다. `capability_unavailable`/`capability_unsupported`는 허용하지 않은 capability 선택, `invocation_invalid`는 scope 밖 인자나 스키마 위반, `tool_call_budget_exhausted`는 예산 소진, `repeated_finished_action`은 방금 끝난 읽기를 같은 인자로 다시 제안한 경우다. 예산 소진이 아닌 거절은 연속 2번까지 자동으로 다시 묻고 세 번째에 멈추며, 다시 물을 때 거절 이유를 함께 준다. `repeated_finished_action`만은 따로 연속 8번까지 다시 묻는다([ADR-0061](adr/0061-rejected-response-retry.md), [ADR-0064](adr/0064-planning-feedback.md), [ADR-0067](adr/0067-step-arguments-and-repeat-limit.md)). Class는 Core 판정이며 model 출력 원문이 아니다. |
 | `model_rejected.*` | 뒤의 class는 journal의 model call settlement와 같은 값이다. `planner_invalid_response`는 provider가 strict JSON Schema를 지키지 않은 응답(문법 미지원·미적용), `provider_limit`은 출력 예산·요청 크기 초과, `provider_rejected`는 4xx 거부다. `planner_invalid_response`와 출력이 잘린 응답은 연속 2번까지 자동으로 다시 묻는다(ADR-0061, ADR-0073). Class는 Core 판정이며 model 출력 원문이 아니다. |
+| `provider:` / `Provider said:` 줄 | Provider가 4xx로 거절하며 보낸 이유를 정리한 요약이다. Key·긴 token은 지워지고 300자에서 잘린다. 401/403은 key, 404는 model ID, 429는 한도 문제다. xAI·Google처럼 잘못된 key에 400을 주는 provider도 있으니 메시지를 먼저 읽는다. 화면 전용이라 journal에 남지 않고 resume 뒤에는 다시 보이지 않는다([ADR-0093](adr/0093-provider-rejection-display.md)). |
 | `configuration_mismatch` | 원래 workspace, file/directory scope, executable와 model profile binding(inference timeout·출력 예산 포함)으로 resume한다. 자동 대체하지 말고 필요하면 새 Run을 시작한다. |
 | `model_call_unknown.timeout`이 planner 호출마다 반복 | 프로필의 inference timeout이 model·hardware에 비해 짧다. 로컬 27B는 호출당 60초 안팎이 걸리므로 `--inference-timeout`을 올린다. |
 | `model_call_unknown.transport_unavailable` / `.interrupted` | 요청이 전송됐을 수 있으나 결과를 못 받았다(연결 끊김) 또는 process가 응답 전에 끝났다. 자동 replay하지 않으므로 endpoint 상태를 확인한 뒤 `resume`한다. |
 | `model_call_unknown.*` 또는 `effect_outcome_unknown` | 불확정 작업을 자동 반복하지 않는다. `/status`와 `/resume`의 고정 진단을 확인하고 외부 상태를 별도로 검증한다. |
 
 지원 요청에는 `xgen --version`, OS/architecture, 설치 채널, 종료 코드와 고정된 오류 코드만 우선 제공한다.
-API key, endpoint 전체 URL, prompt, model 원문 응답, source, process stdout/stderr, state DB와 Run ID는 공개
+API key, endpoint 전체 URL, prompt, model 원문 응답, 검토하지 않은 `provider:` 줄, source, process stdout/stderr, state DB와 Run ID는 공개
 issue에 첨부하지 않는다. 일반 버그는
 [GitHub Issues](https://github.com/PlateerLab/xgen-cli/issues), 보안 취약점은 공개 issue가 아닌
 [비공개 취약점 신고](https://github.com/PlateerLab/xgen-cli/security/advisories/new)를 사용한다. 재현용

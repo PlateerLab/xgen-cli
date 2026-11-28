@@ -2,6 +2,7 @@ use std::env;
 use std::fmt;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -41,7 +42,7 @@ use xgen_policy::{
 use xgen_provider_openai::{
     BearerCredential, EvaluationProposalStepLimit, OpenAiCompatibilityCheckFailure,
     OpenAiCompatibilityChecker, OpenAiJsonTask, OpenAiModelCheckFailure, OpenAiModelChecker,
-    OpenAiPlanner, OpenAiPlannerConfig, OpenAiPlannerConfigError,
+    OpenAiPlanner, OpenAiPlannerConfig, OpenAiPlannerConfigError, ProviderRejection,
 };
 use xgen_runtime::{
     AgentLoop, AgentLoopQuiescence, AgentLoopTick, CapabilityRegistry, DirectExecutor,
@@ -378,6 +379,9 @@ pub enum LocalCommandResult {
     Rejected {
         run_id: String,
         reason: RejectionReason,
+        /// The provider's own explanation when it refused the model call with a 4xx. Display
+        /// only: it is not journaled, so a later inspection of the Run cannot show it.
+        provider: Option<ProviderRejection>,
     },
     RecoveryRequired {
         run_id: String,
@@ -415,10 +419,13 @@ pub fn check_openai_model(request: ModelCheckRequest) -> Result<(), ModelCheckEr
     let config = OpenAiPlannerConfig::new(&base_url, DEFAULT_PLANNER_ID, &model, &tokenizer)
         .and_then(|config| config.with_timeout(MODEL_CHECK_TIMEOUT))
         .map_err(map_model_check_config)?;
-    OpenAiModelChecker::new(config, credential)
-        .map_err(map_model_check_config)?
-        .check()
-        .map_err(map_model_check_failure)
+    let mut checker =
+        OpenAiModelChecker::new(config, credential).map_err(map_model_check_config)?;
+    clear_model_check_rejection();
+    checker.check().map_err(|error| {
+        remember_model_check_rejection(checker.take_provider_rejection());
+        map_model_check_failure(error)
+    })
 }
 
 /// Return the bounded deterministic model catalog without creating Run state.
@@ -453,10 +460,13 @@ pub fn list_openai_models(request: ModelCheckRequest) -> Result<Vec<String>, Mod
     let config = OpenAiPlannerConfig::new(&base_url, DEFAULT_PLANNER_ID, &model, &tokenizer)
         .and_then(|config| config.with_timeout(MODEL_CHECK_TIMEOUT))
         .map_err(map_model_check_config)?;
-    OpenAiModelChecker::new(config, credential)
-        .map_err(map_model_check_config)?
-        .models()
-        .map_err(map_model_check_failure)
+    let mut checker =
+        OpenAiModelChecker::new(config, credential).map_err(map_model_check_config)?;
+    clear_model_check_rejection();
+    checker.models().map_err(|error| {
+        remember_model_check_rejection(checker.take_provider_rejection());
+        map_model_check_failure(error)
+    })
 }
 
 /// Send one explicit, host-validated Chat Completions compatibility probe without Run state.
@@ -506,10 +516,48 @@ pub fn check_openai_compatibility(request: ModelCheckRequest) -> Result<(), Mode
         inference_limits,
         request_options,
     )?;
-    OpenAiCompatibilityChecker::new(config, credential)
-        .map_err(map_model_check_config)?
-        .check()
-        .map_err(map_compatibility_check_failure)
+    let mut checker =
+        OpenAiCompatibilityChecker::new(config, credential).map_err(map_model_check_config)?;
+    clear_model_check_rejection();
+    checker.check().map_err(|error| {
+        let rejection = checker.take_provider_rejection();
+        // The probe's failure class cannot tell a refused key from a refused request.
+        let error = if rejection
+            .as_ref()
+            .is_some_and(ProviderRejection::is_authentication)
+        {
+            ModelCheckError::AuthenticationRejected
+        } else {
+            map_compatibility_check_failure(error)
+        };
+        remember_model_check_rejection(rejection);
+        error
+    })
+}
+
+/// The provider's explanation of the last failed model check in this process, for display.
+///
+/// Model checks return a stable `Copy` class; the bounded text travels beside it instead of
+/// widening every caller's error type. A command runs one check sequence at a time.
+static MODEL_CHECK_REJECTION: Mutex<Option<ProviderRejection>> = Mutex::new(None);
+
+fn clear_model_check_rejection() {
+    remember_model_check_rejection(None);
+}
+
+fn remember_model_check_rejection(rejection: Option<ProviderRejection>) {
+    if let Ok(mut slot) = MODEL_CHECK_REJECTION.lock() {
+        *slot = rejection;
+    }
+}
+
+/// Take what the provider said when the last model check failed with a 4xx, if anything.
+#[must_use]
+pub fn take_model_check_rejection() -> Option<ProviderRejection> {
+    MODEL_CHECK_REJECTION
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.take())
 }
 
 /// Build a host JSON task client for the selected model profile, outside any Run.
@@ -1761,8 +1809,15 @@ fn continue_incomplete(
     let command_process = process.map(ProcessTooling::with_fresh_terminal_sessions);
     let process = command_process.as_ref();
     let model_egress_allowed = planner.is_some();
+    let provider_rejection = Arc::new(Mutex::new(None));
     let mut planner = if let Some(planner) = planner {
         let usage_path = material_catalog_path.with_file_name("usage.sqlite3");
+        let slot = Arc::clone(&provider_rejection);
+        let planner = planner.with_rejection_observer(move |rejection| {
+            if let Ok(mut slot) = slot.lock() {
+                *slot = Some(rejection);
+            }
+        });
         let planner = if let Ok(mut usage_store) = crate::usage::UsageStore::open(&usage_path) {
             planner.with_usage_observer(move |observation| {
                 if usage_store.record(&observation).is_err() {
@@ -2033,7 +2088,54 @@ fn continue_incomplete(
         return classify_durable_boundary_after_driver_error(store, manifest);
     };
     let result = map_driver_outcome(manifest.run_id(), outcome)?;
+    let result = with_provider_rejection(result, &provider_rejection);
     Ok(with_blocking_failure_code(result, store))
+}
+
+/// Recovery hint matched to a provider refusal. The class alone cannot tell a bad key from an
+/// unknown model, so this reads the HTTP status the provider answered with.
+#[must_use]
+pub const fn provider_rejection_hint(rejection: &ProviderRejection) -> &'static str {
+    match rejection.status() {
+        401 | 403 => {
+            "The provider refused the API key. Run xgen model setup --name PROFILE to enter a new key locally (xgen model list shows profile names); never paste keys into chat."
+        }
+        404 => {
+            "Check that the profile names an exact model ID the endpoint advertises: xgen model check --profile PROFILE."
+        }
+        429 => {
+            "Wait for the provider's rate limit or check quota and billing, then continue the Run."
+        }
+        _ => {
+            "Follow the provider's message above. If it names a parameter or format, check the profile's request options with xgen model setup --help, then run xgen model check --compatibility."
+        }
+    }
+}
+
+/// Attach what the provider said when a model call ended the Run with a provider-side refusal.
+fn with_provider_rejection(
+    result: LocalCommandResult,
+    slot: &Arc<Mutex<Option<ProviderRejection>>>,
+) -> LocalCommandResult {
+    let rejection = slot.lock().ok().and_then(|mut slot| slot.take());
+    match result {
+        LocalCommandResult::Rejected {
+            run_id,
+            reason:
+                reason @ RejectionReason::ModelRejected(
+                    ModelCallRejectionReason::ProviderRejected
+                    | ModelCallRejectionReason::RequestTooLarge
+                    | ModelCallRejectionReason::RateLimited
+                    | ModelCallRejectionReason::ProviderLimit,
+                ),
+            provider: None,
+        } => LocalCommandResult::Rejected {
+            run_id,
+            reason,
+            provider: rejection,
+        },
+        other => other,
+    }
 }
 
 /// Attach the failure label of the Step that stopped the Run. Settled failures never stop a Run
@@ -2045,6 +2147,7 @@ fn with_blocking_failure_code(
     let LocalCommandResult::Rejected {
         run_id,
         reason: RejectionReason::FailedWork(None),
+        provider,
     } = result
     else {
         return result;
@@ -2059,6 +2162,7 @@ fn with_blocking_failure_code(
     LocalCommandResult::Rejected {
         run_id,
         reason: RejectionReason::FailedWork(code),
+        provider,
     }
 }
 
@@ -2632,6 +2736,7 @@ fn map_planner_unavailable(run_id: String, failure: PlannerPortFailure) -> Local
     LocalCommandResult::Rejected {
         run_id,
         reason: RejectionReason::ModelRejected(reason),
+        provider: None,
     }
 }
 
@@ -2690,6 +2795,7 @@ fn map_driver_outcome(
             AgentLoopQuiescence::FailedSteps => LocalCommandResult::Rejected {
                 run_id,
                 reason: RejectionReason::FailedWork(None),
+                provider: None,
             },
             AgentLoopQuiescence::ManualIntervention => LocalCommandResult::RecoveryRequired {
                 run_id,
@@ -2703,18 +2809,22 @@ fn map_driver_outcome(
         DriverOutcome::ApprovalDenied { .. } => LocalCommandResult::Rejected {
             run_id,
             reason: RejectionReason::ApprovalDenied,
+            provider: None,
         },
         DriverOutcome::AdmissionNotAuthorized { .. } => LocalCommandResult::Rejected {
             run_id,
             reason: RejectionReason::AdmissionRejected,
+            provider: None,
         },
         DriverOutcome::ProposalRejected(rejection) => LocalCommandResult::Rejected {
             run_id,
             reason: RejectionReason::ProposalRejected(rejection),
+            provider: None,
         },
         DriverOutcome::MaterializerUnavailable(_) => LocalCommandResult::Rejected {
             run_id,
             reason: RejectionReason::MaterialRejected,
+            provider: None,
         },
         DriverOutcome::PlannerUnavailable(failure) => map_planner_unavailable(run_id, failure),
         DriverOutcome::ModelCallRecoveryRequired { reason, .. } => {
@@ -2726,6 +2836,7 @@ fn map_driver_outcome(
         DriverOutcome::ModelCallRejected(reason) => LocalCommandResult::Rejected {
             run_id,
             reason: RejectionReason::ModelRejected(reason),
+            provider: None,
         },
         DriverOutcome::ModelEgressRequired => LocalCommandResult::Paused {
             run_id: Some(run_id),
@@ -3961,6 +4072,50 @@ mod tests {
     }
 
     #[test]
+    fn provider_explanation_attaches_only_to_provider_side_refusals() {
+        let refusal = || {
+            ProviderRejection::from_response(
+                401,
+                br#"{"error":{"message":"bad key","type":"authentication_error"}}"#,
+                None,
+            )
+        };
+        let rejected = |reason| LocalCommandResult::Rejected {
+            run_id: "run".to_owned(),
+            reason,
+            provider: None,
+        };
+        let slot = Arc::new(Mutex::new(Some(refusal())));
+        let result = with_provider_rejection(
+            rejected(RejectionReason::ModelRejected(
+                ModelCallRejectionReason::ProviderRejected,
+            )),
+            &slot,
+        );
+        assert_eq!(
+            result,
+            LocalCommandResult::Rejected {
+                run_id: "run".to_owned(),
+                reason: RejectionReason::ModelRejected(ModelCallRejectionReason::ProviderRejected),
+                provider: Some(refusal()),
+            }
+        );
+        assert!(slot.lock().unwrap().is_none());
+
+        // A schema failure is the model's answer, not a provider refusal; a stale note is dropped.
+        let slot = Arc::new(Mutex::new(Some(refusal())));
+        let invalid = rejected(RejectionReason::ModelRejected(
+            ModelCallRejectionReason::PlannerInvalidResponse,
+        ));
+        assert_eq!(with_provider_rejection(invalid.clone(), &slot), invalid);
+        assert!(slot.lock().unwrap().is_none());
+        assert_eq!(
+            provider_rejection_hint(&refusal()),
+            "The provider refused the API key. Run xgen model setup --name PROFILE to enter a new key locally (xgen model list shows profile names); never paste keys into chat."
+        );
+    }
+
+    #[test]
     fn http_profile_pins_override_references_and_keeps_default_binding() {
         let root = tempdir().unwrap();
         let workspace =
@@ -4291,6 +4446,7 @@ mod tests {
                 reason: RejectionReason::ModelRejected(
                     ModelCallRejectionReason::PlannerInvalidResponse
                 ),
+                provider: None,
             }
         );
         // Un-journaled planner port failures map onto the same durable class names.
@@ -4303,6 +4459,7 @@ mod tests {
             LocalCommandResult::Rejected {
                 run_id: "run-model-rejection".to_owned(),
                 reason: RejectionReason::ModelRejected(ModelCallRejectionReason::ProviderRejected),
+                provider: None,
             }
         );
         for (reason, code) in [
@@ -4346,6 +4503,7 @@ mod tests {
             LocalCommandResult::Rejected {
                 run_id: "run-proposal-rejection".to_owned(),
                 reason: RejectionReason::ProposalRejected(ProposalRejection::InvocationInvalid),
+                provider: None,
             }
         );
         assert_eq!(

@@ -13,8 +13,8 @@ use xgen_local_store::{
 };
 use xgen_policy::{ResourceResolutionFailure, ResourceResolver};
 use xgen_provider_openai::{
-    EvaluationProposalStepLimit, ModelCallOutcome, OpenAiPlanner, OpenAiPlannerConfig,
-    ResponseFormat, ThinkingMode,
+    EvaluationProposalStepLimit, ModelCallOutcome, OpenAiModelCheckFailure, OpenAiModelChecker,
+    OpenAiPlanner, OpenAiPlannerConfig, ResponseFormat, ThinkingMode,
 };
 use xgen_runtime::{
     AgentLoop, AgentLoopTick, CapabilityRegistry, EventFactory, EventFactoryError, EventMetadata,
@@ -141,7 +141,8 @@ fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
                             .expect("content length is numeric")
                     })
                 })
-                .expect("content length should exist");
+                // A bodiless GET (the model catalog) carries no length.
+                .unwrap_or(0);
             let target = header_end + 4 + content_length;
             while request.len() < target {
                 let read = stream.read(&mut chunk).expect("body should read");
@@ -1114,7 +1115,9 @@ fn receipt_completed_tool_output_is_sent_once_and_exactly_in_the_http_context() 
 fn deterministic_provider_rejection_is_closed_without_raw_error_body() {
     let body = serde_json::to_vec(&json!({"error": RAW_RESPONSE_SENTINEL})).unwrap();
     let server = TestServer::spawn("400 Bad Request", body);
-    let mut planner = planner(&server.base_url);
+    let (sender, rejections) = mpsc::channel();
+    let mut planner = planner(&server.base_url)
+        .with_rejection_observer(move |rejection| sender.send(rejection).unwrap());
     let mut store = seed_store();
     let loop_runtime = configured_loop(&mut store, &mut planner);
     let mut events = DeterministicEvents;
@@ -1161,6 +1164,39 @@ fn deterministic_provider_rejection_is_closed_without_raw_error_body() {
         serde_json::to_string(&snapshot.state).unwrap()
     );
     assert!(!durable.contains(RAW_RESPONSE_SENTINEL));
+    // The explanation reaches the display observer only, never the journal (ADR-0093).
+    let rejection = rejections.try_recv().expect("rejection should be observed");
+    assert_eq!(rejection.status(), 400);
+    assert_eq!(rejection.message(), Some(RAW_RESPONSE_SENTINEL));
+    assert!(rejections.try_recv().is_err());
+}
+
+#[test]
+fn model_catalog_refusal_keeps_the_provider_explanation_for_display() {
+    let body = serde_json::to_vec(&json!({"error": {
+        "message": "Incorrect API key provided.",
+        "type": "invalid_request_error",
+        "code": "invalid_api_key",
+    }}))
+    .unwrap();
+    let server = TestServer::spawn("401 Unauthorized", body);
+    let config = OpenAiPlannerConfig::new(&server.base_url, "xgeny.test.catalog", "m", "m")
+        .expect("config should validate");
+    let mut checker = OpenAiModelChecker::new(config, None).expect("checker should build");
+    assert_eq!(
+        checker.check(),
+        Err(OpenAiModelCheckFailure::AuthenticationRejected)
+    );
+    server.finish();
+    let rejection = checker
+        .take_provider_rejection()
+        .expect("explanation should be kept");
+    assert!(rejection.is_authentication());
+    assert_eq!(
+        rejection.to_string(),
+        "HTTP 401 invalid_request_error/invalid_api_key: Incorrect API key provided."
+    );
+    assert!(checker.take_provider_rejection().is_none());
 }
 
 /// A provider that accepts the request and then stalls longer than the planner budget.

@@ -24,6 +24,8 @@ use xgen_runtime::{
 mod completion;
 pub use completion::{CompletionCheck, CompletionContract, parse_completion_contract};
 
+mod rejection;
+pub use rejection::ProviderRejection;
 mod usage;
 pub use usage::{ModelCallObservation, ModelCallOutcome, TokenUsage};
 
@@ -809,6 +811,7 @@ pub struct OpenAiPlanner {
     credential: Option<BearerCredential>,
     transport: Box<dyn Transport + Send>,
     usage_observer: Option<Box<dyn FnMut(ModelCallObservation) + Send>>,
+    rejection_observer: Option<Box<dyn FnMut(ProviderRejection) + Send>>,
 }
 
 impl OpenAiPlanner {
@@ -830,6 +833,7 @@ impl OpenAiPlanner {
             credential,
             transport: Box::new(transport),
             usage_observer: None,
+            rejection_observer: None,
         })
     }
 
@@ -847,6 +851,7 @@ impl OpenAiPlanner {
             credential,
             transport: Box::new(transport),
             usage_observer: None,
+            rejection_observer: None,
         }
     }
 
@@ -862,6 +867,7 @@ impl OpenAiPlanner {
             credential: None,
             transport: Box::new(ExternalTransport(send)),
             usage_observer: None,
+            rejection_observer: None,
         }
     }
 
@@ -911,6 +917,18 @@ impl OpenAiPlanner {
         observer: impl FnMut(ModelCallObservation) + Send + 'static,
     ) -> Self {
         self.usage_observer = Some(Box::new(observer));
+        self
+    }
+
+    /// Receive the sanitized provider explanation of a 4xx answer, for display only.
+    ///
+    /// The summary never reaches the journal or a later model request.
+    #[must_use]
+    pub fn with_rejection_observer(
+        mut self,
+        observer: impl FnMut(ProviderRejection) + Send + 'static,
+    ) -> Self {
+        self.rejection_observer = Some(Box::new(observer));
         self
     }
 }
@@ -993,6 +1011,11 @@ impl OpenAiModelChecker {
         })?;
         decode_model_catalog_models(&body, self.config.max_json_depth)
     }
+
+    /// The sanitized provider explanation of the last 4xx catalog answer, for display only.
+    pub fn take_provider_rejection(&mut self) -> Option<ProviderRejection> {
+        self.transport.take_rejection()
+    }
 }
 
 /// One explicit Chat Completions probe for the selected dialect and local proposal validation.
@@ -1062,7 +1085,8 @@ impl OpenAiCompatibilityChecker {
     ///
     /// # Errors
     ///
-    /// Returns only a fixed redacted failure class. Provider response bodies are never exposed.
+    /// Returns a fixed failure class; a 4xx explanation is available only through
+    /// `take_provider_rejection`, sanitized and for display.
     pub fn check(&mut self) -> Result<(), OpenAiCompatibilityCheckFailure> {
         let system = self.config.prompt_with_schema(COMPATIBILITY_SYSTEM_PROMPT);
         // JSON-object APIs promise syntax, not provider-side schema enforcement.
@@ -1088,6 +1112,11 @@ impl OpenAiCompatibilityChecker {
             })
             .map_err(map_compatibility_transport_failure)?;
         decode_compatibility_response(&response, &self.config.model, self.config.max_json_depth)
+    }
+
+    /// The sanitized provider explanation of the last 4xx probe answer, for display only.
+    pub fn take_provider_rejection(&mut self) -> Option<ProviderRejection> {
+        self.transport.take_rejection()
     }
 }
 
@@ -1318,6 +1347,7 @@ impl fmt::Debug for OpenAiPlanner {
             )
             .field("transport", &"<redacted>")
             .field("usage_observer", &self.usage_observer.is_some())
+            .field("rejection_observer", &self.rejection_observer.is_some())
             .finish()
     }
 }
@@ -1368,6 +1398,12 @@ impl PlannerPort for OpenAiPlanner {
             usage::decode_usage(body, self.config.max_json_depth, &self.config.model)
         });
         let transport_failed = response.is_err();
+        if transport_failed
+            && let Some(rejection) = self.transport.take_rejection()
+            && let Some(observer) = &mut self.rejection_observer
+        {
+            observer(rejection);
+        }
         let result = response.and_then(|response| self.decode_proposal(&response));
         if let Some(observer) = &mut self.usage_observer {
             observer(ModelCallObservation {
@@ -1522,6 +1558,11 @@ struct TransportRequest<'a> {
 
 trait Transport {
     fn send(&mut self, request: TransportRequest<'_>) -> Result<Vec<u8>, PlannerPortFailure>;
+
+    /// The provider's explanation for the last failed `send`, when it answered with a 4xx.
+    fn take_rejection(&mut self) -> Option<ProviderRejection> {
+        None
+    }
 }
 
 struct ExternalTransport<F>(F);
@@ -1545,20 +1586,28 @@ trait ModelCatalogTransport {
         &mut self,
         request: ModelCatalogTransportRequest<'_>,
     ) -> Result<Vec<u8>, OpenAiModelCheckFailure>;
+
+    /// The provider's explanation for the last failed `fetch`, when it answered with a 4xx.
+    fn take_rejection(&mut self) -> Option<ProviderRejection> {
+        None
+    }
 }
 
 struct UreqTransport {
     agent: Agent,
+    rejection: Option<ProviderRejection>,
 }
 
 struct UreqModelCatalogTransport {
     agent: Agent,
+    rejection: Option<ProviderRejection>,
 }
 
 impl UreqModelCatalogTransport {
     fn new(timeout: Duration) -> Self {
         Self {
             agent: bounded_agent(timeout),
+            rejection: None,
         }
     }
 }
@@ -1566,7 +1615,10 @@ impl UreqModelCatalogTransport {
 impl UreqTransport {
     fn new(timeout: Duration) -> Self {
         let agent = bounded_agent(timeout);
-        Self { agent }
+        Self {
+            agent,
+            rejection: None,
+        }
     }
 }
 
@@ -1584,6 +1636,7 @@ fn bounded_agent(timeout: Duration) -> Agent {
 
 impl Transport for UreqTransport {
     fn send(&mut self, request: TransportRequest<'_>) -> Result<Vec<u8>, PlannerPortFailure> {
+        self.rejection = None;
         let mut builder = self
             .agent
             .post(request.endpoint.as_str())
@@ -1597,6 +1650,7 @@ impl Transport for UreqTransport {
             .map_err(|error| map_transport_error(&error))?;
         let status = response.status();
         if status.as_u16() != 200 {
+            self.rejection = read_rejection(&mut response, request.authorization);
             return Err(map_status(status.as_u16()));
         }
         if response
@@ -1622,6 +1676,10 @@ impl Transport for UreqTransport {
         }
         Ok(body)
     }
+
+    fn take_rejection(&mut self) -> Option<ProviderRejection> {
+        self.rejection.take()
+    }
 }
 
 impl ModelCatalogTransport for UreqModelCatalogTransport {
@@ -1629,6 +1687,7 @@ impl ModelCatalogTransport for UreqModelCatalogTransport {
         &mut self,
         request: ModelCatalogTransportRequest<'_>,
     ) -> Result<Vec<u8>, OpenAiModelCheckFailure> {
+        self.rejection = None;
         let mut builder = self
             .agent
             .get(request.endpoint.as_str())
@@ -1641,6 +1700,7 @@ impl ModelCatalogTransport for UreqModelCatalogTransport {
             .map_err(|error| map_model_check_transport_error(&error))?;
         let status = response.status().as_u16();
         if status != 200 {
+            self.rejection = read_rejection(&mut response, request.authorization);
             return Err(map_model_check_status(status));
         }
         if response
@@ -1666,6 +1726,37 @@ impl ModelCatalogTransport for UreqModelCatalogTransport {
         }
         Ok(body)
     }
+
+    fn take_rejection(&mut self) -> Option<ProviderRejection> {
+        self.rejection.take()
+    }
+}
+
+/// Summarize a 4xx answer from at most a bounded prefix of its body. Other statuses keep only
+/// their failure class; a body that cannot be read leaves the status alone.
+fn read_rejection(
+    response: &mut ureq::http::Response<ureq::Body>,
+    authorization: Option<&HeaderValue>,
+) -> Option<ProviderRejection> {
+    use std::io::Read as _;
+
+    let status = response.status().as_u16();
+    if !(400..=499).contains(&status) {
+        return None;
+    }
+    let mut body = Vec::new();
+    let read = response
+        .body_mut()
+        .as_reader()
+        .take(rejection::MAX_REJECTION_BODY_BYTES)
+        .read_to_end(&mut body);
+    if read.is_err() {
+        body.clear();
+    }
+    let secret = authorization
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    Some(ProviderRejection::from_response(status, &body, secret))
 }
 
 fn map_transport_error(error: &ureq::Error) -> PlannerPortFailure {
