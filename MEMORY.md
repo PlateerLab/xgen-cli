@@ -31,6 +31,12 @@ OpenAI가 가려서 돌려준 key의 앞부분도 남아 있었다. 둘 다 고�
 남은 것: agy 거절은 대상이 아니고, resume 뒤에는 이유가 다시 보이지 않는다. Journal에 남기는 B안은 필요할 때 따로 정한다.
 책임: xgen CLI(provider 연결 계층·표시).
 
+2026-11-29(KST) 배포 완료: [rc.10](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.10) 게시. 버전 PR #166(1115f25)는
+rc.9 이후 #163~#165(rc.9 기록, provider 거절 이유 표시, 백그라운드 Run `/bg`)를 담는다.
+Main CI 7개, Release run 46161115930의 19개 job이 재실행 없이 통과했다(약 32분).
+GitHub Release는 17개 asset, prerelease, `immutable=true`. npm 여섯 package `next=0.1.0-rc.10`, launcher `latest=0.1.0-rc.10`.
+새 prefix에서 `@xgen-ai/cli@next` 공개 npm 설치가 `xgen 0.1.0-rc.10`을 냈다. 실제 모델 품질 평가는 이 배포 단계에서 따로 하지 않았다.
+
 2026-11-28 배포 완료: [rc.9](https://github.com/PlateerLab/xgen-cli/releases/tag/v0.1.0-rc.9) 게시. 버전 PR #162(d5bea9c)는
 rc.8 이후 #152~#161(agy Rust transport, `xgen tools enrich`와 사용량 저장, agy 자동 업데이트 차단, Run 중 후속 지시)을 담는다.
 Main CI 7개, Release run 46141667086의 19개 job(설치 검증 10개 포함)이 재실행 없이 통과했다(약 42분).
